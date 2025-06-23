@@ -253,6 +253,9 @@ ALTER TABLE executive.projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE executive.scenarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE executive.alert_configs ENABLE ROW LEVEL SECURITY;
 
+-- Create application user
+CREATE USER qudag_app_user WITH PASSWORD 'qudag_secure_password';
+
 -- Create RLS policies (to be customized based on auth system)
 -- Example policy for organizations
 CREATE POLICY "Users can view their own organization" ON executive.organizations

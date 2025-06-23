@@ -8,7 +8,7 @@
 import { createPool, sql } from 'slonik';
 import { testOrganizations, testDepartments, testAgents, testMetrics, testProjects } from './test-data';
 
-const DATABASE_URL = 'postgresql://postgres:postgres@localhost:5433/qudag_bi';
+const DATABASE_URL = 'postgresql://qudag_executive:password@localhost:5433/qudag_business';
 
 async function seedDatabase() {
   const pool = await createPool(DATABASE_URL);

@@ -1,0 +1,8 @@
+--- Fix shadow address struct initialization
++++ Add missing fields to ShadowMetadata and ShadowAddress
+@@ Add default values for new fields
++ created_at: std::time::SystemTime::now(),
++ last_used: std::time::SystemTime::now(),
++ max_uses: None,
++ rotation_policy: Default::default(),
++ metadata: Default::default(),

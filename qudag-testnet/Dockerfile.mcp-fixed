@@ -38,6 +38,7 @@ hex = "0.4"\n\
 base64 = "0.22"\n\
 rand = "0.8"\n\
 sysinfo = "0.33"\n\
+regex = "1.0"\n\
 \n\
 [[bin]]\n\
 name = "qudag-mcp-real"\n\
@@ -47,7 +48,7 @@ path = "src/main.rs"' > Cargo.toml
 RUN cargo build --release
 
 # Runtime stage
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \

@@ -16,9 +16,9 @@ use std::sync::Mutex;
 use crate::kem::{Ciphertext, KEMError, KeyEncapsulation, PublicKey, SecretKey, SharedSecret};
 
 // Import the appropriate implementation based on the target architecture
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 mod pqcrypto_impl;
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[cfg(not(target_arch = "x86_64"))]
 mod libcrux_impl;
 
 // Global metrics for ML-KEM operations
@@ -99,10 +99,10 @@ impl MlKem768 {
         #[allow(unused_variables)] rng: &mut R,
     ) -> Result<(PublicKey, SecretKey), KEMError> {
         // Use the appropriate implementation based on architecture
-        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        #[cfg(target_arch = "x86_64")]
         return pqcrypto_impl::keygen();
         
-        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        #[cfg(not(target_arch = "x86_64"))]
         return libcrux_impl::keygen();
     }
 
@@ -121,10 +121,10 @@ impl MlKem768 {
         }
 
         // Use the appropriate implementation based on architecture
-        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        #[cfg(target_arch = "x86_64")]
         return pqcrypto_impl::encapsulate(pk);
         
-        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        #[cfg(not(target_arch = "x86_64"))]
         return libcrux_impl::encapsulate(pk);
     }
 
@@ -166,10 +166,10 @@ impl MlKem768 {
         CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
 
         // Use the appropriate implementation based on architecture
-        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        #[cfg(target_arch = "x86_64")]
         let shared_secret = pqcrypto_impl::decapsulate(sk, ct)?;
         
-        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        #[cfg(not(target_arch = "x86_64"))]
         let shared_secret = libcrux_impl::decapsulate(sk, ct)?;
 
         // Update cache (in a real implementation, you'd want LRU eviction)

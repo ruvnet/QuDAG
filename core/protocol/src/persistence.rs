@@ -16,12 +16,12 @@ use tracing::{debug, error, info, warn};
 
 // Import types from other modules
 use qudag_dag::vertex::{Vertex, VertexId};
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 use qudag_network::dark_resolver::DarkDomainRecord;
 use qudag_network::types::PeerId;
 
 // Stub type for ARM64 builds
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[cfg(not(target_arch = "x86_64"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DarkDomainRecord {
     pub domain: String,

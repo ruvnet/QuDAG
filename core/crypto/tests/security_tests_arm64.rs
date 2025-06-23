@@ -1,3 +1,6 @@
+// ARM64-specific test variant with enhanced crypto imports
+#[cfg(target_arch = "aarch64")]
+mod security_tests_arm64_tests {
 use subtle::ConstantTimeEq;
 use zeroize::Zeroize;
 
@@ -34,7 +37,7 @@ fn test_constant_time_comparison() {
 
 #[test]
 fn test_timing_resistance() {
-    use qudag_crypto::ml_dsa::MlDsaKeyPair;
+    use qudag_crypto::MlDsaKeyPair;
     use qudag_crypto::ml_kem::MlKem768;
     use rand::thread_rng;
 
@@ -54,4 +57,5 @@ fn test_timing_resistance() {
     let _ = public_key
         .verify(message, &signature)
         .expect("Verification failed");
+}
 }

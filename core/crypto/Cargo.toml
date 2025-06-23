@@ -39,13 +39,13 @@ lazy_static = "1.4"
 sha2 = "0.10"
 
 # Conditional compilation for quantum crypto libraries
-[target.'cfg(all(target_arch = "x86_64", target_feature = "avx2"))'.dependencies]
+[target.'cfg(target_arch = "x86_64")'.dependencies]
 pqcrypto-dilithium = "0.5"
 pqcrypto-kyber = "0.5"
 pqcrypto-traits = "0.3"
 pqcrypto-hqc = "0.2"
 
-[target.'cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))'.dependencies]
+[target.'cfg(not(target_arch = "x86_64"))'.dependencies]
 # libcrux has ARM64 NEON support and is formally verified
 libcrux-ml-kem = "0.0.2-alpha.4"
 # oqs provides quantum-resistant algorithms including ML-DSA for ARM64

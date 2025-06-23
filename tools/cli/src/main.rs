@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use qudag_crypto::fingerprint::Fingerprint;
 use qudag_dag::Dag;
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 use qudag_network::dark_resolver::{DarkResolver, DarkResolverError};
 use qudag_network::types::NetworkAddress;
 use qudag_network::P2PNode;
@@ -941,7 +941,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         Commands::Address { command } => match command {
             AddressCommands::Register { domain } => {
-                #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+                #[cfg(target_arch = "x86_64")]
                 {
                     info!("Registering dark address: {}", domain);
                     println!("Registering dark address: {}", domain);
@@ -996,7 +996,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     }
                 }
-                #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+                #[cfg(not(target_arch = "x86_64"))]
                 {
                     println!("⚠️  Dark addressing is not available on ARM64 yet");
                     println!("   This feature requires x86_64 with AVX2 instructions");
@@ -1004,7 +1004,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             AddressCommands::Resolve { domain } => {
-                #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+                #[cfg(target_arch = "x86_64")]
                 {
                     info!("Resolving dark address: {}", domain);
                     println!("Resolving dark address: {}", domain);
@@ -1048,7 +1048,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     }
                 }
-                #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+                #[cfg(not(target_arch = "x86_64"))]
                 {
                     println!("⚠️  Dark addressing is not available on ARM64 yet");
                     println!("   This feature requires x86_64 with AVX2 instructions");
@@ -1717,7 +1717,7 @@ async fn run_node(node_config: NodeConfig) -> Result<(), Box<dyn std::error::Err
     let dag = Arc::new(RwLock::new(Dag::new(100))); // Max 100 concurrent operations
 
     // Create Dark Resolver (x86_64 only)
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    #[cfg(target_arch = "x86_64")]
     let _dark_resolver = Arc::new(RwLock::new(DarkResolver::new()));
 
     println!("QuDAG node starting:");

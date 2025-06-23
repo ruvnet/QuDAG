@@ -37,11 +37,11 @@ pub use kem::{
 };
 
 // ML-DSA exports - conditional based on architecture
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 pub use ml_dsa::{MlDsa, MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
 
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[cfg(not(target_arch = "x86_64"))]
 pub use ml_dsa::{MlDsaError, LiboqsMlDsaKeyPair as MlDsaKeyPair, LiboqsMlDsaPublicKey as MlDsaPublicKey};
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[cfg(not(target_arch = "x86_64"))]
 pub use ml_kem::{Metrics as MlKemMetrics, MlKem768};
 pub use signature::{DigitalSignature, SignatureError};

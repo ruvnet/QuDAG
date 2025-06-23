@@ -1,7 +1,7 @@
 use blake3::Hasher;
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 use pqcrypto_hqc::{hqc128, hqc192, hqc256};
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 use pqcrypto_traits::kem::{
     Ciphertext as CiphertextTrait, PublicKey as PublicKeyTrait, SecretKey as SecretKeyTrait,
     SharedSecret as SharedSecretTrait,

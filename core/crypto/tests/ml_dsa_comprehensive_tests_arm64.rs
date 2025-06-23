@@ -1,3 +1,6 @@
+// ARM64-specific test variant with enhanced crypto imports
+#[cfg(target_arch = "aarch64")]
+mod ml_dsa_comprehensive_tests_arm64_tests {
 //! Comprehensive test suite for ML-DSA implementation
 //!
 //! This test suite covers:
@@ -8,7 +11,7 @@
 //! - Property-based testing
 
 use proptest::prelude::*;
-use qudag_crypto::ml_dsa::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
+use qudag_crypto::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
 use std::time::{Duration, Instant};
 
 // NIST ML-DSA parameter sets
@@ -472,4 +475,5 @@ fn test_ml_dsa_performance_benchmarks() {
     println!("  Key generation: {:?}", keygen_time);
     println!("  Signing: {:?}", sign_time);
     println!("  Verification: {:?}", verify_time);
+}
 }

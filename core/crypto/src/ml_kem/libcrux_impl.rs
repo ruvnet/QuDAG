@@ -3,7 +3,7 @@
 //! This module implements the NIST-standardized ML-KEM key encapsulation mechanism
 //! using the libcrux library, which provides ARM64 NEON optimization and formal verification.
 
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[cfg(not(target_arch = "x86_64"))]
 use libcrux_ml_kem::{
     mlkem768::{self, MlKem768Ciphertext, MlKem768PublicKey, MlKem768PrivateKey},
     KEY_GENERATION_SEED_SIZE,
@@ -13,7 +13,7 @@ use rand::RngCore;
 use crate::kem::{Ciphertext, KEMError, PublicKey, SecretKey, SharedSecret};
 
 /// Generate a keypair using libcrux ML-KEM-768
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[cfg(not(target_arch = "x86_64"))]
 pub fn keygen() -> Result<(PublicKey, SecretKey), KEMError> {
     let mut rng = rand::thread_rng();
     let mut seed = [0u8; KEY_GENERATION_SEED_SIZE];
@@ -28,7 +28,7 @@ pub fn keygen() -> Result<(PublicKey, SecretKey), KEMError> {
 }
 
 /// Encapsulate using libcrux ML-KEM-768
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[cfg(not(target_arch = "x86_64"))]
 pub fn encapsulate(public_key: &PublicKey) -> Result<(Ciphertext, SharedSecret), KEMError> {
     let pk_bytes = public_key.as_bytes();
     
@@ -54,7 +54,7 @@ pub fn encapsulate(public_key: &PublicKey) -> Result<(Ciphertext, SharedSecret),
 }
 
 /// Decapsulate using libcrux ML-KEM-768
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[cfg(not(target_arch = "x86_64"))]
 pub fn decapsulate(
     secret_key: &SecretKey,
     ciphertext: &Ciphertext,
@@ -96,7 +96,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+    #[cfg(not(target_arch = "x86_64"))]
     fn test_libcrux_keygen() {
         let (pk, sk) = keygen().unwrap();
         assert_eq!(pk.as_bytes().len(), sizes::PUBLIC_KEY_SIZE);
@@ -104,7 +104,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+    #[cfg(not(target_arch = "x86_64"))]
     fn test_libcrux_encap_decap() {
         let (pk, sk) = keygen().unwrap();
         let (ct, ss1) = encapsulate(&pk).unwrap();

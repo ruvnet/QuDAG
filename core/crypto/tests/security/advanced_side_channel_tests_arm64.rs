@@ -1,3 +1,6 @@
+// ARM64-specific test variant with enhanced crypto imports
+#[cfg(target_arch = "aarch64")]
+mod advanced_side_channel_tests_arm64_tests {
 /// Advanced side-channel analysis test suite
 /// 
 /// This module implements comprehensive side-channel analysis including:
@@ -331,7 +334,8 @@ mod timing_analysis {
 
 #[cfg(test)]
 mod advanced_side_channel_tests {
-    use super::*;
+    use crate::{MlDsaKeyPair, MlDsaPublicKey, MlDsaError};
+use super::{ML_DSA_PUBLIC_KEY_SIZE, ML_DSA_SECRET_KEY_SIZE, ML_DSA_SIGNATURE_SIZE};
 
     #[test]
     fn test_ml_kem_power_analysis_resistance() {
@@ -675,4 +679,4 @@ mod advanced_side_channel_tests {
             "Too many timing outliers in multi-threaded execution: {}/{}",
             outliers.len(), all_timings.len());
     }
-}
+}}

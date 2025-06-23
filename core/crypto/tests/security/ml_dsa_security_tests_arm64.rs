@@ -1,3 +1,6 @@
+// ARM64-specific test variant with enhanced crypto imports
+#[cfg(target_arch = "aarch64")]
+mod ml_dsa_security_tests_arm64_tests {
 //! Security-focused tests for ML-DSA implementation
 //! 
 //! This test suite validates security properties including:
@@ -7,7 +10,7 @@
 //! - Resistance to known cryptographic attacks
 //! - Key isolation and cross-contamination resistance
 
-use qudag_crypto::ml_dsa::{MlDsa, MlDsaKeyPair, MlDsaPublicKey, MlDsaError};
+use qudag_crypto::{MlDsa, MlDsaKeyPair, MlDsaPublicKey, MlDsaError};
 use rand::{thread_rng, RngCore, SeedableRng};
 use rand::rngs::StdRng;
 use std::time::{Duration, Instant};
@@ -448,4 +451,4 @@ mod hex {
     pub fn encode(bytes: &[u8]) -> String {
         bytes.iter().map(|b| format!("{:02x}", b)).collect()
     }
-}
+}}

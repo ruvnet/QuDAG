@@ -8,7 +8,7 @@
 pub mod circuit_breaker;
 pub mod connection;
 pub mod connection_pool;
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 pub mod dark_resolver;
 pub mod discovery;
 pub mod dns;
@@ -29,7 +29,7 @@ pub mod traffic_obfuscation;
 pub mod transport;
 pub mod types;
 
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 pub use dark_resolver::{DarkDomainRecord, DarkResolver, DarkResolverError};
 pub use discovery::{
     DiscoveredPeer, DiscoveryConfig, DiscoveryEvent, DiscoveryMethod, DiscoveryStats,

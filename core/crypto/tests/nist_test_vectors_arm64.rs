@@ -1,3 +1,6 @@
+// ARM64-specific test variant with enhanced crypto imports
+#[cfg(target_arch = "aarch64")]
+mod nist_test_vectors_arm64_tests {
 use hex;
 use proptest::prelude::*;
 /// Comprehensive NIST PQC test vector validation
@@ -149,7 +152,8 @@ fn get_ml_dsa_65_kat_vectors() -> Vec<MlDsaKatVector> {
 
 #[cfg(test)]
 mod nist_test_vectors {
-    use super::*;
+    use crate::{MlDsaKeyPair, MlDsaPublicKey, MlDsaError};
+use super::{ML_DSA_PUBLIC_KEY_SIZE, ML_DSA_SECRET_KEY_SIZE, ML_DSA_SIGNATURE_SIZE};
 
     #[test]
     fn test_ml_kem_768_kat_vectors() {
@@ -477,4 +481,5 @@ mod nist_test_vectors {
             );
         }
     }
+}
 }

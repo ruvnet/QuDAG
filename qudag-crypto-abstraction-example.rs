@@ -26,7 +26,7 @@ pub trait QuantumKEM {
 }
 
 // x86_64 implementation using pqcrypto (AVX2 optimized)
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 mod pqcrypto_backend {
     use super::*;
     use pqcrypto_kyber::kyber768;
@@ -61,7 +61,7 @@ mod pqcrypto_backend {
 }
 
 // ARM64 implementation using libcrux (NEON optimized)
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[cfg(not(target_arch = "x86_64"))]
 mod libcrux_backend {
     use super::*;
     use libcrux_ml_kem::{
@@ -103,12 +103,12 @@ mod libcrux_backend {
 
 // Factory function to get the appropriate implementation
 pub fn create_kem() -> Box<dyn QuantumKEM + Send + Sync> {
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    #[cfg(target_arch = "x86_64")]
     {
         Box::new(pqcrypto_backend::PQCryptoKEM)
     }
     
-    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+    #[cfg(not(target_arch = "x86_64"))]
     {
         Box::new(libcrux_backend::LibcruxKEM)
     }

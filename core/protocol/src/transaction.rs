@@ -1,9 +1,9 @@
 //! Transaction processing module for QuDAG protocol.
 
 use crate::types::ProtocolError;
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 use qudag_crypto::{ml_dsa::MlDsa65, signature::{Signature, SignatureError}};
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[cfg(not(target_arch = "x86_64"))]
 use ed25519_dalek::{Signer, Verifier, SigningKey, VerifyingKey, Signature as Ed25519Signature};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -132,7 +132,7 @@ impl Transaction {
     pub fn sign(&mut self, private_key: &[u8]) -> Result<(), TransactionError> {
         let hash = self.hash();
         
-        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        #[cfg(target_arch = "x86_64")]
         {
             // Create ML-DSA signature
             let ml_dsa = MlDsa65::new()
@@ -142,7 +142,7 @@ impl Transaction {
                 .map_err(|e| TransactionError::CryptoError(e.to_string()))?;
         }
         
-        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        #[cfg(not(target_arch = "x86_64"))]
         {
             // Use Ed25519 on ARM64
             let signing_key = SigningKey::from_bytes(private_key.try_into()
@@ -162,7 +162,7 @@ impl Transaction {
         
         let hash = self.hash();
         
-        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        #[cfg(target_arch = "x86_64")]
         {
             let ml_dsa = MlDsa65::new()
                 .map_err(|e| TransactionError::CryptoError(e.to_string()))?;
@@ -171,7 +171,7 @@ impl Transaction {
                 .map_err(|e| TransactionError::CryptoError(e.to_string()))
         }
         
-        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        #[cfg(not(target_arch = "x86_64"))]
         {
             // Use Ed25519 on ARM64
             let verifying_key = VerifyingKey::from_bytes(public_key.try_into()
@@ -428,7 +428,7 @@ impl Default for TransactionProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    #[cfg(target_arch = "x86_64")]
     use qudag_crypto::ml_dsa::MlDsa65;
 
     #[test]
@@ -480,14 +480,14 @@ mod tests {
     #[tokio::test]
     async fn test_transaction_signing() {
         // Generate key pair based on architecture
-        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        #[cfg(target_arch = "x86_64")]
         let (pk_bytes, sk_bytes) = {
             let ml_dsa = MlDsa65::new().unwrap();
             let (pk, sk) = ml_dsa.keygen().unwrap();
             (pk.to_vec(), sk.to_vec())
         };
         
-        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        #[cfg(not(target_arch = "x86_64"))]
         let (pk_bytes, sk_bytes) = {
             use rand::rngs::OsRng;
             use rand::RngCore;
@@ -550,14 +550,14 @@ mod tests {
         let mut processor = TransactionProcessor::new();
         
         // Generate key pair based on architecture
-        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        #[cfg(target_arch = "x86_64")]
         let (pk_bytes, sk_bytes) = {
             let ml_dsa = MlDsa65::new().unwrap();
             let (pk, sk) = ml_dsa.keygen().unwrap();
             (pk.to_vec(), sk.to_vec())
         };
         
-        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        #[cfg(not(target_arch = "x86_64"))]
         let (pk_bytes, sk_bytes) = {
             use rand::rngs::OsRng;
             use rand::RngCore;

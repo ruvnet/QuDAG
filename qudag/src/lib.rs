@@ -22,11 +22,11 @@ pub use qudag_protocol as protocol;
 pub mod prelude {
     pub use crate::crypto::{HashFunction, KeyPair, MlKem768, PublicKey, SecretKey};
     
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    #[cfg(target_arch = "x86_64")]
     pub use crate::crypto::{Fingerprint, FingerprintError, MlDsaKeyPair, MlDsaPublicKey};
     
     // Re-export compatibility types on ARM64
-    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+    #[cfg(not(target_arch = "x86_64"))]
     pub use crate::protocol::crypto_compat::{MlDsaKeyPair, MlDsaPublicKey};
 
     pub use crate::dag::{Consensus, Dag, Node, QRAvalanche, Vertex, VertexId};

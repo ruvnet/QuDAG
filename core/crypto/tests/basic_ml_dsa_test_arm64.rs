@@ -1,3 +1,6 @@
+// ARM64-specific test variant with enhanced crypto imports
+#[cfg(target_arch = "aarch64")]
+mod basic_ml_dsa_test_arm64_tests {
 //! Basic ML-DSA test to verify compilation and basic functionality
 
 #[test]
@@ -10,7 +13,7 @@ fn test_ml_dsa_types_exist() {
 
 #[test]
 fn test_ml_dsa_basic_functionality() {
-    use qudag_crypto::ml_dsa::{MlDsaKeyPair, MlDsaPublicKey};
+    use qudag_crypto::{MlDsaKeyPair, MlDsaPublicKey};
     use rand::thread_rng;
 
     let mut rng = thread_rng();
@@ -55,4 +58,5 @@ fn test_ml_dsa_basic_functionality() {
             signature_result
         );
     }
+}
 }

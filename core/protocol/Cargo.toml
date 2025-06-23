@@ -38,7 +38,7 @@ sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite"] }
 rocksdb = { version = "0.22", optional = true }
 
 # ARM64 compatibility
-[target.'cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))'.dependencies]
+[target.'cfg(not(target_arch = "x86_64"))'.dependencies]
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 
 # Inter-crate dependencies

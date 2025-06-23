@@ -3,13 +3,13 @@
 //! This module implements the NIST-standardized ML-KEM key encapsulation mechanism
 //! using the pqcrypto library, which provides AVX2 optimizations for x86_64.
 
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 use pqcrypto_kyber::kyber768;
 
 use crate::kem::{Ciphertext, KEMError, PublicKey, SecretKey, SharedSecret};
 
 /// Generate a keypair using pqcrypto Kyber-768
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 pub fn keygen() -> Result<(PublicKey, SecretKey), KEMError> {
     let (pk, sk) = kyber768::keypair();
     
@@ -20,7 +20,7 @@ pub fn keygen() -> Result<(PublicKey, SecretKey), KEMError> {
 }
 
 /// Encapsulate using pqcrypto Kyber-768
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 pub fn encapsulate(public_key: &PublicKey) -> Result<(Ciphertext, SharedSecret), KEMError> {
     let pk_bytes = public_key.as_bytes();
     let pk = kyber768::PublicKey::from_bytes(pk_bytes)
@@ -35,7 +35,7 @@ pub fn encapsulate(public_key: &PublicKey) -> Result<(Ciphertext, SharedSecret),
 }
 
 /// Decapsulate using pqcrypto Kyber-768
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 pub fn decapsulate(
     secret_key: &SecretKey,
     ciphertext: &Ciphertext,
@@ -66,7 +66,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    #[cfg(target_arch = "x86_64")]
     fn test_pqcrypto_keygen() {
         let (pk, sk) = keygen().unwrap();
         assert_eq!(pk.as_bytes().len(), sizes::PUBLIC_KEY_SIZE);
@@ -74,7 +74,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    #[cfg(target_arch = "x86_64")]
     fn test_pqcrypto_encap_decap() {
         let (pk, sk) = keygen().unwrap();
         let (ct, ss1) = encapsulate(&pk).unwrap();

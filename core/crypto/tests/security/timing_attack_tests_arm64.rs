@@ -1,3 +1,6 @@
+// ARM64-specific test variant with enhanced crypto imports
+#[cfg(target_arch = "aarch64")]
+mod timing_attack_tests_arm64_tests {
 /// Comprehensive timing attack resistance test suite
 /// 
 /// This module implements detailed timing attack analysis including:
@@ -354,7 +357,8 @@ mod remote_timing {
 
 #[cfg(test)]
 mod timing_attack_tests {
-    use super::*;
+    use crate::{MlDsaKeyPair, MlDsaPublicKey, MlDsaError};
+use super::{ML_DSA_PUBLIC_KEY_SIZE, ML_DSA_SECRET_KEY_SIZE, ML_DSA_SIGNATURE_SIZE};
 
     #[test]
     fn test_ml_kem_constant_time_keygen() {
@@ -813,4 +817,4 @@ mod timing_attack_tests {
         assert!(stats.coefficient_of_variation < TIMING_VARIANCE_THRESHOLD * 1.5, // Allow slightly more variance across cores
             "Multi-core timing not consistent: CV = {:.6}", stats.coefficient_of_variation);
     }
-}
+}}

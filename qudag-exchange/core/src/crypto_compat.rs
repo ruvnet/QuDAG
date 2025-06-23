@@ -5,7 +5,7 @@
 
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[cfg(not(target_arch = "x86_64"))]
 use ed25519_dalek;
 
 #[derive(Debug, Error)]
@@ -23,26 +23,26 @@ pub enum SignatureError {
 /// Unified signature wrapper that works on all architectures
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UnifiedSignature {
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    #[cfg(target_arch = "x86_64")]
     inner: Vec<u8>,  // ML-DSA signature
     
-    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+    #[cfg(not(target_arch = "x86_64"))]
     inner: ed25519_dalek::Signature,  // Ed25519 signature
 }
 
 /// Unified keypair that works on all architectures
 pub struct UnifiedKeyPair {
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    #[cfg(target_arch = "x86_64")]
     inner: qudag_crypto::MlDsaKeyPair,
     
-    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+    #[cfg(not(target_arch = "x86_64"))]
     inner: ed25519_dalek::SigningKey,
 }
 
 impl UnifiedKeyPair {
     /// Generate a new keypair
     pub fn generate() -> Result<Self, SignatureError> {
-        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        #[cfg(target_arch = "x86_64")]
         {
             let mut rng = rand::thread_rng();
             let inner = qudag_crypto::MlDsaKeyPair::generate(&mut rng)
@@ -50,7 +50,7 @@ impl UnifiedKeyPair {
             Ok(Self { inner })
         }
         
-        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        #[cfg(not(target_arch = "x86_64"))]
         {
             use rand::rngs::OsRng;
             use rand::RngCore;
@@ -63,7 +63,7 @@ impl UnifiedKeyPair {
     
     /// Sign a message
     pub fn sign(&self, message: &[u8]) -> Result<UnifiedSignature, SignatureError> {
-        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        #[cfg(target_arch = "x86_64")]
         {
             let mut rng = rand::thread_rng();
             let signature = self.inner.sign(message, &mut rng)
@@ -71,7 +71,7 @@ impl UnifiedKeyPair {
             Ok(UnifiedSignature { inner: signature })
         }
         
-        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        #[cfg(not(target_arch = "x86_64"))]
         {
             use ed25519_dalek::Signer;
             let signature = self.inner.sign(message);
@@ -81,12 +81,12 @@ impl UnifiedKeyPair {
     
     /// Get public key bytes
     pub fn public_key_bytes(&self) -> Vec<u8> {
-        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        #[cfg(target_arch = "x86_64")]
         {
             self.inner.public_key().to_vec()
         }
         
-        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        #[cfg(not(target_arch = "x86_64"))]
         {
             self.inner.verifying_key().to_bytes().to_vec()
         }
@@ -99,7 +99,7 @@ pub fn verify_signature_bytes(
     message: &[u8],
     signature_bytes: &[u8],
 ) -> Result<(), SignatureError> {
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    #[cfg(target_arch = "x86_64")]
     {
         let pk = qudag_crypto::MlDsaPublicKey::from_bytes(public_key)
             .map_err(|_| SignatureError::InvalidKey)?;
@@ -107,7 +107,7 @@ pub fn verify_signature_bytes(
             .map_err(|_| SignatureError::VerificationFailed)
     }
     
-    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+    #[cfg(not(target_arch = "x86_64"))]
     {
         use ed25519_dalek::{Verifier, VerifyingKey, Signature};
         let pk = VerifyingKey::from_bytes(public_key.try_into().map_err(|_| SignatureError::InvalidKey)?)
@@ -124,7 +124,7 @@ pub fn verify_signature(
     message: &[u8],
     signature: &UnifiedSignature,
 ) -> Result<(), SignatureError> {
-    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    #[cfg(target_arch = "x86_64")]
     {
         let pk = qudag_crypto::MlDsaPublicKey::from_bytes(public_key)
             .map_err(|_| SignatureError::InvalidKey)?;
@@ -132,7 +132,7 @@ pub fn verify_signature(
             .map_err(|_| SignatureError::VerificationFailed)
     }
     
-    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+    #[cfg(not(target_arch = "x86_64"))]
     {
         use ed25519_dalek::{Verifier, VerifyingKey};
         let pk = VerifyingKey::from_bytes(public_key.try_into().map_err(|_| SignatureError::InvalidKey)?)
@@ -145,12 +145,12 @@ pub fn verify_signature(
 impl UnifiedSignature {
     /// Get signature as bytes
     pub fn to_bytes(&self) -> Vec<u8> {
-        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        #[cfg(target_arch = "x86_64")]
         {
             self.inner.clone()
         }
         
-        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        #[cfg(not(target_arch = "x86_64"))]
         {
             self.inner.to_bytes().to_vec()
         }
@@ -158,10 +158,10 @@ impl UnifiedSignature {
 }
 
 /// Re-export the appropriate types based on architecture
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 pub use qudag_crypto::{MlDsaKeyPair, MlDsaPublicKey, MlDsaError};
 
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[cfg(not(target_arch = "x86_64"))]
 pub mod ml_dsa_compat {
     use super::*;
     
@@ -172,5 +172,5 @@ pub mod ml_dsa_compat {
     pub type MlDsaError = SignatureError;
 }
 
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[cfg(not(target_arch = "x86_64"))]
 pub use ml_dsa_compat::*;

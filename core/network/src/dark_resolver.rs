@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 // Import crypto primitives from the crypto module
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[cfg(target_arch = "x86_64")]
 use qudag_crypto::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
 use qudag_crypto::ml_kem::MlKem768;
 

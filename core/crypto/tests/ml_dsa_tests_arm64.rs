@@ -1,5 +1,9 @@
+// ARM64-specific test variant with enhanced crypto imports
+#[cfg(target_arch = "aarch64")]
+mod ml_dsa_tests_arm64_tests {
 use proptest::prelude::*;
-use qudag_crypto::ml_dsa::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
+// Use crate-level imports for architecture-specific type aliases
+use qudag_crypto::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
 use rand::{thread_rng, RngCore};
 
 #[test]
@@ -65,4 +69,5 @@ proptest! {
             let _ = pk.verify(&message, &sig_bytes);
         }
     }
+}
 }

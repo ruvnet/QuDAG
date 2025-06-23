@@ -1,3 +1,6 @@
+// ARM64-specific test variant with enhanced crypto imports
+#[cfg(target_arch = "aarch64")]
+mod comprehensive_memory_safety_tests_arm64_tests {
 /// Comprehensive memory safety test suite for cryptographic operations
 /// 
 /// This module implements thorough memory safety testing including:
@@ -227,7 +230,8 @@ mod secure_wiping {
 
 #[cfg(test)]
 mod comprehensive_memory_safety_tests {
-    use super::*;
+    use crate::{MlDsaKeyPair, MlDsaPublicKey, MlDsaError};
+use super::{ML_DSA_PUBLIC_KEY_SIZE, ML_DSA_SECRET_KEY_SIZE, ML_DSA_SIGNATURE_SIZE};
 
     #[test]
     fn test_ml_kem_memory_leak_detection() {
@@ -637,4 +641,4 @@ mod comprehensive_memory_safety_tests {
         assert_ne!(ss1_original, ss1_after, "Shared secret 1 not properly zeroized");
         assert_ne!(ss2_original, ss2_after, "Shared secret 2 not properly zeroized");
     }
-}
+}}

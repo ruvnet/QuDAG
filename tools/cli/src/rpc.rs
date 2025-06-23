@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use qudag_crypto::ml_dsa::MlDsaKeyPair;
+use qudag_crypto::MlDsaKeyPair;
 use qudag_protocol::NodeConfig;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

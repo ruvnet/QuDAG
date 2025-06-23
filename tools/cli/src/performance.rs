@@ -191,7 +191,6 @@ impl PerformanceTracker {
         {
             // Use task_info on macOS
             use std::mem;
-            use std::ptr;
 
             extern "C" {
                 fn task_info(

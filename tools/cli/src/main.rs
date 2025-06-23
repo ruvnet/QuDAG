@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use qudag_crypto::fingerprint::Fingerprint;
 use qudag_dag::Dag;
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 use qudag_network::dark_resolver::{DarkResolver, DarkResolverError};
 use qudag_network::types::NetworkAddress;
 use qudag_network::P2PNode;
@@ -940,10 +941,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         Commands::Address { command } => match command {
             AddressCommands::Register { domain } => {
-                info!("Registering dark address: {}", domain);
-                println!("Registering dark address: {}", domain);
+                #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+                {
+                    info!("Registering dark address: {}", domain);
+                    println!("Registering dark address: {}", domain);
 
-                let resolver = DarkResolver::new();
+                    let resolver = DarkResolver::new();
                 let test_address = NetworkAddress::new([127, 0, 0, 1], 8080);
                 let mut rng = thread_rng();
 
@@ -991,13 +994,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Err(e) => {
                         println!("✗ Error registering domain: {:?}", e);
                     }
+                    }
+                }
+                #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+                {
+                    println!("⚠️  Dark addressing is not available on ARM64 yet");
+                    println!("   This feature requires x86_64 with AVX2 instructions");
+                    println!("   Use standard networking addresses for now");
                 }
             }
             AddressCommands::Resolve { domain } => {
-                info!("Resolving dark address: {}", domain);
-                println!("Resolving dark address: {}", domain);
+                #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+                {
+                    info!("Resolving dark address: {}", domain);
+                    println!("Resolving dark address: {}", domain);
 
-                let resolver = DarkResolver::new();
+                    let resolver = DarkResolver::new();
 
                 match resolver.lookup_domain(&domain) {
                     Ok(record) => {
@@ -1034,6 +1046,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Err(e) => {
                         println!("✗ Error resolving domain: {:?}", e);
                     }
+                    }
+                }
+                #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+                {
+                    println!("⚠️  Dark addressing is not available on ARM64 yet");
+                    println!("   This feature requires x86_64 with AVX2 instructions");
+                    println!("   Use standard networking addresses for now");
                 }
             }
             AddressCommands::Shadow { ttl } => {
@@ -1697,7 +1716,8 @@ async fn run_node(node_config: NodeConfig) -> Result<(), Box<dyn std::error::Err
     // Create DAG instance
     let dag = Arc::new(RwLock::new(Dag::new(100))); // Max 100 concurrent operations
 
-    // Create Dark Resolver
+    // Create Dark Resolver (x86_64 only)
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     let _dark_resolver = Arc::new(RwLock::new(DarkResolver::new()));
 
     println!("QuDAG node starting:");

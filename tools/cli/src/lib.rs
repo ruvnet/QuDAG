@@ -1,5 +1,5 @@
-#![deny(unsafe_code)]
 #![allow(missing_docs)]
+// Note: unsafe code is allowed for platform-specific system monitoring (macOS task_info)
 
 //! Command-line interface for the QuDAG protocol with performance optimizations.
 //!
@@ -16,6 +16,7 @@
 pub mod async_optimizations;
 pub mod commands;
 pub mod config;
+pub mod crypto_compat;
 pub mod mcp;
 pub mod node_manager;
 pub mod output;

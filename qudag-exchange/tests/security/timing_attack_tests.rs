@@ -140,7 +140,7 @@ fn test_timing_guard() {
 /// Test for timing leaks in error paths
 #[test]
 fn test_error_path_timing() {
-    use qudag_crypto::ml_dsa::{MlDsaKeyPair, MlDsaPublicKey};
+    use qudag_crypto::{MlDsaKeyPair, MlDsaPublicKey};
     
     let mut rng = thread_rng();
     const ITERATIONS: usize = 100;

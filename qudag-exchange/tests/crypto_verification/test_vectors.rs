@@ -64,7 +64,7 @@ fn load_test_vectors<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Vec<T>
 #[cfg(test)]
 mod ml_dsa_verification {
     use super::*;
-    use qudag_crypto::ml_dsa::{keypair_from_seed, sign, verify};
+    use qudag_crypto::{keypair_from_seed, sign, verify};
     
     /// Known ML-DSA-65 (Dilithium3) test vectors
     #[test]
@@ -397,7 +397,7 @@ mod exchange_crypto_verification {
     fn verify_transaction_signing() {
         // Verify that transaction signing produces consistent results
         use qudag_exchange_core::{Transaction, TransactionBuilder};
-        use qudag_crypto::ml_dsa::{keypair, sign, verify};
+        use qudag_crypto::{keypair, sign, verify};
         
         let (pk, sk) = keypair().expect("Failed to generate keypair");
         

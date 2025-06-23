@@ -8,9 +8,10 @@ use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use qudag_crypto::{
-    Ciphertext as KemCiphertext, KeyPair as KemKeyPair, MlDsaKeyPair, MlDsaPublicKey, MlKem768,
+    Ciphertext as KemCiphertext, KeyPair as KemKeyPair, MlKem768,
     PublicKey as KemPublicKey, SecretKey, SharedSecret,
 };
+use crate::crypto_compat::{MlDsaKeyPair, MlDsaPublicKey};
 use rand;
 
 use crate::message::{HandshakeType, Message, MessageError, MessageType, ProtocolVersion};

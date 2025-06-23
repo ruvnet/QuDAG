@@ -7,6 +7,7 @@ pub mod allocator;
 pub mod compatibility;
 pub mod config;
 pub mod coordinator;
+pub mod crypto_compat;
 pub mod handshake;
 pub mod instrumentation;
 pub mod message;

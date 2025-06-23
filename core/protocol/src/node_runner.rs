@@ -8,8 +8,11 @@ use tracing::{debug, error, info, warn};
 // Import network components
 use qudag_network::{
     p2p::{NetworkConfig as P2PNetworkConfig, P2PEvent, P2PNode, QuDagResponse},
-    DarkResolver, P2PHandle,
+    P2PHandle,
 };
+
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+use qudag_network::DarkResolver;
 
 // Import DAG components
 use qudag_dag::{Dag, DagMessage, VertexId};
@@ -158,6 +161,7 @@ pub struct NodeRunner {
     >,
 
     /// Dark resolver for .dark addresses
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     dark_resolver: Option<Arc<RwLock<DarkResolver>>>,
 
     /// Event channel for protocol events
@@ -187,6 +191,7 @@ impl NodeRunner {
             dag,
             rpc_server: None,
             rpc_command_rx: None,
+            #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
             dark_resolver: None,
             event_tx,
             event_rx: Some(event_rx),
@@ -239,6 +244,7 @@ impl NodeRunner {
         self.rpc_command_rx = Some(rpc_command_rx);
 
         // Initialize dark resolver if enabled
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
         if self.config.enable_dark_resolver {
             self.dark_resolver = Some(Arc::new(RwLock::new(DarkResolver::new())));
         }
@@ -487,8 +493,15 @@ impl NodeRunner {
     }
 
     /// Get a reference to the dark resolver
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     pub fn dark_resolver(&self) -> &Option<Arc<RwLock<DarkResolver>>> {
         &self.dark_resolver
+    }
+    
+    /// Get a reference to the dark resolver (stub for non-x86_64)
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+    pub fn dark_resolver(&self) -> &Option<Arc<RwLock<()>>> {
+        &None
     }
 
     /// Get a reference to the running state

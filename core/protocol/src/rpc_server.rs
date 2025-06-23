@@ -1,5 +1,5 @@
 use crate::ProtocolError;
-use qudag_crypto::ml_dsa::MlDsaPublicKey;
+use crate::crypto_compat::MlDsaPublicKey;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::pin::Pin;

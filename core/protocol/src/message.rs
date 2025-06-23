@@ -1,6 +1,7 @@
 //! Protocol message implementation.
 
-use qudag_crypto::{Ciphertext, MlDsaKeyPair, MlDsaPublicKey, MlKem768, PublicKey, SecretKey};
+use qudag_crypto::{Ciphertext, MlKem768, PublicKey, SecretKey};
+use crate::crypto_compat::{MlDsaKeyPair, MlDsaPublicKey};
 use qudag_dag::vertex::VertexId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -318,8 +319,8 @@ impl Message {
         self.signature = Some(signature);
 
         // Set sender key hash for verification
-        let public_key_bytes = keypair.public_key();
-        self.sender_key_hash = Some(blake3::hash(public_key_bytes).as_bytes().to_vec());
+        let public_key_bytes = keypair.public_key().as_bytes();
+        self.sender_key_hash = Some(blake3::hash(&public_key_bytes).as_bytes().to_vec());
 
         Ok(())
     }
@@ -334,7 +335,7 @@ impl Message {
         // Verify sender key hash matches
         if let Some(sender_hash) = &self.sender_key_hash {
             let public_key_bytes = public_key.as_bytes();
-            let expected_hash = blake3::hash(public_key_bytes).as_bytes().to_vec();
+            let expected_hash = blake3::hash(&public_key_bytes).as_bytes().to_vec();
             if sender_hash != &expected_hash {
                 return Ok(false);
             }

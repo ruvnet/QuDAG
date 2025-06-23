@@ -9,7 +9,7 @@ use thiserror::Error;
 
 // Import crypto primitives from the crypto module
 #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
-use qudag_crypto::ml_dsa::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
+use qudag_crypto::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
 use qudag_crypto::ml_kem::MlKem768;
 
 use crate::types::NetworkAddress;

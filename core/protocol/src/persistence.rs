@@ -16,8 +16,21 @@ use tracing::{debug, error, info, warn};
 
 // Import types from other modules
 use qudag_dag::vertex::{Vertex, VertexId};
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 use qudag_network::dark_resolver::DarkDomainRecord;
 use qudag_network::types::PeerId;
+
+// Stub type for ARM64 builds
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DarkDomainRecord {
+    pub domain: String,
+    pub address: Vec<u8>,
+    pub owner_id: Vec<u8>,
+    pub timestamp: u64,
+    pub ttl: u64,
+    pub metadata: HashMap<String, String>,
+}
 
 /// Result type for persistence operations
 pub type Result<T> = std::result::Result<T, PersistenceError>;
@@ -300,7 +313,7 @@ impl FileStateStore {
     /// Get path for a dark domain file
     fn domain_path(&self, record: &DarkDomainRecord) -> PathBuf {
         // Use owner_id as the filename since domain is in a related field
-        let id_hex = hex::encode(record.owner_id.as_bytes());
+        let id_hex = hex::encode(&record.owner_id);
         self.data_dir
             .join("domains")
             .join(format!("{}.json", id_hex))
@@ -643,7 +656,7 @@ impl StateStore for MemoryStateStore {
     }
 
     async fn save_dark_record(&self, record: &DarkDomainRecord) -> Result<()> {
-        let key = hex::encode(record.owner_id.as_bytes());
+        let key = hex::encode(&record.owner_id);
         self.dark_records.insert(key, record.clone());
         debug!(
             "Saved dark domain record for owner {:?} to memory",

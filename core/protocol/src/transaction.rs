@@ -1,7 +1,10 @@
 //! Transaction processing module for QuDAG protocol.
 
 use crate::types::ProtocolError;
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 use qudag_crypto::{ml_dsa::MlDsa65, signature::{Signature, SignatureError}};
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+use ed25519_dalek::{Signer, Verifier, SigningKey, VerifyingKey, Signature as Ed25519Signature};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
@@ -129,12 +132,24 @@ impl Transaction {
     pub fn sign(&mut self, private_key: &[u8]) -> Result<(), TransactionError> {
         let hash = self.hash();
         
-        // Create ML-DSA signature
-        let ml_dsa = MlDsa65::new()
-            .map_err(|e| TransactionError::CryptoError(e.to_string()))?;
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        {
+            // Create ML-DSA signature
+            let ml_dsa = MlDsa65::new()
+                .map_err(|e| TransactionError::CryptoError(e.to_string()))?;
+            
+            self.signature = ml_dsa.sign(private_key, &hash)
+                .map_err(|e| TransactionError::CryptoError(e.to_string()))?;
+        }
         
-        self.signature = ml_dsa.sign(private_key, &hash)
-            .map_err(|e| TransactionError::CryptoError(e.to_string()))?;
+        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        {
+            // Use Ed25519 on ARM64
+            let signing_key = SigningKey::from_bytes(private_key.try_into()
+                .map_err(|_| TransactionError::CryptoError("Invalid private key length".to_string()))?);
+            let signature = signing_key.sign(&hash);
+            self.signature = signature.to_bytes().to_vec();
+        }
         
         Ok(())
     }
@@ -147,11 +162,27 @@ impl Transaction {
         
         let hash = self.hash();
         
-        let ml_dsa = MlDsa65::new()
-            .map_err(|e| TransactionError::CryptoError(e.to_string()))?;
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        {
+            let ml_dsa = MlDsa65::new()
+                .map_err(|e| TransactionError::CryptoError(e.to_string()))?;
+            
+            ml_dsa.verify(public_key, &hash, &self.signature)
+                .map_err(|e| TransactionError::CryptoError(e.to_string()))
+        }
         
-        ml_dsa.verify(public_key, &hash, &self.signature)
-            .map_err(|e| TransactionError::CryptoError(e.to_string()))
+        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        {
+            // Use Ed25519 on ARM64
+            let verifying_key = VerifyingKey::from_bytes(public_key.try_into()
+                .map_err(|_| TransactionError::CryptoError("Invalid public key length".to_string()))?);
+            let signature = Ed25519Signature::from_bytes(&self.signature.try_into()
+                .map_err(|_| TransactionError::CryptoError("Invalid signature length".to_string()))?);
+            
+            verifying_key.verify(&hash, &signature)
+                .map(|_| true)
+                .map_err(|_| TransactionError::CryptoError("Signature verification failed".to_string()))
+        }
     }
 
     /// Get total input amount
@@ -397,6 +428,7 @@ impl Default for TransactionProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     use qudag_crypto::ml_dsa::MlDsa65;
 
     #[test]
@@ -447,8 +479,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_transaction_signing() {
-        let ml_dsa = MlDsa65::new().unwrap();
-        let (pk, sk) = ml_dsa.keygen().unwrap();
+        // Generate key pair based on architecture
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        let (pk_bytes, sk_bytes) = {
+            let ml_dsa = MlDsa65::new().unwrap();
+            let (pk, sk) = ml_dsa.keygen().unwrap();
+            (pk.to_vec(), sk.to_vec())
+        };
+        
+        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        let (pk_bytes, sk_bytes) = {
+            use rand::rngs::OsRng;
+            use rand::RngCore;
+            let mut secret_key_bytes = [0u8; 32];
+            OsRng.fill_bytes(&mut secret_key_bytes);
+            let sk = SigningKey::from_bytes(&secret_key_bytes);
+            let pk = sk.verifying_key();
+            (pk.to_bytes().to_vec(), sk.to_bytes().to_vec())
+        };
 
         let input = TransactionInput {
             prev_tx_hash: [1; 32],
@@ -465,11 +513,11 @@ mod tests {
         let mut tx = Transaction::new(vec![input], vec![output], 1);
         
         // Sign transaction
-        tx.sign(sk.as_bytes()).unwrap();
+        tx.sign(&sk_bytes).unwrap();
         assert!(!tx.signature.is_empty());
 
         // Verify signature
-        assert!(tx.verify_signature(pk.as_bytes()).unwrap());
+        assert!(tx.verify_signature(&pk_bytes).unwrap());
     }
 
     #[test]
@@ -500,8 +548,25 @@ mod tests {
     #[tokio::test]
     async fn test_transaction_processor() {
         let mut processor = TransactionProcessor::new();
-        let ml_dsa = MlDsa65::new().unwrap();
-        let (pk, sk) = ml_dsa.keygen().unwrap();
+        
+        // Generate key pair based on architecture
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        let (pk_bytes, sk_bytes) = {
+            let ml_dsa = MlDsa65::new().unwrap();
+            let (pk, sk) = ml_dsa.keygen().unwrap();
+            (pk.to_vec(), sk.to_vec())
+        };
+        
+        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        let (pk_bytes, sk_bytes) = {
+            use rand::rngs::OsRng;
+            use rand::RngCore;
+            let mut secret_key_bytes = [0u8; 32];
+            OsRng.fill_bytes(&mut secret_key_bytes);
+            let sk = SigningKey::from_bytes(&secret_key_bytes);
+            let pk = sk.verifying_key();
+            (pk.to_bytes().to_vec(), sk.to_bytes().to_vec())
+        };
 
         // Create a genesis UTXO
         let genesis_utxo = UTXO {
@@ -528,10 +593,10 @@ mod tests {
         };
 
         let mut tx = Transaction::new(vec![input], vec![output], 100);
-        tx.sign(sk.as_bytes()).unwrap();
+        tx.sign(&sk_bytes).unwrap();
 
         // Add transaction to processor
-        processor.add_transaction(tx.clone(), pk.as_bytes()).unwrap();
+        processor.add_transaction(tx.clone(), &pk_bytes).unwrap();
         
         // Process transaction
         let tx_hash = tx.hash();

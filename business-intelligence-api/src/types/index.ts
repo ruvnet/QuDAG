@@ -10,14 +10,17 @@ export * from './api';
 
 // Re-export commonly used types for convenience
 export type {
+  ApiResponse,
+  PaginatedResponse,
+  CommandRequest,
+  CommandResponse,
+} from './api';
+
+export type {
   Organization,
   Department,
   AgentProfile,
   BusinessMetric,
   Project,
   CommandHistory,
-  ApiResponse,
-  PaginatedResponse,
-  CommandRequest,
-  CommandResponse,
-} from './api';
+} from './database';

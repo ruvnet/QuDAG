@@ -253,22 +253,20 @@ impl Transaction {
 
     /// Sign the transaction using QuDAG crypto
     #[cfg(feature = "std")]
-    pub fn sign(&mut self, keypair: &qudag_crypto::MlDsaKeyPair) -> Result<()> {
+    pub fn sign(&mut self, keypair: &crate::crypto_compat::UnifiedKeyPair) -> Result<()> {
         let message = self.to_bytes()?;
 
         // Sign the message
         let signature = keypair
-            .sign(&message, &mut rand::thread_rng())
+            .sign(&message)
             .map_err(|e| Error::Other(format!("Signing failed: {:?}", e)))?;
 
-        let public_key = keypair
-            .to_public_key()
-            .map_err(|e| Error::Other(format!("Public key extraction failed: {:?}", e)))?;
+        let public_key = keypair.public_key_bytes();
 
         self.signature = Some(TransactionSignature {
             algorithm: "ML-DSA-87".to_string(),
-            public_key: public_key.as_bytes().to_vec(),
-            signature,
+            public_key,
+            signature: signature.to_bytes(),
         });
 
         Ok(())
@@ -284,12 +282,8 @@ impl Transaction {
 
         let message = self.to_bytes()?;
 
-        // Create public key from bytes
-        let public_key = qudag_crypto::MlDsaPublicKey::from_bytes(&sig_data.public_key)
-            .map_err(|e| Error::Other(format!("Invalid public key: {:?}", e)))?;
-
-        // Verify the signature
-        match public_key.verify(&message, &sig_data.signature) {
+        // Verify the signature using raw bytes
+        match crate::crypto_compat::verify_signature_bytes(&sig_data.public_key, &message, &sig_data.signature) {
             Ok(()) => Ok(true),
             Err(_) => Ok(false),
         }

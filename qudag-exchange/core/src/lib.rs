@@ -26,6 +26,7 @@ use std::{collections::BTreeMap, string::String, vec::Vec};
 pub mod account;
 pub mod config;
 pub mod consensus;
+pub mod crypto_compat;
 pub mod error;
 pub mod fee_model;
 pub mod immutable;
@@ -43,6 +44,7 @@ pub use config::{
     GovernanceConfig, NetworkConfig, SecurityConfig,
 };
 pub use consensus::ConsensusAdapter;
+pub use crypto_compat::UnifiedKeyPair;
 pub use error::{Error, Result};
 pub use fee_model::{AgentStatus, FeeCalculator, FeeModel, FeeModelParams};
 pub use immutable::{

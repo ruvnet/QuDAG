@@ -3,6 +3,10 @@
 //! This module implements the NIST-standardized ML-KEM key encapsulation mechanism.
 //! ML-KEM provides quantum-resistant key exchange capabilities based on the
 //! Module-LWE problem.
+//!
+//! This implementation uses conditional compilation to support both:
+//! - pqcrypto (AVX2 optimized) for x86_64
+//! - libcrux (NEON optimized) for ARM64
 
 use rand::RngCore;
 use std::collections::HashMap;
@@ -10,6 +14,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use crate::kem::{Ciphertext, KEMError, KeyEncapsulation, PublicKey, SecretKey, SharedSecret};
+
+// Import the appropriate implementation based on the target architecture
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+mod pqcrypto_impl;
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+mod libcrux_impl;
 
 // Global metrics for ML-KEM operations
 static CACHE_HITS: AtomicU64 = AtomicU64::new(0);
@@ -88,27 +98,12 @@ impl MlKem768 {
     pub fn keygen_with_rng<R: RngCore + rand::CryptoRng>(
         #[allow(unused_variables)] rng: &mut R,
     ) -> Result<(PublicKey, SecretKey), KEMError> {
-        // For now, use a placeholder implementation
-        // In a real implementation, this would use the ML-KEM algorithm
-        let mut pk_bytes = vec![0u8; Self::PUBLIC_KEY_SIZE];
-        let mut sk_bytes = vec![0u8; Self::SECRET_KEY_SIZE];
-
-        rng.fill_bytes(&mut pk_bytes);
-        rng.fill_bytes(&mut sk_bytes);
-
-        // Create some deterministic relationship between pk and sk for testing
-        for i in 0..32 {
-            if i < pk_bytes.len() && i < sk_bytes.len() {
-                sk_bytes[i] = pk_bytes[i] ^ 0xFF;
-            }
-        }
-
-        let public_key =
-            PublicKey::from_bytes(&pk_bytes).map_err(|_| KEMError::KeyGenerationError)?;
-        let secret_key =
-            SecretKey::from_bytes(&sk_bytes).map_err(|_| KEMError::KeyGenerationError)?;
-
-        Ok((public_key, secret_key))
+        // Use the appropriate implementation based on architecture
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        return pqcrypto_impl::keygen();
+        
+        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        return libcrux_impl::keygen();
     }
 
     /// Encapsulate a shared secret using a public key
@@ -125,29 +120,12 @@ impl MlKem768 {
             return Err(KEMError::InvalidKey);
         }
 
-        // For now, use a placeholder implementation
-        // In a real implementation, this would use the ML-KEM encapsulation algorithm
-        let mut rng = rand::thread_rng();
-        let mut ct_bytes = vec![0u8; Self::CIPHERTEXT_SIZE];
-        let mut ss_bytes = vec![0u8; Self::SHARED_SECRET_SIZE];
-
-        rng.fill_bytes(&mut ct_bytes);
-        rng.fill_bytes(&mut ss_bytes);
-
-        // Create some deterministic relationship for testing
-        for i in 0..32 {
-            if i < pk_bytes.len() {
-                ct_bytes[i] = pk_bytes[i] ^ 0xAA;
-                ss_bytes[i % Self::SHARED_SECRET_SIZE] ^= pk_bytes[i];
-            }
-        }
-
-        let ciphertext =
-            Ciphertext::from_bytes(&ct_bytes).map_err(|_| KEMError::EncapsulationError)?;
-        let shared_secret =
-            SharedSecret::from_bytes(&ss_bytes).map_err(|_| KEMError::EncapsulationError)?;
-
-        Ok((ciphertext, shared_secret))
+        // Use the appropriate implementation based on architecture
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        return pqcrypto_impl::encapsulate(pk);
+        
+        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        return libcrux_impl::encapsulate(pk);
     }
 
     /// Decapsulate a shared secret using a secret key
@@ -187,19 +165,12 @@ impl MlKem768 {
         }
         CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
 
-        // For now, use a placeholder implementation
-        // In a real implementation, this would use the ML-KEM decapsulation algorithm
-        let mut ss_bytes = vec![0u8; Self::SHARED_SECRET_SIZE];
-
-        // Reconstruct the shared secret deterministically from sk and ct
-        for i in 0..32 {
-            if i < sk_bytes.len() && i < ct_bytes.len() {
-                ss_bytes[i % Self::SHARED_SECRET_SIZE] ^= sk_bytes[i] ^ ct_bytes[i];
-            }
-        }
-
-        let shared_secret =
-            SharedSecret::from_bytes(&ss_bytes).map_err(|_| KEMError::DecapsulationError)?;
+        // Use the appropriate implementation based on architecture
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+        let shared_secret = pqcrypto_impl::decapsulate(sk, ct)?;
+        
+        #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+        let shared_secret = libcrux_impl::decapsulate(sk, ct)?;
 
         // Update cache (in a real implementation, you'd want LRU eviction)
         if let Ok(mut cache) = KEY_CACHE.lock() {

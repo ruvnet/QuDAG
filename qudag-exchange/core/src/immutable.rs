@@ -237,7 +237,7 @@ impl ImmutableDeployment {
     #[cfg(feature = "std")]
     pub fn lock_system(
         &mut self,
-        keypair: &qudag_crypto::MlDsaKeyPair,
+        keypair: &crate::crypto_compat::UnifiedKeyPair,
         current_time: Timestamp,
     ) -> Result<()> {
         if !self.config.enabled {
@@ -261,18 +261,16 @@ impl ImmutableDeployment {
 
         // Sign the message
         let signature = keypair
-            .sign(&message, &mut rand::thread_rng())
+            .sign(&message)
             .map_err(|e| Error::Other(format!("Signing failed: {:?}", e)))?;
 
-        let public_key = keypair
-            .to_public_key()
-            .map_err(|e| Error::Other(format!("Public key extraction failed: {:?}", e)))?;
+        let public_key = keypair.public_key_bytes();
 
         // Create immutable signature
         let immutable_sig = ImmutableSignature {
             algorithm: "ML-DSA-87".to_string(),
-            public_key: public_key.as_bytes().to_vec(),
-            signature,
+            public_key,
+            signature: signature.to_bytes(),
             config_hash,
         };
 
@@ -303,12 +301,8 @@ impl ImmutableDeployment {
         message.extend_from_slice(sig_data.config_hash.as_bytes());
         message.extend_from_slice(&locked_at.value().to_le_bytes());
 
-        // Create public key from bytes
-        let public_key = qudag_crypto::MlDsaPublicKey::from_bytes(&sig_data.public_key)
-            .map_err(|e| Error::Other(format!("Invalid public key: {:?}", e)))?;
-
-        // Verify the signature
-        match public_key.verify(&message, &sig_data.signature) {
+        // Verify the signature using crypto_compat
+        match crate::crypto_compat::verify_signature_bytes(&sig_data.public_key, &message, &sig_data.signature) {
             Ok(()) => {
                 // Also verify that the config hash matches current config
                 let current_hash = self.system_config.hash()?;
@@ -374,7 +368,7 @@ impl ImmutableDeployment {
     #[cfg(feature = "std")]
     pub fn governance_override(
         &mut self,
-        governance_keypair: &qudag_crypto::MlDsaKeyPair,
+        governance_keypair: &crate::crypto_compat::UnifiedKeyPair,
         current_time: Timestamp,
     ) -> Result<()> {
         let governance_key = self
@@ -384,11 +378,9 @@ impl ImmutableDeployment {
             .ok_or_else(|| Error::Other("No governance key set".into()))?;
 
         // Verify governance key matches
-        let public_key = governance_keypair
-            .to_public_key()
-            .map_err(|e| Error::Other(format!("Governance key extraction failed: {:?}", e)))?;
+        let public_key = governance_keypair.public_key_bytes();
 
-        if public_key.as_bytes() != governance_key {
+        if &public_key != governance_key {
             return Err(Error::Other("Invalid governance key".into()));
         }
 

@@ -201,7 +201,7 @@ impl ExchangeConfig {
     #[cfg(feature = "std")]
     pub fn lock_system(
         &mut self,
-        keypair: &qudag_crypto::MlDsaKeyPair,
+        keypair: &crate::crypto_compat::UnifiedKeyPair,
         current_time: Timestamp,
     ) -> Result<()> {
         self.immutable_deployment.lock_system(keypair, current_time)
@@ -327,7 +327,7 @@ impl ExchangeConfig {
     #[cfg(feature = "std")]
     pub fn governance_override(
         &mut self,
-        governance_keypair: &qudag_crypto::MlDsaKeyPair,
+        governance_keypair: &crate::crypto_compat::UnifiedKeyPair,
         current_time: Timestamp,
     ) -> Result<()> {
         self.immutable_deployment

@@ -1,6 +1,7 @@
 //! Production-ready P2P network peer discovery implementation with Kademlia DHT,
 //! dark addressing support, and sophisticated peer reputation management.
 
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 use crate::dark_resolver::DarkResolver;
 use crate::shadow_address::{DefaultShadowAddressHandler, NetworkType, ShadowAddress};
 use crate::types::NetworkError;
@@ -832,6 +833,7 @@ pub struct KademliaPeerDiscovery {
     /// Last discovery run
     last_discovery: Option<Instant>,
     /// Dark address resolver
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     dark_resolver: Arc<DarkResolver>,
     /// Shadow address handler
     shadow_handler: DefaultShadowAddressHandler,
@@ -1484,6 +1486,7 @@ impl KademliaPeerDiscovery {
             event_tx: None,
             bootstrap_tried: HashSet::new(),
             last_discovery: None,
+            #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
             dark_resolver: Arc::new(DarkResolver::new()),
             shadow_handler: DefaultShadowAddressHandler::new(
                 NetworkType::Mainnet,

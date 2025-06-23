@@ -54,7 +54,9 @@
 #![allow(clippy::needless_range_loop)]
 #![allow(clippy::type_complexity)]
 
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 use pqcrypto_dilithium::dilithium3::*;
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 use pqcrypto_traits::sign::{
     PublicKey as PqPublicKeyTrait, SecretKey as PqSecretKeyTrait,
     SignedMessage as PqSignedMessageTrait,

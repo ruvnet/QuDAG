@@ -19,6 +19,7 @@ import { TabBar } from "./components/TabBar";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { NotificationToast } from "./components/NotificationToast";
 import { DashboardTab } from "./components/tabs/DashboardTab";
+import { DataDashboardTab } from "./components/tabs/DataDashboardTab";
 import { PlaceholderTab } from "./components/tabs/PlaceholderTab";
 import { cn } from "./lib/utils";
 import type { Tab, SidebarItem } from "./types";
@@ -291,45 +292,10 @@ function CockpitApp() {
       },
       storage: {
         id: "storage",
-        title: "Data Storage",
+        title: "Data Intelligence",
         icon: "database",
-        render: (ctx) => (
-          <PlaceholderTab
-            title="Data Storage"
-            description="Manage your enterprise data and storage systems"
-            icon={<Database className="w-16 h-16" />}
-            features={[
-              "Distributed Storage Management",
-              "Data Backup & Recovery",
-              "Storage Cost Optimization",
-              "Data Lifecycle Management",
-              "Security & Encryption",
-              "Performance Monitoring",
-            ]}
-            quickActions={[
-              {
-                label: "Backup Data",
-                description: "Create comprehensive data backup",
-                icon: <Database className="w-6 h-6" />,
-                color: "blue" as const,
-                action: () =>
-                  ctx.onNotification("Data backup process started", "info"),
-              },
-              {
-                label: "Optimize Storage",
-                description: "Analyze and optimize storage usage",
-                icon: <TrendingUp className="w-6 h-6" />,
-                color: "green" as const,
-                action: () =>
-                  ctx.onNotification(
-                    "Storage optimization analysis started",
-                    "info"
-                  ),
-              },
-            ]}
-            onNotification={ctx.onNotification}
-          />
-        ),
+        render: (ctx) => <DataDashboardTab theme={ctx.theme} />,
+        closable: true,
       },
       security: {
         id: "security",

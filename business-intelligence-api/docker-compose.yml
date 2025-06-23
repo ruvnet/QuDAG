@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: qudag-bi-postgres
+    environment:
+      POSTGRES_USER: qudag_executive
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: qudag_business
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qudag_executive -d qudag_business"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: qudag-bi-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Business Intelligence API
+  bi-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qudag-bi-api
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://qudag_executive:password@postgres:5432/qudag_business
+      REDIS_URL: redis://redis:6379
+      QUDAG_API_URL: http://host.docker.internal:8080
+      QUDAG_EXCHANGE_URL: http://host.docker.internal:8081
+      QUDAG_WS_URL: ws://host.docker.internal:8080/ws
+      JWT_SECRET: development-secret-key
+    ports:
+      - "8090:8090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  # pgAdmin for database management (optional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: qudag-bi-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@qudag.ai
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    profiles:
+      - tools
+
+  # RedisInsight for Redis management (optional)
+  redis-insight:
+    image: redislabs/redisinsight:latest
+    container_name: qudag-bi-redis-insight
+    ports:
+      - "8001:8001"
+    volumes:
+      - redis_insight_data:/db
+    depends_on:
+      - redis
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+  redis_data:
+  pgadmin_data:
+  redis_insight_data:
+
+networks:
+  default:
+    name: qudag-network
+    external: true

@@ -1,0 +1,66 @@
+# QuDAG MCP Node v3 Enhanced - Docker Image
+# Enhanced MCP tools with better descriptions for darknet users
+
+FROM rust:1.87 as builder
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Create src directory
+RUN mkdir -p src
+
+# Copy the enhanced v3 node configuration
+COPY configs/qudag-mcp-node-v3.rs /build/src/main.rs
+
+# Create a minimal Cargo.toml
+RUN echo '[package]\n\
+name = "qudag-mcp-node"\n\
+version = "1.0.0"\n\
+edition = "2021"\n\
+\n\
+[dependencies]\n\
+serde = { version = "1.0", features = ["derive"] }\n\
+serde_json = "1.0"\n\
+fastrand = "2.0"' > Cargo.toml
+
+# Build the node
+RUN cargo build --release
+
+# Runtime stage
+FROM debian:bullseye-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the binary
+COPY --from=builder /build/target/release/qudag-mcp-node /usr/local/bin/
+
+# Create data directory
+RUN mkdir -p /data/qudag
+
+# Default environment variables
+ENV QUDAG_NODE_NAME=mcp-node \
+    QUDAG_NETWORK_ID=qudag-testnet \
+    QUDAG_P2P_PORT=4001 \
+    QUDAG_RPC_PORT=8080 \
+    QUDAG_METRICS_PORT=9090 \
+    QUDAG_IS_BOOTSTRAP=false
+
+# Expose ports
+EXPOSE 4001 8080 9090
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Entry point
+ENTRYPOINT ["/usr/local/bin/qudag-mcp-node"]
+CMD ["--config", "/data/qudag/config.toml"]

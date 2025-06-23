@@ -212,79 +212,276 @@ fn main() {
     }
 }
 
-// Initialize MCP tools (same as v2)
+// Initialize MCP tools with enhanced descriptions for darknet users
 fn init_mcp_tools() -> HashMap<String, serde_json::Value> {
     let mut tools = HashMap::new();
     
-    tools.insert("qudag_crypto".to_string(), json!({
-        "name": "qudag_crypto",
-        "description": "Quantum-resistant cryptography operations",
+    // DAG Operations
+    tools.insert("qudag_dag".to_string(), json!({
+        "name": "qudag_dag",
+        "description": "QuDAG Directed Acyclic Graph operations including consensus, finality, and tip selection",
         "inputSchema": {
             "type": "object",
+            "required": ["operation"],
             "properties": {
                 "operation": {
                     "type": "string",
-                    "enum": ["generate_keys", "sign", "verify", "encrypt", "decrypt"]
+                    "description": "The DAG operation to perform",
+                    "enum": ["get_status", "add_vertex", "get_tips", "validate", "query_finality", "get_vertex"]
+                },
+                "vertex_id": {
+                    "type": "string",
+                    "description": "Vertex ID for query operations"
+                },
+                "data": {
+                    "type": "string",
+                    "description": "Data payload for submit operation"
+                },
+                "depth": {
+                    "type": "integer",
+                    "description": "Query depth limit for traversal operations",
+                    "minimum": 1,
+                    "maximum": 100
+                }
+            }
+        }
+    }));
+    
+    // Vault Operations
+    tools.insert("qudag_vault".to_string(), json!({
+        "name": "qudag_vault",
+        "description": "QuDAG quantum-resistant password vault operations including create, read, update, delete entries and password generation",
+        "inputSchema": {
+            "type": "object",
+            "required": ["operation"],
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "description": "The vault operation to perform",
+                    "enum": ["create", "unlock", "store", "retrieve", "list", "update", "remove", "generate_password"]
+                },
+                "label": {
+                    "type": "string",
+                    "description": "Entry label for store, retrieve, update, remove operations"
+                },
+                "username": {
+                    "type": "string",
+                    "description": "Username for vault entries"
+                },
+                "password": {
+                    "type": "string",
+                    "description": "Password for store/update operations (use generate_password for secure generation)"
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Category filter for list operation",
+                    "enum": ["personal", "work", "finance", "social", "development", "darknet"]
+                },
+                "generate": {
+                    "type": "boolean",
+                    "description": "Generate password for store/update operations"
+                },
+                "length": {
+                    "type": "integer",
+                    "description": "Password length for generation",
+                    "minimum": 8,
+                    "maximum": 64,
+                    "default": 16
+                },
+                "symbols": {
+                    "type": "boolean",
+                    "description": "Include symbols in generated password",
+                    "default": true
+                },
+                "numbers": {
+                    "type": "boolean",
+                    "description": "Include numbers in generated password",
+                    "default": true
+                }
+            }
+        }
+    }));
+    
+    // Network Operations
+    tools.insert("qudag_network".to_string(), json!({
+        "name": "qudag_network",
+        "description": "QuDAG P2P network operations including peer management, discovery, and dark addressing",
+        "inputSchema": {
+            "type": "object",
+            "required": ["operation"],
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "description": "The network operation to perform",
+                    "enum": ["list_peers", "connect", "disconnect", "broadcast", "resolve_dark_domain", "register_dark_domain", "get_network_stats"]
+                },
+                "peer_address": {
+                    "type": "string",
+                    "description": "Peer multiaddr for connect/disconnect operations (e.g., /ip4/1.2.3.4/tcp/4001)"
+                },
+                "domain": {
+                    "type": "string",
+                    "description": "Dark domain for resolve/register operations (e.g., mynode.dark)"
+                },
+                "message": {
+                    "type": "string",
+                    "description": "Message content for broadcast operation"
+                },
+                "ttl": {
+                    "type": "integer",
+                    "description": "Time-to-live for dark domain registration (hours)",
+                    "minimum": 1,
+                    "maximum": 8760,
+                    "default": 720
+                }
+            }
+        }
+    }));
+    
+    // Cryptography Operations
+    tools.insert("qudag_crypto".to_string(), json!({
+        "name": "qudag_crypto",
+        "description": "QuDAG quantum-resistant cryptographic operations including key generation, signing, verification, hashing, and encryption",
+        "inputSchema": {
+            "type": "object",
+            "required": ["operation"],
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "description": "The cryptographic operation to perform",
+                    "enum": ["generate_keys", "sign", "verify", "encrypt", "decrypt", "hash", "fingerprint"]
                 },
                 "algorithm": {
                     "type": "string",
-                    "enum": ["ml-dsa", "ml-kem", "hqc", "blake3"]
-                }
-            }
-        }
-    }));
-    
-    tools.insert("qudag_vault".to_string(), json!({
-        "name": "qudag_vault",
-        "description": "Secure vault operations",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "operation": {
+                    "description": "Cryptographic algorithm to use",
+                    "enum": ["ml-dsa", "ml-kem", "hqc", "blake3", "chacha20poly1305"],
+                    "default": "ml-dsa"
+                },
+                "data": {
                     "type": "string",
-                    "enum": ["create", "unlock", "store", "retrieve", "list"]
-                }
-            }
-        }
-    }));
-    
-    tools.insert("qudag_dag".to_string(), json!({
-        "name": "qudag_dag",
-        "description": "DAG consensus operations",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "operation": {
+                    "description": "Data to sign, verify, hash, encrypt, or decrypt (base64 encoded)"
+                },
+                "signature": {
                     "type": "string",
-                    "enum": ["get_status", "add_vertex", "get_tips", "validate"]
-                }
-            }
-        }
-    }));
-    
-    tools.insert("qudag_network".to_string(), json!({
-        "name": "qudag_network",
-        "description": "P2P network operations",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "operation": {
+                    "description": "Signature to verify (base64 encoded)"
+                },
+                "publicKey": {
                     "type": "string",
-                    "enum": ["list_peers", "connect", "disconnect", "broadcast"]
+                    "description": "Public key for verification or encryption (base64 encoded)"
+                },
+                "privateKey": {
+                    "type": "string",
+                    "description": "Private key for signing or decryption (base64 encoded)"
+                },
+                "format": {
+                    "type": "string",
+                    "description": "Output format for keys",
+                    "enum": ["base64", "hex", "pem"],
+                    "default": "base64"
                 }
             }
         }
     }));
     
+    // Exchange Operations
     tools.insert("qudag_exchange".to_string(), json!({
         "name": "qudag_exchange",
-        "description": "rUv token exchange operations",
+        "description": "QuDAG Exchange operations for rUv tokens - decentralized resource trading on the darknet",
         "inputSchema": {
             "type": "object",
+            "required": ["operation"],
             "properties": {
                 "operation": {
                     "type": "string",
-                    "enum": ["get_balance", "transfer", "get_fees", "list_accounts"]
+                    "description": "The exchange operation to perform",
+                    "enum": ["get_balance", "transfer", "get_fees", "list_accounts", "get_exchange_rate", "create_account", "verify_agent"]
+                },
+                "account_id": {
+                    "type": "string",
+                    "description": "Account identifier for balance queries and transfers"
+                },
+                "from_account": {
+                    "type": "string",
+                    "description": "Source account for transfers"
+                },
+                "to_account": {
+                    "type": "string",
+                    "description": "Destination account for transfers"
+                },
+                "amount": {
+                    "type": "number",
+                    "description": "Amount of rUv tokens for transfers",
+                    "minimum": 0.01
+                },
+                "memo": {
+                    "type": "string",
+                    "description": "Optional memo for transactions (max 256 chars)",
+                    "maxLength": 256
+                },
+                "account_name": {
+                    "type": "string",
+                    "description": "Name for new account creation"
+                }
+            }
+        }
+    }));
+    
+    // System Information (limited for remote users)
+    tools.insert("qudag_system".to_string(), json!({
+        "name": "qudag_system",
+        "description": "QuDAG system information and network health monitoring",
+        "inputSchema": {
+            "type": "object",
+            "required": ["operation"],
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "description": "The system operation to perform",
+                    "enum": ["get_info", "get_network_health", "get_node_metrics", "get_version"]
+                },
+                "detailed": {
+                    "type": "boolean",
+                    "description": "Return detailed information",
+                    "default": false
+                }
+            }
+        }
+    }));
+    
+    // Dark Services (special darknet features)
+    tools.insert("qudag_dark".to_string(), json!({
+        "name": "qudag_dark",
+        "description": "QuDAG darknet-specific services including onion routing, shadow addresses, and anonymous messaging",
+        "inputSchema": {
+            "type": "object",
+            "required": ["operation"],
+            "properties": {
+                "operation": {
+                    "type": "string",
+                    "description": "The dark service operation to perform",
+                    "enum": ["create_shadow_address", "send_anonymous_message", "create_onion_route", "get_dark_stats"]
+                },
+                "hops": {
+                    "type": "integer",
+                    "description": "Number of onion routing hops",
+                    "minimum": 3,
+                    "maximum": 7,
+                    "default": 5
+                },
+                "ttl": {
+                    "type": "integer",
+                    "description": "Time-to-live for shadow addresses (minutes)",
+                    "minimum": 5,
+                    "maximum": 1440,
+                    "default": 60
+                },
+                "recipient": {
+                    "type": "string",
+                    "description": "Recipient dark address or public key"
+                },
+                "message": {
+                    "type": "string",
+                    "description": "Message content for anonymous messaging"
                 }
             }
         }
@@ -1002,40 +1199,174 @@ fn handle_mcp_tool_call(body: &str, state: &Arc<Mutex<NodeState>>, _mcp_state: &
         // Simulate tool execution
         let result = match tool_name {
             "qudag_crypto" => {
-                json!({
-                    "success": true,
-                    "result": {
-                        "operation": arguments["operation"],
-                        "algorithm": arguments["algorithm"],
-                        "key": "ml-dsa-pubkey-example-12345",
-                        "timestamp": std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs()
-                    }
-                })
+                let operation = arguments["operation"].as_str().unwrap_or("generate_keys");
+                match operation {
+                    "generate_keys" => json!({
+                        "success": true,
+                        "result": {
+                            "publicKey": "ML-DSA-PUB-KEY-BASE64-EXAMPLE",
+                            "privateKey": "ML-DSA-PRIV-KEY-BASE64-EXAMPLE",
+                            "algorithm": arguments["algorithm"].as_str().unwrap_or("ml-dsa"),
+                            "format": arguments["format"].as_str().unwrap_or("base64")
+                        }
+                    }),
+                    "hash" => json!({
+                        "success": true,
+                        "result": {
+                            "hash": "BLAKE3-HASH-BASE64-EXAMPLE",
+                            "algorithm": "blake3"
+                        }
+                    }),
+                    _ => json!({
+                        "success": true,
+                        "result": {
+                            "operation": operation,
+                            "status": "completed"
+                        }
+                    })
+                }
             }
             "qudag_dag" => {
                 let state_lock = state.lock().unwrap();
-                json!({
-                    "success": true,
-                    "result": {
-                        "height": state_lock.block_height,
-                        "synced": state_lock.is_synced,
-                        "tips": 2,
-                        "vertices": state_lock.messages_processed
-                    }
-                })
+                let operation = arguments["operation"].as_str().unwrap_or("get_status");
+                match operation {
+                    "get_status" => json!({
+                        "success": true,
+                        "result": {
+                            "height": state_lock.block_height,
+                            "synced": state_lock.is_synced,
+                            "tips": 2,
+                            "vertices": state_lock.messages_processed,
+                            "consensus": "QR-Avalanche",
+                            "finality": 0.999
+                        }
+                    }),
+                    _ => json!({
+                        "success": true,
+                        "result": {
+                            "operation": operation,
+                            "status": "completed"
+                        }
+                    })
+                }
             }
             "qudag_network" => {
                 let state_lock = state.lock().unwrap();
+                let operation = arguments["operation"].as_str().unwrap_or("list_peers");
+                match operation {
+                    "list_peers" => json!({
+                        "success": true,
+                        "result": {
+                            "peers": state_lock.peer_count,
+                            "connected": state_lock.connected_peers.clone()
+                        }
+                    }),
+                    "get_network_stats" => json!({
+                        "success": true,
+                        "result": {
+                            "totalPeers": state_lock.peer_count,
+                            "darkDomains": 42,
+                            "onionRoutes": 7,
+                            "bandwidth": "1.2 MB/s"
+                        }
+                    }),
+                    _ => json!({
+                        "success": true,
+                        "result": {
+                            "operation": operation,
+                            "status": "completed"
+                        }
+                    })
+                }
+            }
+            "qudag_vault" => {
+                let operation = arguments["operation"].as_str().unwrap_or("list");
+                match operation {
+                    "generate_password" => json!({
+                        "success": true,
+                        "result": {
+                            "password": "Xk9#mP2$vL7@nQ4&",
+                            "length": arguments["length"].as_u64().unwrap_or(16),
+                            "strength": "very strong"
+                        }
+                    }),
+                    _ => json!({
+                        "success": true,
+                        "result": {
+                            "operation": operation,
+                            "entries": 5
+                        }
+                    })
+                }
+            }
+            "qudag_exchange" => {
+                let operation = arguments["operation"].as_str().unwrap_or("get_balance");
+                match operation {
+                    "get_balance" => json!({
+                        "success": true,
+                        "result": {
+                            "balance": 1000.0,
+                            "account": arguments["account_id"].as_str().unwrap_or("default"),
+                            "currency": "rUv"
+                        }
+                    }),
+                    "get_fees" => json!({
+                        "success": true,
+                        "result": {
+                            "baseFee": 0.001,
+                            "dynamicFee": 0.0025,
+                            "verifiedDiscount": 0.5
+                        }
+                    }),
+                    _ => json!({
+                        "success": true,
+                        "result": {
+                            "operation": operation,
+                            "status": "completed"
+                        }
+                    })
+                }
+            }
+            "qudag_system" => {
+                let operation = arguments["operation"].as_str().unwrap_or("get_info");
                 json!({
                     "success": true,
                     "result": {
-                        "peers": state_lock.peer_count,
-                        "connected": state_lock.connected_peers.clone()
+                        "version": "1.0.0-mcp-v3",
+                        "network": "qudag-testnet",
+                        "status": "healthy",
+                        "uptime": state.lock().unwrap().uptime.elapsed().as_secs()
                     }
                 })
+            }
+            "qudag_dark" => {
+                let operation = arguments["operation"].as_str().unwrap_or("get_dark_stats");
+                match operation {
+                    "create_shadow_address" => json!({
+                        "success": true,
+                        "result": {
+                            "address": "shadow-7x9Kp3mQ.dark",
+                            "ttl": arguments["ttl"].as_u64().unwrap_or(60),
+                            "expires": "2025-06-23T16:30:00Z"
+                        }
+                    }),
+                    "get_dark_stats" => json!({
+                        "success": true,
+                        "result": {
+                            "activeShadowAddresses": 127,
+                            "onionRoutes": 42,
+                            "anonymousMessages": 1337,
+                            "darkDomains": 256
+                        }
+                    }),
+                    _ => json!({
+                        "success": true,
+                        "result": {
+                            "operation": operation,
+                            "status": "completed"
+                        }
+                    })
+                }
             }
             _ => {
                 json!({

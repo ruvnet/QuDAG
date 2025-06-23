@@ -7,8 +7,8 @@
 
 export const testOrganizations = [
   {
-    id: 'demo-org-1',
-    tenant_id: 'tenant-demo-1',
+    id: '550e8400-e29b-41d4-a716-446655440000',
+    tenant_id: '550e8400-e29b-41d4-a716-446655440001',
     name: 'QuDAG Enterprises',
     logo_url: 'https://via.placeholder.com/64',
     industry: 'Technology',

@@ -1,5 +1,6 @@
 use proptest::prelude::*;
-use qudag_crypto::ml_dsa::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
+// Use crate-level imports for architecture-specific type aliases
+use qudag_crypto::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
 use rand::{thread_rng, RngCore};
 
 #[test]

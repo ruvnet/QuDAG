@@ -8,7 +8,7 @@
 //! - Constant-time operation validation
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use qudag_crypto::ml_dsa::{MlDsa, MlDsaKeyPair, MlDsaPublicKey};
+use qudag_crypto::{MlDsa, MlDsaKeyPair, MlDsaPublicKey};
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -693,7 +693,8 @@ criterion_main!(benches);
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::{MlDsaKeyPair, MlDsaPublicKey, MlDsaError};
+use super::{ML_DSA_PUBLIC_KEY_SIZE, ML_DSA_SECRET_KEY_SIZE, ML_DSA_SIGNATURE_SIZE};
 
     #[test]
     fn test_timing_variance_measurement() {

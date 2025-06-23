@@ -10,7 +10,7 @@ fn test_ml_dsa_types_exist() {
 
 #[test]
 fn test_ml_dsa_basic_functionality() {
-    use qudag_crypto::ml_dsa::{MlDsaKeyPair, MlDsaPublicKey};
+    use qudag_crypto::{MlDsaKeyPair, MlDsaPublicKey};
     use rand::thread_rng;
 
     let mut rng = thread_rng();

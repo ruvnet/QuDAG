@@ -34,7 +34,7 @@ fn test_constant_time_comparison() {
 
 #[test]
 fn test_timing_resistance() {
-    use qudag_crypto::ml_dsa::MlDsaKeyPair;
+    use qudag_crypto::MlDsaKeyPair;
     use qudag_crypto::ml_kem::MlKem768;
     use rand::thread_rng;
 

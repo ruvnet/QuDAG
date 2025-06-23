@@ -1,4 +1,4 @@
-use crate::ml_dsa::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
+use crate::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
 use blake3::Hasher;
 use rand_core::{CryptoRng, RngCore};
 use subtle::{Choice, ConstantTimeEq};

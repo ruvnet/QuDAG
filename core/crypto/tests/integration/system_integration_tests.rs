@@ -141,7 +141,8 @@ impl IntegrationTestContext {
 
 #[cfg(test)]
 mod system_integration_tests {
-    use super::*;
+    use crate::{MlDsaKeyPair, MlDsaPublicKey, MlDsaError};
+use super::{ML_DSA_PUBLIC_KEY_SIZE, ML_DSA_SECRET_KEY_SIZE, ML_DSA_SIGNATURE_SIZE};
 
     #[test]
     fn test_end_to_end_key_exchange() {

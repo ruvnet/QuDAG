@@ -3,7 +3,7 @@
 //! This example demonstrates how to use ML-DSA for quantum-resistant digital signatures.
 //! ML-DSA is a quantum-resistant signature scheme based on lattice cryptography.
 
-use qudag_crypto::ml_dsa::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
+use qudag_crypto::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
 use rand::thread_rng;
 use std::time::Instant;
 

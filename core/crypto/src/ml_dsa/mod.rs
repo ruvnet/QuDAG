@@ -23,7 +23,7 @@
 //! # Example Usage
 //!
 //! ```rust
-//! use qudag_crypto::ml_dsa::{MlDsaKeyPair, MlDsaPublicKey};
+//! use qudag_crypto::{MlDsaKeyPair, MlDsaPublicKey};
 //! use rand::thread_rng;
 //!
 //! fn example() -> Result<(), Box<dyn std::error::Error>> {
@@ -61,6 +61,15 @@ use pqcrypto_traits::sign::{
     PublicKey as PqPublicKeyTrait, SecretKey as PqSecretKeyTrait,
     SignedMessage as PqSignedMessageTrait,
 };
+
+// Import liboqs implementation for ARM64
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+mod liboqs_impl;
+
+// FFI-based verification for ARM64
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+mod ffi_verify;
+
 use rand::Rng;
 use rand_core::{CryptoRng, RngCore};
 use sha3::{
@@ -190,7 +199,8 @@ pub enum MlDsaError {
     InternalError(String),
 }
 
-/// ML-DSA public key for signature verification
+/// ML-DSA public key for signature verification (x86_64 with AVX2)
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 #[derive(Clone)]
 pub struct MlDsaPublicKey {
     /// Raw public key bytes
@@ -199,6 +209,7 @@ pub struct MlDsaPublicKey {
     internal_key: PublicKey,
 }
 
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 impl std::fmt::Debug for MlDsaPublicKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MlDsaPublicKey")
@@ -207,6 +218,7 @@ impl std::fmt::Debug for MlDsaPublicKey {
     }
 }
 
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 impl MlDsaPublicKey {
     /// Create a new ML-DSA public key from raw bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, MlDsaError> {
@@ -292,7 +304,8 @@ impl MlDsaPublicKey {
     }
 }
 
-/// ML-DSA key pair for signing operations
+/// ML-DSA key pair for signing operations (x86_64 with AVX2)
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 pub struct MlDsaKeyPair {
     /// Public key bytes
     public_key: Vec<u8>,
@@ -304,6 +317,7 @@ pub struct MlDsaKeyPair {
     internal_secret: SecretKey,
 }
 
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 impl std::fmt::Debug for MlDsaKeyPair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MlDsaKeyPair")
@@ -313,6 +327,7 @@ impl std::fmt::Debug for MlDsaKeyPair {
     }
 }
 
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 impl Drop for MlDsaKeyPair {
     fn drop(&mut self) {
         // Zeroize sensitive key material
@@ -320,6 +335,7 @@ impl Drop for MlDsaKeyPair {
     }
 }
 
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 impl MlDsaKeyPair {
     /// Create a public key from this keypair for sharing/cloning purposes
     pub fn to_public_key(&self) -> Result<MlDsaPublicKey, MlDsaError> {
@@ -855,7 +871,8 @@ fn sample_in_ball(seed: &[u8]) -> [i32; ML_DSA_N] {
 
 // Removed redundant function - signing is now integrated directly into the sign method
 
-/// Verify signature using ML-DSA (internal implementation)
+/// Verify signature using ML-DSA (internal implementation for x86_64)
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 fn verify_signature_internal(
     message: &[u8],
     public_key_bytes: &[u8],
@@ -885,9 +902,11 @@ fn verify_signature_internal(
     }
 }
 
-/// Main ML-DSA interface with advanced features
+/// Main ML-DSA interface with advanced features (x86_64 with AVX2)
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 pub struct MlDsa;
 
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 impl MlDsa {
     /// Generate a new ML-DSA key pair
     pub fn keygen<R: CryptoRng + RngCore>(
@@ -971,7 +990,8 @@ pub struct MlDsaParameters {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::{MlDsaKeyPair, MlDsaPublicKey, MlDsaError};
+use super::{ML_DSA_PUBLIC_KEY_SIZE, ML_DSA_SECRET_KEY_SIZE, ML_DSA_SIGNATURE_SIZE};
     use rand::thread_rng;
 
     #[test]
@@ -1028,7 +1048,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
     fn test_ntt_operations() {
+        use super::{ML_DSA_N, ntt, invntt};
+        
         let mut poly = [1i32; ML_DSA_N];
         let original = poly;
 
@@ -1041,3 +1064,41 @@ mod tests {
         }
     }
 }
+
+/// Verify signature using ML-DSA (internal implementation for ARM64 with liboqs)
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+fn verify_signature_internal(
+    message: &[u8],
+    public_key_bytes: &[u8],
+    signature: &[u8],
+) -> Result<(), MlDsaError> {
+    use oqs::sig::{Algorithm, Sig};
+    
+    // Validate inputs
+    if public_key_bytes.len() != ML_DSA_PUBLIC_KEY_SIZE {
+        return Err(MlDsaError::InvalidPublicKey("Invalid public key size".to_string()));
+    }
+    
+    if signature.len() < 2000 || signature.len() > ML_DSA_SIGNATURE_SIZE {
+        return Err(MlDsaError::InvalidSignatureLength {
+            expected: ML_DSA_SIGNATURE_SIZE,
+            found: signature.len(),
+        });
+    }
+    
+    // For now, we need to use a workaround since we can't easily reconstruct
+    // oqs types from raw bytes. This is a limitation of the current oqs API.
+    // The proper verification happens in LiboqsMlDsaPublicKey::verify()
+    // which has access to the native oqs types.
+    
+    // This is a temporary implementation that validates structure but
+    // doesn't perform actual cryptographic verification when called directly.
+    // Real verification happens through the LiboqsMlDsaPublicKey type.
+    Err(MlDsaError::InternalError(
+        "Direct byte verification not supported - use LiboqsMlDsaPublicKey::verify()".to_string()
+    ))
+}
+
+// Re-export appropriate types based on architecture
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+pub use liboqs_impl::{LiboqsMlDsaKeyPair, LiboqsMlDsaPublicKey};

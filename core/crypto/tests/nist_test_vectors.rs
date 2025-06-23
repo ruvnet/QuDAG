@@ -149,7 +149,8 @@ fn get_ml_dsa_65_kat_vectors() -> Vec<MlDsaKatVector> {
 
 #[cfg(test)]
 mod nist_test_vectors {
-    use super::*;
+    use crate::{MlDsaKeyPair, MlDsaPublicKey, MlDsaError};
+use super::{ML_DSA_PUBLIC_KEY_SIZE, ML_DSA_SECRET_KEY_SIZE, ML_DSA_SIGNATURE_SIZE};
 
     #[test]
     fn test_ml_kem_768_kat_vectors() {

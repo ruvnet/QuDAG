@@ -8,7 +8,7 @@
 //! - Property-based testing
 
 use proptest::prelude::*;
-use qudag_crypto::ml_dsa::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
+use qudag_crypto::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
 use std::time::{Duration, Instant};
 
 // NIST ML-DSA parameter sets

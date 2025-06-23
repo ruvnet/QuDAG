@@ -12,28 +12,36 @@
 
 pub mod encryption;
 pub mod error;
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+
 pub mod fingerprint;
 pub mod hash;
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+
+#[cfg(feature = "hqc")]
 pub mod hqc;
 pub mod kem;
 // mod optimized;
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+
 pub mod ml_dsa;
 pub mod ml_kem;
 pub mod signature;
 
 pub use error::CryptoError;
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+
 pub use fingerprint::{Fingerprint, FingerprintError};
 pub use hash::HashFunction;
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+
+#[cfg(feature = "hqc")]
 pub use hqc::{Hqc, Hqc128, Hqc192, Hqc256, HqcError, SecurityParameter};
 pub use kem::{
     Ciphertext, KEMError, KeyEncapsulation, KeyPair, PublicKey, SecretKey, SharedSecret,
 };
+
+// ML-DSA exports - conditional based on architecture
 #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 pub use ml_dsa::{MlDsa, MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
+
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+pub use ml_dsa::{MlDsaError, LiboqsMlDsaKeyPair as MlDsaKeyPair, LiboqsMlDsaPublicKey as MlDsaPublicKey};
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
 pub use ml_kem::{Metrics as MlKemMetrics, MlKem768};
 pub use signature::{DigitalSignature, SignatureError};

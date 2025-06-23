@@ -12,7 +12,7 @@ keywords = ["quantum-resistant", "post-quantum", "ml-kem", "ml-dsa", "cryptograp
 categories = ["cryptography"]
 
 [features]
-default = ["ml-kem", "ml-dsa", "hqc"]
+default = ["ml-kem", "ml-dsa"]
 ml-kem = []
 ml-dsa = []
 hqc = []
@@ -48,6 +48,11 @@ pqcrypto-hqc = "0.2"
 [target.'cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))'.dependencies]
 # libcrux has ARM64 NEON support and is formally verified
 libcrux-ml-kem = "0.0.2-alpha.4"
+# oqs provides quantum-resistant algorithms including ML-DSA for ARM64
+oqs = "0.10.1"
+# Direct FFI access for verification
+oqs-sys = "0.10.1"
+libc = "0.2"
 
 [dev-dependencies]
 proptest.workspace = true

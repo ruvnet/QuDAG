@@ -331,7 +331,8 @@ mod timing_analysis {
 
 #[cfg(test)]
 mod advanced_side_channel_tests {
-    use super::*;
+    use crate::{MlDsaKeyPair, MlDsaPublicKey, MlDsaError};
+use super::{ML_DSA_PUBLIC_KEY_SIZE, ML_DSA_SECRET_KEY_SIZE, ML_DSA_SIGNATURE_SIZE};
 
     #[test]
     fn test_ml_kem_power_analysis_resistance() {

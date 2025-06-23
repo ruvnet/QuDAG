@@ -7,7 +7,7 @@
 //! - Resistance to known cryptographic attacks
 //! - Key isolation and cross-contamination resistance
 
-use qudag_crypto::ml_dsa::{MlDsa, MlDsaKeyPair, MlDsaPublicKey, MlDsaError};
+use qudag_crypto::{MlDsa, MlDsaKeyPair, MlDsaPublicKey, MlDsaError};
 use rand::{thread_rng, RngCore, SeedableRng};
 use rand::rngs::StdRng;
 use std::time::{Duration, Instant};

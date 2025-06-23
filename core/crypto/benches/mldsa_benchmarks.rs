@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use qudag_crypto::ml_dsa::{MLDsa, SIGNATURE_LENGTH};
+use qudag_crypto::{MLDsa, SIGNATURE_LENGTH};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::time::Instant;
 

@@ -102,17 +102,33 @@ export const businessApi = {
   },
 };
 
+// Define proper types for WebSocket data
+export interface WebSocketMessage {
+  topic: string;
+  type: "metrics" | "transaction" | "agent_status" | "system_alert";
+  data: BusinessMetrics | Transaction | AgentPerformance | SystemAlert;
+  timestamp: string;
+}
+
+export interface SystemAlert {
+  id: string;
+  level: "info" | "warning" | "error" | "critical";
+  message: string;
+  source: string;
+}
+
 // WebSocket connection for real-time updates
 export class RealtimeConnection {
   private ws: WebSocket | null = null;
-  private subscribers: Map<string, Set<(data: any) => void>> = new Map();
+  private subscribers: Map<string, Set<(data: WebSocketMessage) => void>> =
+    new Map();
 
   connect() {
     const wsUrl = API_BASE_URL.replace("http", "ws") + "/ws";
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+      const data: WebSocketMessage = JSON.parse(event.data);
       const topic = data.topic || "default";
 
       const handlers = this.subscribers.get(topic);
@@ -131,7 +147,7 @@ export class RealtimeConnection {
     };
   }
 
-  subscribe(topic: string, handler: (data: any) => void) {
+  subscribe(topic: string, handler: (data: WebSocketMessage) => void) {
     if (!this.subscribers.has(topic)) {
       this.subscribers.set(topic, new Set());
     }

@@ -1,332 +1,565 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { motion, AnimatePresence } from "framer-motion";
 import {
+  BarChart3,
+  Users,
+  Settings,
+  Activity,
   DollarSign,
   TrendingUp,
-  Users,
-  Activity,
-  Settings,
-  LogOut,
+  Database,
+  Shield,
+  Zap,
 } from "lucide-react";
-import { MetricCard } from "./components/MetricCard";
-import { RevenueChart } from "./components/RevenueChart";
-import { AgentTable } from "./components/AgentTable";
-import { formatCurrency, formatNumber, getTrend } from "./lib/utils";
+
+import { useCockpit } from "./hooks/useCockpit";
+import { Sidebar } from "./components/Sidebar";
+import { TabBar } from "./components/TabBar";
+import { ThemeToggle } from "./components/ThemeToggle";
+import { NotificationToast } from "./components/NotificationToast";
+import { DashboardTab } from "./components/tabs/DashboardTab";
+import { PlaceholderTab } from "./components/tabs/PlaceholderTab";
+import { cn } from "./lib/utils";
+import type { Tab, SidebarItem } from "./types";
 
 // Create a client
 const queryClient = new QueryClient();
 
-// Mock data - replace with real API calls
-const mockMetrics = {
-  revenue: {
-    current: 248500,
-    previous: 198200,
-    growth: 0.254,
-    currency: "rUv",
-  },
-  agents: {
-    total: 24,
-    active: 19,
-    efficiency: 0.92,
-  },
-  operations: {
-    totalTasks: 15842,
-    completedTasks: 14698,
-    successRate: 0.928,
-    avgCompletionTime: 142,
-  },
-  costs: {
-    compute: 42300,
-    storage: 8900,
-    network: 12400,
-    total: 63600,
-  },
-};
+function CockpitApp() {
+  const {
+    theme,
+    tabs,
+    activeTabId,
+    sidebarCollapsed,
+    notifications,
+    toggleTheme,
+    addTab,
+    removeTab,
+    setActiveTab,
+    toggleSidebar,
+    addNotification,
+    removeNotification,
+  } = useCockpit();
 
-const mockRevenueData = [
-  { date: "Jan 1", revenue: 182000, costs: 58000, profit: 124000 },
-  { date: "Jan 8", revenue: 195000, costs: 61000, profit: 134000 },
-  { date: "Jan 15", revenue: 208000, costs: 62000, profit: 146000 },
-  { date: "Jan 22", revenue: 224000, costs: 63000, profit: 161000 },
-  { date: "Jan 29", revenue: 248500, costs: 63600, profit: 184900 },
-];
+  // Apply theme to document
+  useEffect(() => {
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [theme]);
 
-const mockAgents = [
-  {
-    id: "1",
-    name: "Sales Bot Alpha",
-    type: "Sales Automation",
-    tasksCompleted: 3421,
-    successRate: 0.96,
-    revenueGenerated: 89400,
-    costIncurred: 12300,
-    roi: 6.27,
-    status: "active" as const,
-  },
-  {
-    id: "2",
-    name: "Support Agent Beta",
-    type: "Customer Service",
-    tasksCompleted: 5832,
-    successRate: 0.91,
-    revenueGenerated: 45200,
-    costIncurred: 8900,
-    roi: 4.08,
-    status: "active" as const,
-  },
-  {
-    id: "3",
-    name: "Research Swarm Gamma",
-    type: "Data Analysis",
-    tasksCompleted: 1247,
-    successRate: 0.88,
-    revenueGenerated: 67300,
-    costIncurred: 18700,
-    roi: 2.6,
-    status: "idle" as const,
-  },
-  {
-    id: "4",
-    name: "Content Creator Delta",
-    type: "Content Generation",
-    tasksCompleted: 892,
-    successRate: 0.94,
-    revenueGenerated: 34100,
-    costIncurred: 6400,
-    roi: 4.33,
-    status: "active" as const,
-  },
-];
+  // Initialize with dashboard tab
+  useEffect(() => {
+    if (tabs.length === 0) {
+      addTab({
+        id: "dashboard",
+        title: "Dashboard",
+        icon: "home",
+        render: (context) => <DashboardTab theme={context.theme} />,
+        closable: false,
+      });
+    }
+  }, [tabs.length, addTab]);
 
-function Dashboard() {
-  const [selectedPeriod, setSelectedPeriod] = useState("7d");
-  const [notification, setNotification] = useState<{
-    message: string;
-    type: "info" | "success";
-  } | null>(null);
+  const handleSidebarItemClick = (item: SidebarItem) => {
+    const tabConfigs: Record<string, Omit<Tab, "action">> = {
+      dashboard: {
+        id: "dashboard",
+        title: "Dashboard",
+        icon: "home",
+        render: (ctx) => <DashboardTab theme={ctx.theme} />,
+        closable: false,
+      },
+      analytics: {
+        id: "analytics",
+        title: "Analytics",
+        icon: "bar-chart-3",
+        render: (ctx) => (
+          <PlaceholderTab
+            title="Analytics"
+            description="Advanced analytics and insights for your autonomous enterprise"
+            icon={<BarChart3 className="w-16 h-16" />}
+            features={[
+              "Predictive Revenue Forecasting",
+              "Agent Performance Predictions",
+              "Cost Optimization Recommendations",
+              "Market Trend Analysis",
+              "ROI Optimization Insights",
+              "Custom Dashboard Builder",
+            ]}
+            quickActions={[
+              {
+                label: "Generate Report",
+                description: "Create comprehensive analytics report",
+                icon: <BarChart3 className="w-6 h-6" />,
+                color: "blue" as const,
+                action: () =>
+                  ctx.onNotification(
+                    "Analytics report generation started",
+                    "info"
+                  ),
+              },
+              {
+                label: "View Insights",
+                description: "Access AI-powered business insights",
+                icon: <TrendingUp className="w-6 h-6" />,
+                color: "green" as const,
+                action: () =>
+                  ctx.onNotification("Opening insights dashboard", "info"),
+              },
+            ]}
+            onNotification={ctx.onNotification}
+          />
+        ),
+      },
+      agents: {
+        id: "agents",
+        title: "Agent Management",
+        icon: "users",
+        render: (ctx) => (
+          <PlaceholderTab
+            title="Agent Management"
+            description="Deploy, monitor, and optimize your AI agent workforce"
+            icon={<Users className="w-16 h-16" />}
+            features={[
+              "Agent Deployment Wizard",
+              "Real-time Performance Monitoring",
+              "Automated Scaling Rules",
+              "Agent Health Diagnostics",
+              "Task Assignment Engine",
+              "Agent Communication Hub",
+            ]}
+            quickActions={[
+              {
+                label: "Deploy New Agent",
+                description: "Launch a new AI agent with guided setup",
+                icon: <Users className="w-6 h-6" />,
+                color: "blue" as const,
+                action: () =>
+                  ctx.onNotification(
+                    "Agent deployment wizard would open here",
+                    "info"
+                  ),
+              },
+              {
+                label: "Scale Operations",
+                description: "Automatically scale your agent workforce",
+                icon: <TrendingUp className="w-6 h-6" />,
+                color: "green" as const,
+                action: () =>
+                  ctx.onNotification(
+                    "Auto-scaling configuration started",
+                    "info"
+                  ),
+              },
+            ]}
+            onNotification={ctx.onNotification}
+          />
+        ),
+      },
+      revenue: {
+        id: "revenue",
+        title: "Revenue Streams",
+        icon: "dollar-sign",
+        render: (ctx) => (
+          <PlaceholderTab
+            title="Revenue Streams"
+            description="Track and optimize your autonomous revenue generation"
+            icon={<DollarSign className="w-16 h-16" />}
+            features={[
+              "Revenue Stream Analytics",
+              "Automated Pricing Optimization",
+              "Payment Processing Integration",
+              "Revenue Forecasting Models",
+              "Profit Margin Analysis",
+              "Customer Lifetime Value",
+            ]}
+            quickActions={[
+              {
+                label: "Optimize Pricing",
+                description: "AI-powered pricing optimization",
+                icon: <DollarSign className="w-6 h-6" />,
+                color: "green" as const,
+                action: () =>
+                  ctx.onNotification(
+                    "Pricing optimization analysis started",
+                    "info"
+                  ),
+              },
+              {
+                label: "View Reports",
+                description: "Generate detailed revenue reports",
+                icon: <BarChart3 className="w-6 h-6" />,
+                color: "blue" as const,
+                action: () =>
+                  ctx.onNotification(
+                    "Revenue report generation started",
+                    "info"
+                  ),
+              },
+            ]}
+            onNotification={ctx.onNotification}
+          />
+        ),
+      },
+      performance: {
+        id: "performance",
+        title: "Performance",
+        icon: "trending-up",
+        render: (ctx) => (
+          <PlaceholderTab
+            title="Performance Monitoring"
+            description="Real-time performance metrics and optimization tools"
+            icon={<TrendingUp className="w-16 h-16" />}
+            features={[
+              "Real-time Performance Dashboards",
+              "Automated Alert System",
+              "Performance Benchmarking",
+              "Resource Utilization Tracking",
+              "Bottleneck Detection",
+              "Performance Optimization AI",
+            ]}
+            quickActions={[
+              {
+                label: "Run Diagnostics",
+                description: "Comprehensive system performance check",
+                icon: <Activity className="w-6 h-6" />,
+                color: "orange" as const,
+                action: () =>
+                  ctx.onNotification("Performance diagnostics started", "info"),
+              },
+              {
+                label: "Optimize System",
+                description: "Auto-optimize system performance",
+                icon: <TrendingUp className="w-6 h-6" />,
+                color: "green" as const,
+                action: () =>
+                  ctx.onNotification("System optimization initiated", "info"),
+              },
+            ]}
+            onNotification={ctx.onNotification}
+          />
+        ),
+      },
+      operations: {
+        id: "operations",
+        title: "Operations",
+        icon: "activity",
+        render: (ctx) => (
+          <PlaceholderTab
+            title="Operations Center"
+            description="Monitor and control your autonomous operations"
+            icon={<Activity className="w-16 h-16" />}
+            features={[
+              "Task Queue Management",
+              "Workflow Automation",
+              "Error Handling & Recovery",
+              "Operational Metrics",
+              "Process Optimization",
+              "Incident Response System",
+            ]}
+            quickActions={[
+              {
+                label: "Monitor Tasks",
+                description: "View real-time task queue status",
+                icon: <Activity className="w-6 h-6" />,
+                color: "blue" as const,
+                action: () =>
+                  ctx.onNotification(
+                    "Task monitoring dashboard opened",
+                    "info"
+                  ),
+              },
+              {
+                label: "Emergency Stop",
+                description: "Safely halt all operations",
+                icon: <Shield className="w-6 h-6" />,
+                color: "red" as const,
+                action: () =>
+                  ctx.onNotification(
+                    "Emergency stop protocol activated",
+                    "warning"
+                  ),
+              },
+            ]}
+            onNotification={ctx.onNotification}
+          />
+        ),
+      },
+      storage: {
+        id: "storage",
+        title: "Data Storage",
+        icon: "database",
+        render: (ctx) => (
+          <PlaceholderTab
+            title="Data Storage"
+            description="Manage your enterprise data and storage systems"
+            icon={<Database className="w-16 h-16" />}
+            features={[
+              "Distributed Storage Management",
+              "Data Backup & Recovery",
+              "Storage Cost Optimization",
+              "Data Lifecycle Management",
+              "Security & Encryption",
+              "Performance Monitoring",
+            ]}
+            quickActions={[
+              {
+                label: "Backup Data",
+                description: "Create comprehensive data backup",
+                icon: <Database className="w-6 h-6" />,
+                color: "blue" as const,
+                action: () =>
+                  ctx.onNotification("Data backup process started", "info"),
+              },
+              {
+                label: "Optimize Storage",
+                description: "Analyze and optimize storage usage",
+                icon: <TrendingUp className="w-6 h-6" />,
+                color: "green" as const,
+                action: () =>
+                  ctx.onNotification(
+                    "Storage optimization analysis started",
+                    "info"
+                  ),
+              },
+            ]}
+            onNotification={ctx.onNotification}
+          />
+        ),
+      },
+      security: {
+        id: "security",
+        title: "Security",
+        icon: "shield",
+        render: (ctx) => (
+          <PlaceholderTab
+            title="Security Center"
+            description="Protect your autonomous enterprise with advanced security"
+            icon={<Shield className="w-16 h-16" />}
+            features={[
+              "Threat Detection & Response",
+              "Access Control Management",
+              "Security Audit Logs",
+              "Vulnerability Scanning",
+              "Compliance Monitoring",
+              "Incident Response Automation",
+            ]}
+            quickActions={[
+              {
+                label: "Security Scan",
+                description: "Run comprehensive security audit",
+                icon: <Shield className="w-6 h-6" />,
+                color: "orange" as const,
+                action: () =>
+                  ctx.onNotification("Security scan initiated", "info"),
+              },
+              {
+                label: "Threat Analysis",
+                description: "Analyze potential security threats",
+                icon: <Activity className="w-6 h-6" />,
+                color: "red" as const,
+                action: () =>
+                  ctx.onNotification("Threat analysis started", "info"),
+              },
+            ]}
+            onNotification={ctx.onNotification}
+          />
+        ),
+      },
+      automation: {
+        id: "automation",
+        title: "Automation",
+        icon: "zap",
+        render: (ctx) => (
+          <PlaceholderTab
+            title="Automation Hub"
+            description="Create and manage automated workflows and processes"
+            icon={<Zap className="w-16 h-16" />}
+            features={[
+              "Workflow Designer",
+              "Trigger Management",
+              "Process Automation",
+              "Integration Hub",
+              "Automation Analytics",
+              "Smart Scheduling",
+            ]}
+            quickActions={[
+              {
+                label: "Create Workflow",
+                description: "Design new automated workflow",
+                icon: <Zap className="w-6 h-6" />,
+                color: "purple" as const,
+                action: () =>
+                  ctx.onNotification("Workflow designer opened", "info"),
+              },
+              {
+                label: "Schedule Tasks",
+                description: "Set up automated task scheduling",
+                icon: <Settings className="w-6 h-6" />,
+                color: "blue" as const,
+                action: () =>
+                  ctx.onNotification("Task scheduler opened", "info"),
+              },
+            ]}
+            onNotification={ctx.onNotification}
+          />
+        ),
+      },
+      settings: {
+        id: "settings",
+        title: "Settings",
+        icon: "settings",
+        render: (ctx) => (
+          <PlaceholderTab
+            title="Settings"
+            description="Configure your QuDAG Executive dashboard and preferences"
+            icon={<Settings className="w-16 h-16" />}
+            features={[
+              "Dashboard Customization",
+              "User Preferences",
+              "API Configuration",
+              "Notification Settings",
+              "Theme & Appearance",
+              "Data Export Options",
+            ]}
+            quickActions={[
+              {
+                label: "Customize Dashboard",
+                description: "Personalize your dashboard layout",
+                icon: <Settings className="w-6 h-6" />,
+                color: "blue" as const,
+                action: () =>
+                  ctx.onNotification("Dashboard customization opened", "info"),
+              },
+              {
+                label: "Export Data",
+                description: "Export your data and configurations",
+                icon: <Database className="w-6 h-6" />,
+                color: "green" as const,
+                action: () =>
+                  ctx.onNotification("Data export wizard opened", "info"),
+              },
+            ]}
+            onNotification={ctx.onNotification}
+          />
+        ),
+      },
+    };
 
-  const profit = mockMetrics.revenue.current - mockMetrics.costs.total;
-  const profitMargin = profit / mockMetrics.revenue.current;
-  const revenueTrend = getTrend(
-    mockMetrics.revenue.current,
-    mockMetrics.revenue.previous
-  );
+    const tabConfig = tabConfigs[item.id];
+    if (tabConfig) {
+      addTab(tabConfig);
+    }
+  };
 
-  const handleQuickAction = (action: string) => {
-    setNotification({
-      message: `${action} - This would open a wizard to guide you through the process`,
-      type: "info",
-    });
-    setTimeout(() => setNotification(null), 4000);
+  const activeTab = tabs.find((tab) => tab.id === activeTabId);
+
+  const renderActiveTab = () => {
+    if (!activeTab) return null;
+
+    const context = {
+      theme,
+      onNotification: (
+        message: string,
+        type: "info" | "success" | "warning" | "error"
+      ) => addNotification({ message, type }),
+    };
+
+    return activeTab.render(context);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Notification */}
-      {notification && (
-        <div
-          className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg ${
-            notification.type === "success" ? "bg-green-500" : "bg-blue-500"
-          } text-white max-w-md`}
-        >
-          {notification.message}
-        </div>
+    <div
+      className={cn(
+        "h-screen overflow-hidden transition-colors duration-200",
+        theme === "dark" ? "bg-gray-900" : "bg-gray-50"
       )}
+    >
+      {/* Notifications */}
+      <NotificationToast
+        notifications={notifications}
+        onRemove={removeNotification}
+        theme={theme}
+      />
 
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-bold text-gray-900">
-                QuDAG Executive
-              </h1>
-              <span className="ml-3 text-sm text-gray-500">
-                Zero Person Enterprise Dashboard
-              </span>
-            </div>
+      <header
+        className={cn(
+          "border-b transition-colors duration-200 z-10 relative",
+          theme === "dark" ?
+            "bg-gray-800 border-gray-700"
+          : "bg-white border-gray-200"
+        )}
+      >
+        <div className="flex items-center justify-between h-16 px-4">
+          <div className="flex items-center gap-4">
+            <h1
+              className={cn(
+                "text-xl font-bold",
+                theme === "dark" ? "text-white" : "text-gray-900"
+              )}
+            >
+              QuDAG Executive
+            </h1>
+            <span
+              className={cn(
+                "text-sm",
+                theme === "dark" ? "text-gray-400" : "text-gray-500"
+              )}
+            >
+              Zero Person Enterprise Dashboard
+            </span>
+          </div>
 
-            <div className="flex items-center gap-4">
-              <select
-                value={selectedPeriod}
-                onChange={(e) => setSelectedPeriod(e.target.value)}
-                className="text-sm border-gray-300 rounded-md"
-              >
-                <option value="24h">Last 24 hours</option>
-                <option value="7d">Last 7 days</option>
-                <option value="30d">Last 30 days</option>
-                <option value="90d">Last 90 days</option>
-              </select>
-
-              <button className="p-2 text-gray-400 hover:text-gray-500">
-                <Settings className="w-5 h-5" />
-              </button>
-
-              <button className="p-2 text-gray-400 hover:text-gray-500">
-                <LogOut className="w-5 h-5" />
-              </button>
-            </div>
+          <div className="flex items-center gap-4">
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Top KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <MetricCard
-            title="Total Revenue"
-            value={formatCurrency(mockMetrics.revenue.current)}
-            change={mockMetrics.revenue.growth}
-            trend={revenueTrend}
-            subtitle="vs last period"
-            icon={<DollarSign className="w-6 h-6 text-gray-600" />}
+      <div className="flex h-[calc(100vh-4rem)]">
+        {/* Sidebar */}
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          onToggle={toggleSidebar}
+          onItemClick={handleSidebarItemClick}
+          theme={theme}
+        />
+
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Tab Bar */}
+          <TabBar
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onTabClick={setActiveTab}
+            onTabClose={removeTab}
+            theme={theme}
           />
 
-          <MetricCard
-            title="Net Profit"
-            value={formatCurrency(profit)}
-            change={profitMargin}
-            trend="up"
-            subtitle={`${(profitMargin * 100).toFixed(1)}% margin`}
-            icon={<TrendingUp className="w-6 h-6 text-gray-600" />}
-          />
-
-          <MetricCard
-            title="Active Agents"
-            value={`${mockMetrics.agents.active}/${mockMetrics.agents.total}`}
-            change={mockMetrics.agents.efficiency}
-            trend="neutral"
-            subtitle={`${(mockMetrics.agents.efficiency * 100).toFixed(0)}% efficiency`}
-            icon={<Users className="w-6 h-6 text-gray-600" />}
-          />
-
-          <MetricCard
-            title="Operations"
-            value={formatNumber(mockMetrics.operations.completedTasks)}
-            change={mockMetrics.operations.successRate}
-            trend="up"
-            subtitle="completed tasks"
-            icon={<Activity className="w-6 h-6 text-gray-600" />}
-          />
-        </div>
-
-        {/* Revenue Chart */}
-        <div className="mb-8">
-          <RevenueChart data={mockRevenueData} />
-        </div>
-
-        {/* Cost Breakdown */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="lg:col-span-2">
-            <AgentTable agents={mockAgents} />
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Cost Breakdown
-            </h3>
-
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Compute</span>
-                  <span className="font-medium">
-                    {formatCurrency(mockMetrics.costs.compute)}
-                  </span>
-                </div>
-                <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-blue-500 h-2 rounded-full"
-                    style={{
-                      width: `${(mockMetrics.costs.compute / mockMetrics.costs.total) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Storage</span>
-                  <span className="font-medium">
-                    {formatCurrency(mockMetrics.costs.storage)}
-                  </span>
-                </div>
-                <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-green-500 h-2 rounded-full"
-                    style={{
-                      width: `${(mockMetrics.costs.storage / mockMetrics.costs.total) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Network</span>
-                  <span className="font-medium">
-                    {formatCurrency(mockMetrics.costs.network)}
-                  </span>
-                </div>
-                <div className="mt-1 w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-purple-500 h-2 rounded-full"
-                    style={{
-                      width: `${(mockMetrics.costs.network / mockMetrics.costs.total) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="pt-4 border-t">
-                <div className="flex justify-between">
-                  <span className="text-sm font-medium text-gray-900">
-                    Total Costs
-                  </span>
-                  <span className="text-lg font-bold text-gray-900">
-                    {formatCurrency(mockMetrics.costs.total)}
-                  </span>
-                </div>
-              </div>
-            </div>
+          {/* Tab Content */}
+          <div className="flex-1 min-h-0">
+            <AnimatePresence mode="wait">
+              {activeTab && (
+                <motion.div
+                  key={activeTabId}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                  className="h-full"
+                >
+                  {renderActiveTab()}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
-
-        {/* Quick Actions */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Quick Actions
-          </h3>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <button
-              onClick={() => handleQuickAction("Deploy New Agent")}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Deploy New Agent
-            </button>
-            <button
-              onClick={() => handleQuickAction("Scale Operations")}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              Scale Operations
-            </button>
-            <button
-              onClick={() => handleQuickAction("Optimize Costs")}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              Optimize Costs
-            </button>
-            <button
-              onClick={() => handleQuickAction("View Reports")}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-            >
-              View Reports
-            </button>
-          </div>
-        </div>
-      </main>
+      </div>
     </div>
   );
 }
@@ -334,7 +567,7 @@ function Dashboard() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Dashboard />
+      <CockpitApp />
     </QueryClientProvider>
   );
 }

@@ -1,86 +1,64 @@
-# QuDAG Quick Start Guide
+# QuDAG Quickstart for ARM64 (Apple Silicon)
 
-This guide will help you get up and running with QuDAG quickly.
+## 🚨 Current Status
 
-## Prerequisites
+The QuDAG project has a dependency issue with `pqcrypto-kyber` that prevents direct compilation on ARM64 Macs due to AVX2 (Intel-specific) CPU instructions.
 
-- Rust toolchain (1.75.0 or later)
-- Git
-- CMake (3.12 or later)
-- C++ compiler supporting C++17
-- OpenSSL development libraries
+## ✅ Working Solutions
 
-## Quick Installation
+### Option 1: Use the Simple Runner (Fastest)
 
 ```bash
-# Clone the repository
-git clone https://github.com/qudag/qudag
-cd qudag
-
-# Build QuDAG
-cargo build --release
-
-# Run tests to verify installation
-cargo test --all-features --workspace
+./qudag-simple.sh help
 ```
 
-## First Node Setup
+This script provides access to working examples and functionality without building the problematic dependencies.
 
-1. Initialize a node:
-   ```bash
-   qudag init --node-id node1
-   ```
+### Option 2: Run Examples Directly
 
-2. Configure the node:
-   ```bash
-   qudag config set --network testnet --port 8000
-   ```
-
-3. Start the node:
-   ```bash
-   qudag start
-   ```
-
-## Create a Simple Network
-
-1. Initialize additional nodes:
-   ```bash
-   qudag init --node-id node2
-   qudag init --node-id node3
-   ```
-
-2. Configure peer connections:
-   ```bash
-   qudag peer add /ip4/127.0.0.1/tcp/8000 --to node2
-   qudag peer add /ip4/127.0.0.1/tcp/8000 --to node3
-   ```
-
-3. Start all nodes:
-   ```bash
-   qudag start --node-id node2 --port 8001
-   qudag start --node-id node3 --port 8002
-   ```
-
-## Basic Operations
-
-### Send Messages
 ```bash
-qudag message send --to QD... --content "Hello QuDAG!"
+# List available examples
+ls examples/
+
+# Run a basic server example
+cargo run --example basic_server
+
+# Run vault example
+cargo run --package qudag-vault-core --example basic_usage
 ```
 
-### Monitor Network
+### Option 3: Use Docker Compose (Full Stack)
+
 ```bash
-qudag network status
+# Start the full QuDAG stack
+docker-compose up -d
+
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f
 ```
 
-### View Node Status
-```bash
-qudag node info
-```
+### Option 4: Wait for Fix
 
-## Next Steps
+The project maintainers need to:
 
-- Read the [Full Installation Guide](installation.md) for detailed setup
-- Explore [CLI Usage](cli-usage.md) for more commands
-- Review [Security Best Practices](security.md)
-- Check [Troubleshooting](troubleshooting.md) if you encounter issues
+1. Update `pqcrypto-kyber` to support ARM64
+2. Provide pre-built binaries for ARM64
+3. Add CI/CD for multi-platform releases
+
+## 🛠️ What Works Right Now
+
+- ✅ Examples that don't use quantum crypto
+- ✅ Docker containers (with x86 emulation)
+- ✅ Core DAG functionality
+- ✅ Vault operations
+- ❌ Full CLI binary (blocked by pqcrypto-kyber)
+- ❌ npm package binary download (no releases exist)
+
+## 📝 Bottom Line
+
+**Don't worry about the type errors** - they're not your fault. Use the workarounds above until the project fixes ARM64 support.
+
+For development, the examples provide full functionality to explore QuDAG's capabilities.

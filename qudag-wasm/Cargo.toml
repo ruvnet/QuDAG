@@ -24,7 +24,7 @@ wee_alloc = { version = "0.4", optional = true }
 # QuDAG dependencies with conditional compilation
 # Note: qudag-crypto has C dependencies that don't work with WASM
 # Using it only for non-WASM targets
-qudag-dag = { version = "0.4.0", path = "../core/dag", optional = true }
+qudag-dag = { version = "0.5.0", path = "../core/dag", optional = true }
 
 # Async and serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -77,10 +77,10 @@ web-sys = { version = "0.3", features = [
 ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-qudag = { version = "1.2.1", path = "../qudag", optional = true }
-qudag-crypto = { version = "0.4.0", path = "../core/crypto" }
-qudag-network = { version = "0.4.0", path = "../core/network", optional = true }
-qudag-protocol = { version = "0.4.0", path = "../core/protocol", optional = true }
+qudag = { version = "1.4.0", path = "../qudag", optional = true }
+qudag-crypto = { version = "0.5.0", path = "../core/crypto" }
+qudag-network = { version = "0.5.0", path = "../core/network", optional = true }
+qudag-protocol = { version = "0.5.0", path = "../core/protocol", optional = true }
 tokio = { version = "1.0", features = ["sync", "macros", "rt-multi-thread"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

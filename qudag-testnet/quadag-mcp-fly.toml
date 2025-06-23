@@ -1,0 +1,40 @@
+# QuDAG MCP Implementation on Fly.io
+app = "quadag-mcp"
+primary_region = "iad"
+
+[build]
+  dockerfile = "qudag-mcp-real/Dockerfile.standalone"
+
+[env]
+  RUST_LOG = "info,qudag_mcp_real=debug"
+  QUDAG_NETWORK_ID = "qudag-testnet"
+  QUDAG_NODE_NAME = "mcp-node"
+
+[experimental]
+  auto_rollback = true
+
+[[services]]
+  internal_port = 3000
+  protocol = "tcp"
+  auto_stop_machines = false
+  auto_start_machines = true
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 50
+    soft_limit = 25
+
+  [[services.http_checks]]
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "30s"
+    method = "get"
+    path = "/health"

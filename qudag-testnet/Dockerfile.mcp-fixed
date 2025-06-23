@@ -1,0 +1,75 @@
+# QuDAG MCP Fixed - With Dark Registry Persistence
+# Based on standalone implementation with persistence fixes
+
+FROM rust:1.87 as builder
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Create src directory
+RUN mkdir -p src
+
+# Copy the fixed standalone node configuration
+COPY configs/qudag-mcp-standalone-fixed.rs /build/src/main.rs
+
+# Create the enhanced Cargo.toml with all dependencies
+RUN echo '[package]\n\
+name = "qudag-mcp-real"\n\
+version = "1.0.0"\n\
+edition = "2021"\n\
+\n\
+[dependencies]\n\
+warp = "0.3"\n\
+serde = { version = "1.0", features = ["derive"] }\n\
+serde_json = "1.0"\n\
+tokio = { version = "1.0", features = ["full"] }\n\
+env_logger = "0.11"\n\
+log = "0.4"\n\
+uuid = { version = "1.0", features = ["v4", "serde"] }\n\
+chrono = { version = "0.4", features = ["serde"] }\n\
+sha2 = "0.10"\n\
+hex = "0.4"\n\
+base64 = "0.22"\n\
+rand = "0.8"\n\
+sysinfo = "0.33"\n\
+\n\
+[[bin]]\n\
+name = "qudag-mcp-real"\n\
+path = "src/main.rs"' > Cargo.toml
+
+# Build the node
+RUN cargo build --release
+
+# Runtime stage
+FROM debian:bullseye-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the binary
+COPY --from=builder /build/target/release/qudag-mcp-real /usr/local/bin/
+
+# Create data directory with write permissions
+RUN mkdir -p /tmp && chmod 777 /tmp
+
+# Default environment variables
+ENV RUST_LOG=info
+
+# Expose ports
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# Entry point
+ENTRYPOINT ["/usr/local/bin/qudag-mcp-real"]

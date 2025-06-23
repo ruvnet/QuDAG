@@ -1,5 +1,12 @@
 {
   "_comment": "QuDAG MCP Configurations - See mcp-configs-explained.json for details",
+  "_status": "Real MCP implementation deployed and WORKING at quadag-mcp.fly.dev",
+  "_deployment": {
+    "remote_server": "LIVE at https://quadag-mcp.fly.dev - FULLY FUNCTIONAL",
+    "local_server": "Also running on http://localhost:3000",
+    "local_docker": "docker run -d -p 3000:3000 qudag-mcp-real:standalone",
+    "tools": ["qudag_dag", "qudag_network", "qudag_crypto", "qudag_vault", "qudag_exchange", "qudag_dark", "qudag_system"]
+  },
   "mcpServers": {
     "qudag": {
       "command": "qudag",
@@ -20,27 +27,67 @@
       ],
       "timeout": 600
     },
-    "qudag-testnet": {
-      "_comment": "HTTPS working with v3 node - enhanced HTTP/2 support",
+    "qudag-local": {
+      "_comment": "Local MCP server for testing - run: docker run -p 3000:3000 qudag-mcp-real:standalone",
       "command": "node",
       "args": [
         "/workspaces/QuDAG/.roo/mcp-http-proxy.js",
-        "https://qudag-testnet-node1.fly.dev"
+        "http://localhost:3000"
       ],
       "alwaysAllow": [
         "qudag_crypto",
         "qudag_vault",
         "qudag_dag",
         "qudag_network",
-        "qudag_exchange"
+        "qudag_exchange",
+        "qudag_dark",
+        "qudag_system"
       ],
-      "description": "QuDAG Testnet MCP Server (Toronto Node - v3)",
+      "description": "QuDAG Local MCP Server (Docker)",
+      "timeout": 600
+    },
+    "qudag-testnet": {
+      "_comment": "Real QuDAG MCP Implementation - Live on fly.dev",
+      "command": "node",
+      "args": [
+        "/workspaces/QuDAG/.roo/mcp-http-proxy.js",
+        "https://quadag-mcp.fly.dev"
+      ],
+      "alwaysAllow": [
+        "qudag_crypto",
+        "qudag_vault",
+        "qudag_dag",
+        "qudag_network",
+        "qudag_exchange",
+        "qudag_dark",
+        "qudag_system"
+      ],
+      "description": "QuDAG Real MCP Server - Full Implementation",
       "timeout": 600,
       "_urls": {
-        "working": "https://qudag-testnet-node1.fly.dev/mcp (FIXED!)",
-        "also_working": "http://109.105.222.156:3333/mcp",
-        "intro_page": "https://qudag-testnet-node1.fly.dev/ (works)"
+        "primary": "https://quadag-mcp.fly.dev/mcp",
+        "tools": "https://quadag-mcp.fly.dev/mcp/tools",
+        "health": "https://quadag-mcp.fly.dev/health"
       }
+    },
+    "qudag-mcp-real": {
+      "_comment": "Direct connection to QuDAG Real MCP Implementation",
+      "command": "node",
+      "args": [
+        "/workspaces/QuDAG/.roo/mcp-http-proxy.js",
+        "https://quadag-mcp.fly.dev"
+      ],
+      "alwaysAllow": [
+        "qudag_crypto",
+        "qudag_vault",
+        "qudag_dag",
+        "qudag_network",
+        "qudag_exchange",
+        "qudag_dark",
+        "qudag_system"
+      ],
+      "description": "QuDAG Real MCP - Direct Connection",
+      "timeout": 600
     },
     "supabase": {
       "command": "npx",

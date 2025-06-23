@@ -1,0 +1,36 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Data directories
+/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Keys and secrets
+*.key
+*.secret
+*.pem
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Docker volumes
+docker-volumes/
+
+# Environment files
+.env
+.env.local

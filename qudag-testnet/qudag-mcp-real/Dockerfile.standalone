@@ -1,0 +1,42 @@
+# QuDAG MCP Real Implementation - Standalone Version
+FROM rust:1.87-slim AS builder
+
+# Install minimal dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy files
+COPY qudag-testnet/qudag-mcp-real/Cargo.standalone.toml ./Cargo.toml
+RUN mkdir -p src
+COPY qudag-testnet/qudag-mcp-real/src/main_standalone.rs ./src/main_standalone.rs
+
+# Build
+RUN cargo build --release
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/target/release/qudag-mcp-real /usr/local/bin/
+
+# Expose ports
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+
+# Environment
+ENV RUST_LOG=info,qudag_mcp_real=debug
+
+# Run
+CMD ["qudag-mcp-real"]

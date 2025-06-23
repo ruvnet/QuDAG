@@ -1,0 +1,87 @@
+# Optimized fly.toml for MCP support with better proxy handling
+
+app = "qudag-testnet-node1"
+primary_region = "yyz"
+kill_signal = "SIGINT"
+kill_timeout = "5s"
+
+[build]
+  image = "registry.fly.io/qudag-testnet-node1:deployment-mcp-v2"
+
+[env]
+  QUDAG_NODE_NAME = "toronto-node"
+  QUDAG_IS_BOOTSTRAP = "true"
+  QUDAG_NETWORK_ID = "qudag-testnet"
+  QUDAG_BOOTSTRAP_PEERS = "/dns4/qudag-testnet-node2.fly.dev/tcp/4001,/dns4/qudag-testnet-node3.fly.dev/tcp/4001,/dns4/qudag-testnet-node4.fly.dev/tcp/4001"
+
+[experimental]
+  auto_rollback = true
+
+# Main HTTP service with MCP integration
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+  processes = ["app"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 1000
+    soft_limit = 900
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true  # Redirect HTTP to HTTPS
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+    [services.ports.tls_options]
+      alpn = ["h2", "http/1.1"]  # Support both HTTP/2 and HTTP/1.1
+      versions = ["TLSv1.2", "TLSv1.3"]
+
+  [[services.http_checks]]
+    interval = "30s"
+    timeout = "30s"      # Increased from default 10s
+    grace_period = "60s" # Increased from default 45s
+    method = "GET"
+    path = "/health"
+    protocol = "http"
+    tls_skip_verify = false
+
+# Remove dedicated MCP service - integrate into main HTTP port
+# This avoids the proxy issues with custom TCP handlers
+
+# P2P service remains unchanged
+[[services]]
+  internal_port = 4001
+  protocol = "tcp"
+  processes = ["app"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+  [[services.ports]]
+    port = 4001
+
+# Metrics service remains unchanged
+[[services]]
+  internal_port = 9090
+  protocol = "tcp"
+  processes = ["app"]
+
+  [[services.ports]]
+    port = 9090
+
+# Increased resources for better HTTP/2 handling
+[env]
+  GOGC = "100"
+  GOMAXPROCS = "2"
+
+# Add machine configuration for better performance
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 2
+  memory_mb = 512

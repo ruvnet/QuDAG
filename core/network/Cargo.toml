@@ -54,7 +54,7 @@ sha2 = "0.10"
 hkdf = "0.12"
 
 # Other dependencies
-qudag-crypto = { version = "0.4.0", path = "../crypto" }
+qudag-crypto = { version = "0.5.0", path = "../crypto" }
 
 # Compression for message chunking
 zstd = "0.13"

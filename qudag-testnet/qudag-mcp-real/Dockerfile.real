@@ -1,0 +1,72 @@
+# Build stage
+FROM rust:1.87 AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    git \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create workspace directory
+WORKDIR /workspace
+
+# Copy entire QuDAG workspace
+COPY . .
+
+# Build the real MCP implementation
+WORKDIR /workspace/qudag-testnet/qudag-mcp-real
+RUN cargo build --release
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -g 1000 qudag && \
+    useradd -u 1000 -g qudag -m -s /bin/bash qudag
+
+# Create data directories
+RUN mkdir -p /data/keys /data/db /data/vault /data/dag && \
+    chown -R qudag:qudag /data
+
+# Copy binary from builder
+COPY --from=builder /workspace/qudag-testnet/qudag-mcp-real/target/release/qudag-mcp-real /usr/local/bin/
+
+# Copy configuration
+COPY --from=builder /workspace/qudag-testnet/qudag-mcp-real/config/default.toml /etc/qudag/default.toml
+
+# Switch to non-root user
+USER qudag
+
+# Set data directory
+WORKDIR /data
+
+# Expose ports
+# MCP HTTP/WebSocket port
+EXPOSE 3000
+# P2P networking port
+EXPOSE 9000
+
+# Set environment variables
+ENV RUST_LOG=info,qudag_mcp_real=debug
+ENV QUDAG_DATA_DIR=/data
+ENV QUDAG_NETWORK_ID=qudag-testnet
+ENV QUDAG_NODE_NAME=mcp-real-node
+ENV QUDAG_IS_BOOTSTRAP=true
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# Run the application
+ENTRYPOINT ["qudag-mcp-real"]
+CMD ["http", "--port", "3000", "--p2p-port", "9000"]

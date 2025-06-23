@@ -1,0 +1,31 @@
+[package]
+name = "qudag-mcp-real"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.40", features = ["full"] }
+
+# Web framework
+warp = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# QuDAG core dependencies - using minimal features
+qudag-crypto = { version = "0.4.3", path = "../../core/crypto", default-features = false }
+qudag-dag = { version = "0.4.3", path = "../../core/dag", default-features = false }
+qudag-network = { version = "0.4.3", path = "../../core/network", default-features = false }
+qudag-vault-core = { version = "0.4.3", path = "../../core/vault", default-features = false }
+
+# Utilities
+base64 = "0.22"
+uuid = { version = "1.8", features = ["v4"] }
+env_logger = "0.11"
+log = "0.4"
+
+[[bin]]
+name = "qudag-mcp-real-simple"
+path = "src/main_simple.rs"

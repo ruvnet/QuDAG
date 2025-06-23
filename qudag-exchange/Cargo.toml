@@ -12,12 +12,12 @@ categories = ["cryptography", "finance", "web-programming"]
 
 [dependencies]
 # Re-export main modules
-qudag-exchange-core = { path = "core" }
+qudag-exchange-core = { version = "0.4.0", path = "core" }
 
 # Core QuDAG dependencies
-qudag-crypto = { path = "../core/crypto" }
-qudag-vault-core = { path = "../core/vault" }
-qudag-dag = { path = "../core/dag" }
+qudag-crypto = { version = "0.5.0", path = "../core/crypto" }
+qudag-vault-core = { version = "0.5.0", path = "../core/vault" }
+qudag-dag = { version = "0.5.0", path = "../core/dag" }
 
 # Standard dependencies  
 thiserror = "1.0"

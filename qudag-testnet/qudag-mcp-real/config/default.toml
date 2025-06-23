@@ -1,0 +1,56 @@
+# QuDAG MCP Real Implementation Configuration
+
+[network]
+listen_port = 9000
+bootstrap_peers = [
+    "/ip4/127.0.0.1/tcp/9001/p2p/12D3KooWGzxQ6rMJNkZKNvMvpCBxGnJLb8kZ9gCJ4mQrqotqhDkB",
+    "/ip4/127.0.0.1/tcp/9002/p2p/12D3KooWLRYPCqGpXPQPvCRaKdJJrBj8YJvYgE3gTQHfKD4zBmQH"
+]
+max_peers = 50
+enable_mdns = true
+enable_relay = true
+enable_autonat = true
+enable_dcutr = true
+gossipsub_heartbeat_interval = 1000
+kademlia_replication_factor = 20
+
+[crypto]
+algorithm = "ml-dsa"  # Options: "ml-dsa", "ml-kem", "hqc"
+key_store_path = "./data/keys"
+enable_timing_protection = true
+enable_hardware_acceleration = false
+
+[dag]
+consensus_algorithm = "qr-avalanche"
+block_size_limit = 1048576  # 1MB
+finality_threshold = 0.8
+validator_set_size = 100
+block_time_ms = 1000
+
+[exchange]
+database_url = "sqlite://./data/exchange.db"
+business_plan_enabled = true
+payout_threshold = 100
+system_fee_percentage = 0.001
+
+[exchange.fee_model]
+base_fee = 0.001
+dynamic_fee_enabled = true
+verified_agent_discount = 0.5
+minimum_fee = 0.0001
+maximum_fee = 0.01
+
+[mcp]
+port = 3000
+host = "0.0.0.0"
+enable_auth = false
+auth_token = ""
+max_request_size = 10485760  # 10MB
+timeout_ms = 30000
+
+[storage]
+data_dir = "./data"
+cache_size = 100000000  # 100MB
+enable_compression = true
+backup_enabled = true
+backup_interval_hours = 24

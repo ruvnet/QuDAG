@@ -15,8 +15,8 @@ rust-version = "1.75"
 
 [dependencies]
 # QuDAG dependencies for integration
-qudag-crypto = { version = "0.4.0", path = "../crypto" }
-qudag-dag = { version = "0.4.0", path = "../dag" }
+qudag-crypto = { version = "0.5.0", path = "../crypto" }
+qudag-dag = { version = "0.5.0", path = "../dag" }
 
 # Cryptography
 aes-gcm = "0.10"

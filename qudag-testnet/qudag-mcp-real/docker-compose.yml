@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  qudag-mcp-real:
+    build:
+      context: ../..
+      dockerfile: qudag-testnet/qudag-mcp-real/Dockerfile
+    image: qudag-mcp-real:latest
+    container_name: qudag-mcp-real
+    ports:
+      - "3000:3000"  # MCP server
+      - "9000:9000"  # P2P network
+    volumes:
+      - qudag-data:/data
+      - ./config:/etc/qudag:ro
+    environment:
+      - RUST_LOG=info,qudag_mcp_real=debug,qudag=debug
+      - QUDAG_MCP_PORT=3000
+      - QUDAG_P2P_PORT=9000
+      - QUDAG_DATABASE_URL=sqlite:///data/db/exchange.db
+    networks:
+      - qudag-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: qudag-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - qudag-network
+    restart: unless-stopped
+
+  # Optional: Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: qudag-grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - qudag-network
+    restart: unless-stopped
+
+volumes:
+  qudag-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  qudag-network:
+    driver: bridge

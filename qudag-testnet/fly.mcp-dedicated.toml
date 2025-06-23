@@ -1,0 +1,66 @@
+# Dedicated MCP Service Configuration for Fly.io
+# Deploy as a separate app: fly launch --config fly.mcp-dedicated.toml
+
+app = "qudag-mcp-service"
+primary_region = "yyz"
+kill_signal = "SIGINT"
+kill_timeout = "5s"
+
+[build]
+  dockerfile = "Dockerfile.mcp-v3"
+
+[env]
+  QUDAG_NODE_NAME = "mcp-service"
+  QUDAG_IS_BOOTSTRAP = "false"
+  QUDAG_NETWORK_ID = "qudag-testnet"
+  # Connect to the main testnet nodes
+  QUDAG_BOOTSTRAP_PEERS = "/dns4/qudag-testnet-node1.fly.dev/tcp/4001,/dns4/qudag-testnet-node2.fly.dev/tcp/4001,/dns4/qudag-testnet-node3.fly.dev/tcp/4001,/dns4/qudag-testnet-node4.fly.dev/tcp/4001"
+
+[experimental]
+  auto_rollback = true
+
+# Only expose the MCP HTTP service
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+  processes = ["app"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 1000
+    soft_limit = 900
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+    [services.ports.tls_options]
+      alpn = ["h2", "http/1.1"]
+      versions = ["TLSv1.2", "TLSv1.3"]
+
+  [[services.http_checks]]
+    interval = "15s"
+    timeout = "30s"
+    grace_period = "60s"
+    method = "GET"
+    path = "/health"
+    protocol = "http"
+    tls_skip_verify = false
+
+# Dedicated resources for MCP service
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 2
+  memory_mb = 512
+
+# Custom domains (optional)
+# You can set up a custom domain like mcp.qudag.io
+# [[services.ports]]
+#   handlers = ["tls", "http"]
+#   port = 443
+#   [services.ports.tls_options]
+#     alpn = ["h2", "http/1.1"]

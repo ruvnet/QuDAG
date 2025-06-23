@@ -1,0 +1,72 @@
+# QuDAG Real MCP Node for Testnet
+# This integrates all the real QuDAG components created by the agents
+
+FROM rust:1.87 AS builder
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Create a consolidated main.rs that includes all agent implementations
+COPY qudag-testnet/qudag-mcp-real/src /build/src
+COPY qudag-testnet/qudag-mcp-real/Cargo.toml /build/
+
+# Create a simplified Cargo.toml for faster build
+RUN echo '[package]\n\
+name = "qudag-mcp-real"\n\
+version = "1.0.0"\n\
+edition = "2021"\n\
+\n\
+[dependencies]\n\
+# Core dependencies for real functionality\n\
+tokio = { version = "1.40", features = ["full"] }\n\
+warp = "0.3"\n\
+serde = { version = "1.0", features = ["derive"] }\n\
+serde_json = "1.0"\n\
+base64 = "0.22"\n\
+sha2 = "0.10"\n\
+blake3 = "1.5"\n\
+chrono = { version = "0.4", features = ["serde"] }\n\
+lazy_static = "1.4"\n\
+sysinfo = "0.31"\n\
+env_logger = "0.11"\n\
+log = "0.4"\n\
+# Crypto placeholders until we can integrate real libs\n\
+rand = "0.8"\n\
+hex = "0.4"' > Cargo.toml
+
+# Build
+RUN cargo build --release
+
+# Runtime
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/target/release/qudag-mcp-real /usr/local/bin/
+
+# Create directories
+RUN mkdir -p /data/keys /data/vault /data/dag
+
+# Environment
+ENV RUST_LOG=info,qudag_mcp_real=debug
+ENV QUDAG_NETWORK_ID=qudag-testnet
+ENV QUDAG_NODE_NAME=mcp-real-node
+
+# Ports
+EXPOSE 3000 9000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# Run
+CMD ["qudag-mcp-real", "start", "--host", "0.0.0.0", "--port", "3000"]

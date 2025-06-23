@@ -6,12 +6,20 @@
 - **Core Functionality**: All QuDAG components build and run
 - **CLI**: Fully functional with quantum crypto support
 - **Basic Crypto**: libcrux (ML-KEM) + oqs (ML-DSA) libraries work
+- **ML-DSA FFI Verification**: ✨ IMPLEMENTED! Direct FFI calls to liboqs for signature verification
+- **ML-DSA Module Tests**: All 4 tests PASSING
+- **ML-DSA Integration Tests**: PASSING with FFI implementation
 
-### ❌ What's Not Working (Tests)
-1. **Import Issues**: Tests import types from wrong locations
-2. **API Mismatches**: oqs API doesn't easily support key/signature reconstruction from bytes
-3. **Missing Methods**: Some test expectations don't match ARM64 implementations
-4. **Compilation Errors**: Many tests have cascading errors
+### ⚠️ Partially Working
+1. **Other Test Suites**: Need dependency fixes (hex-literal, proptest)
+2. **WASM Tests**: Need to be updated for ARM64
+3. **Performance Tests**: Need ARM64-specific benchmarks
+
+### ✅ SOLVED: FFI Implementation
+Successfully implemented direct FFI verification using oqs-sys:
+- Created `ffi_verify.rs` module with direct liboqs calls
+- Bypassed oqs crate API limitations
+- Signature verification now works properly from serialized keys
 
 ## The Path to PRISTINE
 
@@ -65,37 +73,64 @@ qudag-exchange    ← Mostly working (61/64 pass)
 2. **Contribute upstream** to improve ARM64 support
 3. **Switch to different library** if needed (e.g., pqcrypto-traits)
 
-## Example: Fixing ML-DSA Verification
+## ✅ IMPLEMENTED: ML-DSA FFI Verification
 
-Current issue: Can't reconstruct oqs types from bytes.
+The oqs API limitation has been solved with direct FFI:
 
-**Workaround:**
+**Implementation in `ffi_verify.rs`:**
 ```rust
-// Store algorithm type with the key
-pub struct LiboqsMlDsaPublicKey {
-    key_bytes: Vec<u8>,
-    algorithm: Algorithm,
-}
-
-// Use FFI for verification
-pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), MlDsaError> {
-    unsafe {
-        let result = oqs_sys::OQS_SIG_verify(
-            self.algorithm.to_oqs_algorithm(),
-            message.as_ptr(),
-            message.len(),
-            signature.as_ptr(),
-            signature.len(),
-            self.key_bytes.as_ptr(),
-        );
-        
-        if result == oqs_sys::OQS_SUCCESS {
-            Ok(())
-        } else {
-            Err(MlDsaError::VerificationFailed)
-        }
+pub unsafe fn verify_signature_ffi(
+    public_key: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> Result<(), MlDsaError> {
+    // Get ML-DSA-65 algorithm identifier
+    let alg_name = OQS_SIG_alg_ml_dsa_65.as_ptr() as *const libc::c_char;
+    
+    // Create signature object
+    let sig = OQS_SIG_new(alg_name);
+    if sig.is_null() {
+        return Err(MlDsaError::InternalError("Failed to create OQS_SIG object".to_string()));
+    }
+    
+    // Perform verification
+    let result = OQS_SIG_verify(
+        sig,
+        message.as_ptr(),
+        message.len(),
+        signature.as_ptr(),
+        signature.len(),
+        public_key.as_ptr(),
+    );
+    
+    // Clean up
+    OQS_SIG_free(sig);
+    
+    // Check result
+    if result == OQS_STATUS::OQS_SUCCESS {
+        Ok(())
+    } else {
+        Err(MlDsaError::VerificationFailed)
     }
 }
+```
+
+**Integration in `liboqs_impl.rs`:**
+```rust
+pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), MlDsaError> {
+    // Use FFI-based verification for pristine functionality
+    unsafe {
+        super::ffi_verify::verify_signature_ffi(&self.key_bytes, message, signature)
+    }
+}
+```
+
+**Required Dependencies:**
+```toml
+[target.'cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))'.dependencies]
+oqs = "0.10.1"
+oqs-sys = "0.10.1"  # Direct FFI access
+libc = "0.2"        # C types
 ```
 
 ## Action Items for PRISTINE Status

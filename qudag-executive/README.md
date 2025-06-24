@@ -9,6 +9,7 @@ The QuDAG EIC is a revolutionary dashboard that makes running an AI-powered comp
 ### 🎯 Key Features
 
 - **Natural Language CEO Interface** - Just say what you want: "Hire 5 more sales agents"
+- **Multi-Provider Authentication** - Seamlessly switch between Firebase, Supabase, or no-auth development mode
 - **Living Organization Chart** - Visualize and reorganize your AI workforce with drag-and-drop
 - **Predictive Business Intelligence** - Get recommendations before problems occur
 - **One-Click Scaling** - Grow from 1 to 1,000 agents instantly
@@ -23,6 +24,7 @@ The QuDAG EIC is a revolutionary dashboard that makes running an AI-powered comp
 ## 📚 Documentation
 
 - **[Executive Dashboard Overview](EXECUTIVE_DASHBOARD_OVERVIEW.md)** - Complete feature guide
+- **[Authentication Setup](docs/auth/authentication-setup.md)** - Multi-provider auth configuration
 - **[AI-CEO Guide](../docs/AI_CEO_GUIDE.md)** - Learn to run a zero-person business
 - **[Implementation Roadmap](../docs/EXECUTIVE_IMPLEMENTATION_ROADMAP.md)** - Technical development plan
 - **[CEO Quick Reference](../docs/CEO_QUICK_REFERENCE.md)** - Commands and shortcuts
@@ -73,23 +75,27 @@ npm run tauri build       # Desktop apps for all platforms
 ## 🖥️ Desktop App Features (Tauri-Powered)
 
 ### Native Performance
+
 - **Instant Startup** - Under 1 second launch time
 - **Low Memory** - Only 40-80MB RAM usage
 - **Small Download** - Just 10-30MB installer
 - **Native Notifications** - Real-time alerts for critical events
 
 ### Enhanced Security
+
 - **Secure by Default** - Tauri's security model protects your business data
 - **Local First** - Your data never leaves your machine unless you want it to
 - **Encrypted Storage** - Quantum-resistant encryption for sensitive data
 
 ### Deep System Integration
+
 - **System Tray** - Quick access to CEO commands
 - **Global Hotkeys** - Control your AI empire with keyboard shortcuts
 - **Voice Commands** - Always-on voice assistant (with permission)
 - **Native Menus** - Familiar desktop experience
 
 ### QuDAG Integration
+
 ```rust
 // Direct Rust integration with QuDAG core
 // No network latency, maximum performance
@@ -100,12 +106,12 @@ let agent = qudag::hire_agent("customer service specialist").await?;
 
 Just speak or type what you need:
 
-| You Say | What Happens |
-|---------|--------------|
-| "Hire a data analyst" | Creates and deploys specialized agent |
+| You Say                       | What Happens                              |
+| ----------------------------- | ----------------------------------------- |
+| "Hire a data analyst"         | Creates and deploys specialized agent     |
 | "Show me why costs increased" | Analyzes and explains with visualizations |
-| "Prepare for board meeting" | Generates complete board package |
-| "Scale for Black Friday" | Automatically deploys agents for demand |
+| "Prepare for board meeting"   | Generates complete board package          |
+| "Scale for Black Friday"      | Automatically deploys agents for demand   |
 
 ## 🏢 The Living Organization
 
@@ -134,23 +140,29 @@ No more technical jargon. See what actually impacts your business:
 ## 🚀 Revolutionary Features
 
 ### 1. **Hire Like a Human**
+
 Describe what you need in plain English. The system handles all technical details.
 
 ### 2. **Predictive Recommendations**
+
 "You'll need 3 more service agents by Tuesday to maintain quality."
 
 ### 3. **Scenario Planning**
+
 "What happens if we double our sales team?" See projections before you act.
 
 ### 4. **Voice-Activated CEO**
+
 Run your entire company by voice while commuting, exercising, or relaxing.
 
 ### 5. **Self-Organizing Teams**
+
 Set goals, and watch your AI agents figure out the best way to achieve them.
 
 ## 🏗️ Technical Architecture
 
 ### Frontend Stack
+
 - **Framework**: React 18 + TypeScript
 - **Desktop**: Tauri (Rust-based, native performance)
 - **Styling**: Tailwind CSS
@@ -159,6 +171,7 @@ Set goals, and watch your AI agents figure out the best way to achieve them.
 - **Charts**: D3.js + Recharts
 
 ### Why Tauri?
+
 - **Performance**: Native speed, low memory usage
 - **Security**: Better isolation for business-critical data
 - **Size**: 10-30MB vs 100MB+ for alternatives
@@ -166,6 +179,7 @@ Set goals, and watch your AI agents figure out the best way to achieve them.
 - **Cross-platform**: Windows, macOS, Linux from one codebase
 
 ### Platform Detection
+
 ```typescript
 // Automatic platform adaptation
 if (window.__TAURI__) {
@@ -189,6 +203,7 @@ if (window.__TAURI__) {
 ## 🔮 Roadmap
 
 ### Phase 1: Foundation (Current)
+
 - ✅ Basic dashboard and metrics
 - ✅ Agent performance tracking
 - ✅ Desktop app with Tauri
@@ -196,6 +211,7 @@ if (window.__TAURI__) {
 - 🔄 Org chart visualization
 
 ### Phase 2: Intelligence (Q1 2025)
+
 - Predictive analytics
 - Strategic recommendations
 - Scenario planning
@@ -203,6 +219,7 @@ if (window.__TAURI__) {
 - Mobile apps
 
 ### Phase 3: Automation (Q2 2025)
+
 - Self-organizing teams
 - Autonomous scaling
 - Market monitoring
@@ -210,6 +227,7 @@ if (window.__TAURI__) {
 - AR/VR interface
 
 ### Phase 4: Revolution (Q3 2025)
+
 - Brain-computer integration
 - Swarm consciousness
 - Economic transformation
@@ -230,16 +248,19 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
 ## 📦 Installation Options
 
 ### Desktop App (Recommended)
+
 - **Windows**: Download `.msi` installer
 - **macOS**: Download `.dmg` or use Homebrew
 - **Linux**: AppImage, `.deb`, or `.rpm`
 
 ### Web App
+
 - Self-host on your infrastructure
 - Cloud deployment options available
 - PWA support for mobile devices
 
 ### Enterprise
+
 - Custom deployment options
 - On-premise installations
 - White-label solutions

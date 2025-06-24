@@ -173,6 +173,21 @@ VITE_API_TIMEOUT=10000
 # Feature Flags
 VITE_ENABLE_QUANTUM_CRYPTO=true
 VITE_ENABLE_VOICE_COMMANDS=false
+
+# Authentication Provider (none | supabase | firebase)
+VITE_AUTH_PROVIDER=none
+
+# Supabase Auth (if using supabase)
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+
+# Firebase Auth (if using firebase)
+VITE_FIREBASE_API_KEY=your-firebase-api-key
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+VITE_FIREBASE_APP_ID=your-app-id
 ```
 
 ### Important Configuration Notes
@@ -213,6 +228,7 @@ VITE_ENABLE_VOICE_COMMANDS=false
 ## TypeScript Configuration Notes
 
 The project uses strict TypeScript settings:
+
 - `strict: true` - All strict type checking enabled
 - `noUnusedLocals: true` - Errors on unused variables (prefix with `_` to ignore)
 - `noUnusedParameters: true` - Errors on unused parameters
@@ -222,6 +238,7 @@ The project uses strict TypeScript settings:
 ## ESLint Configuration
 
 Custom rules include:
+
 - Unused variables with `_` prefix are ignored
 - React Hooks rules enforced
 - React Refresh compatibility checks
@@ -230,6 +247,7 @@ Custom rules include:
 ## Tailwind CSS Extensions
 
 The project includes custom breakpoints and spacing for large displays:
+
 - Additional breakpoints: `3xl` (1920px), `4xl` (2560px), `5xl` (3840px)
 - Extended spacing: 22-40 (5.5rem - 10rem)
 - Extended max-width: `8xl` (88rem), `9xl` (96rem), `10xl` (104rem)

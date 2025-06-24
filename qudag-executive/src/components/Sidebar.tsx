@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { Icon } from "@iconify/react";
 import { cn } from "../lib/utils";
 import type { SidebarItem } from "../types";
 
@@ -43,65 +44,69 @@ export function Sidebar({
   onItemClick,
   theme,
 }: SidebarProps) {
+  console.log("Sidebar theme prop:", theme);
   const sidebarItems: Array<{
     id: string;
     label: string;
-    icon: keyof typeof iconMap;
+    icon: keyof typeof iconMap | { iconify: string };
     badge?: string;
     disabled?: boolean;
   }> = [
     {
       id: "dashboard",
       label: "Dashboard",
-      icon: "home",
+      icon: { iconify: "fluent-color:chart-multiple-16" },
     },
     {
       id: "analytics",
       label: "Analytics",
-      icon: "bar-chart-3",
+      icon: { iconify: "fluent-color:data-trending-16" },
     },
     {
       id: "agents",
       label: "Agent Management",
-      icon: "users",
+      icon: { iconify: "fluent-color:people-team-16" },
       badge: "24",
     },
     {
       id: "revenue",
       label: "Revenue Streams",
-      icon: "dollar-sign",
+      icon: { iconify: "fluent-color:arrow-trending-lines-20" },
     },
     {
       id: "performance",
       label: "Performance",
-      icon: "trending-up",
+      icon: { iconify: "fluent-color:data-trending-16" },
     },
     {
       id: "operations",
       label: "Operations",
-      icon: "activity",
+      icon: { iconify: "fluent-color:slide-text-sparkle-16" },
       badge: "15.8K",
     },
 
     {
       id: "security",
       label: "Security",
-      icon: "shield",
+      icon: { iconify: "fluent-color:lock-closed-16" },
     },
     {
       id: "automation",
       label: "Automation",
-      icon: "zap",
+      icon: { iconify: "fluent-color:data-line-16" },
     },
     {
       id: "settings",
       label: "Settings",
-      icon: "settings",
+      icon: { iconify: "fluent-color:settings-16" },
     },
   ];
 
-  const renderIcon = (iconName: keyof typeof iconMap) => {
-    const IconComponent = iconMap[iconName];
+  const renderIcon = (icon: keyof typeof iconMap | { iconify: string }) => {
+    if (typeof icon === "object" && "iconify" in icon) {
+      return <Icon icon={icon.iconify} className="w-5 h-5" />;
+    }
+    const IconComponent = iconMap[icon];
     return <IconComponent className="w-5 h-5" />;
   };
 
@@ -132,26 +137,10 @@ export function Sidebar({
           "bg-gray-900 border-gray-800"
         : "bg-white border-gray-200"
       )}
+      style={{ backgroundColor: theme === "dark" ? "#111827" : "#ffffff" }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-inherit">
-        <AnimatePresence mode="wait">
-          {!collapsed && (
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
-              className={cn(
-                "font-bold text-lg",
-                theme === "dark" ? "text-white" : "text-gray-900"
-              )}
-            >
-              QuDAG
-            </motion.div>
-          )}
-        </AnimatePresence>
-
+      <div className="flex items-center justify-end p-4 border-b border-inherit">
         <button
           onClick={onToggle}
           className={cn(

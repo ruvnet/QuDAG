@@ -31,6 +31,14 @@ npm run lint            # Run ESLint
 # npm run test:watch     # Run tests in watch mode
 ```
 
+### Tauri Desktop App (Future)
+
+```bash
+# Note: Tauri integration mentioned in README but not yet in package.json
+# npm run tauri dev      # Run desktop app in development
+# npm run tauri build    # Build native desktop app
+```
+
 ## Key Architecture
 
 ### Frontend Stack
@@ -167,6 +175,18 @@ VITE_ENABLE_QUANTUM_CRYPTO=true
 VITE_ENABLE_VOICE_COMMANDS=false
 ```
 
+### Important Configuration Notes
+
+- Default backend port is 8090 (not 8080)
+- Voice commands are disabled by default to prevent initialization errors
+- The `index.html` title needs updating from default "Vite + React + TS" to "QuDAG Executive"
+
+## Keyboard Shortcuts
+
+- **Cmd/Ctrl + K**: Open CEO Command Bar
+- **Esc**: Close command bar or modals
+- **Tab**: Navigate between UI elements
+
 ## Common Development Tasks
 
 ### Adding New Dashboard Tabs
@@ -189,6 +209,30 @@ VITE_ENABLE_VOICE_COMMANDS=false
 2. Implement service functions with proper error handling
 3. Add TanStack Query integration for caching
 4. Update components to use new endpoints
+
+## TypeScript Configuration Notes
+
+The project uses strict TypeScript settings:
+- `strict: true` - All strict type checking enabled
+- `noUnusedLocals: true` - Errors on unused variables (prefix with `_` to ignore)
+- `noUnusedParameters: true` - Errors on unused parameters
+- Target: ES2020 with ESNext library features
+- Module resolution: bundler (optimized for Vite)
+
+## ESLint Configuration
+
+Custom rules include:
+- Unused variables with `_` prefix are ignored
+- React Hooks rules enforced
+- React Refresh compatibility checks
+- TypeScript-aware linting
+
+## Tailwind CSS Extensions
+
+The project includes custom breakpoints and spacing for large displays:
+- Additional breakpoints: `3xl` (1920px), `4xl` (2560px), `5xl` (3840px)
+- Extended spacing: 22-40 (5.5rem - 10rem)
+- Extended max-width: `8xl` (88rem), `9xl` (96rem), `10xl` (104rem)
 
 ## ARM64 Support Notes
 

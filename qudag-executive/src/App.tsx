@@ -479,7 +479,7 @@ function CockpitApp() {
   return (
     <div
       className={cn(
-        "h-screen overflow-hidden transition-colors duration-200",
+        "h-screen w-screen overflow-hidden transition-colors duration-200",
         theme === "dark" ? "bg-gray-900" : "bg-gray-50"
       )}
     >
@@ -664,7 +664,7 @@ function CockpitApp() {
           </div>
 
           {/* Integrated CEO Command Bar in Header */}
-          <div className="flex-1 max-w-2xl mx-8">
+          <div className="flex-1 max-w-3xl 3xl:max-w-4xl 4xl:max-w-5xl mx-4 md:mx-8 lg:mx-12 xl:mx-16 2xl:mx-20">
             <CEOCommandBar
               theme={theme}
               onCommand={handleCEOCommand}
@@ -709,7 +709,7 @@ function CockpitApp() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                  className="h-full"
+                  className="h-full w-full"
                 >
                   {renderActiveTab()}
                 </motion.div>

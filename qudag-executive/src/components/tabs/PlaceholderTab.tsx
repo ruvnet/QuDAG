@@ -52,8 +52,8 @@ export function PlaceholderTab({
       className="h-full flex flex-col"
     >
       <ScrollContainer>
-        <div className="p-6">
-          <div className="max-w-4xl mx-auto space-y-8">
+        <div className="p-6 md:p-8 lg:p-12 xl:p-16 2xl:p-20 3xl:p-24 4xl:p-28 5xl:p-32">
+          <div className="w-full max-w-7xl 3xl:max-w-8xl 4xl:max-w-9xl 5xl:max-w-10xl mx-auto space-y-8">
             {/* Header Section */}
             <div className="text-center space-y-6">
               {/* Icon */}

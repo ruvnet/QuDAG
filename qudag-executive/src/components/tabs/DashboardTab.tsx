@@ -109,7 +109,7 @@ export function DashboardTab({ theme = "light" }: DashboardTabProps) {
       className="h-full flex flex-col"
     >
       <ScrollContainer theme={theme}>
-        <div className="p-6 space-y-6">
+        <div className="p-6 md:p-8 lg:p-12 xl:p-16 2xl:p-20 3xl:p-24 4xl:p-28 5xl:p-32 space-y-6">
           {/* Top KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <MetricCard

@@ -179,7 +179,7 @@ export function DataDashboardTab({ theme = "light" }: DataDashboardTabProps) {
       </div>
 
       {/* Key Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 3xl:grid-cols-6 5xl:grid-cols-8 gap-6">
         <StatCard
           title="Total Revenue"
           value={
@@ -225,7 +225,7 @@ export function DataDashboardTab({ theme = "light" }: DataDashboardTabProps) {
       </div>
 
       {/* Quick Tables Preview */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 3xl:grid-cols-3 4xl:grid-cols-4 gap-6">
         {/* Recent Agents */}
         <div
           className={cn(
@@ -371,7 +371,7 @@ export function DataDashboardTab({ theme = "light" }: DataDashboardTabProps) {
       {/* Header */}
       <div
         className={cn(
-          "p-6 border-b",
+          "p-6 md:p-8 lg:px-12 xl:px-16 2xl:px-20 3xl:px-24 4xl:px-28 5xl:px-32 border-b",
           theme === "dark" ? "border-gray-700" : "border-gray-200"
         )}
       >
@@ -422,7 +422,7 @@ export function DataDashboardTab({ theme = "light" }: DataDashboardTabProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 p-6 md:p-8 lg:px-12 xl:px-16 2xl:px-20 3xl:px-24 4xl:px-28 5xl:px-32 overflow-auto">
         <motion.div
           key={activeTable}
           initial={{ opacity: 0, y: 20 }}

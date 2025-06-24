@@ -133,7 +133,7 @@ export function OrganizationChartTab({
       {/* Header with Stats */}
       <div
         className={cn(
-          "p-6 border-b",
+          "p-6 md:p-8 lg:px-12 xl:px-16 2xl:px-20 3xl:px-24 4xl:px-28 5xl:px-32 border-b",
           theme === "dark" ?
             "border-gray-700 bg-gray-800"
           : "border-gray-200 bg-white"
@@ -194,7 +194,7 @@ export function OrganizationChartTab({
 
         {/* Workforce Stats */}
         {showStats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 3xl:grid-cols-8 4xl:grid-cols-12 gap-4">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}

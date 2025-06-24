@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BarChart3,
-  Users,
   Settings,
   Activity,
   DollarSign,
@@ -23,11 +22,12 @@ import { NotificationToast } from "./components/NotificationToast";
 import { CEOCommandBar } from "./components/CEOCommandBar";
 import { DashboardTab } from "./components/tabs/DashboardTab";
 import { DataDashboardTab } from "./components/tabs/DataDashboardTab";
+import { OrganizationChartTab } from "./components/tabs/OrganizationChartTab";
 import { PlaceholderTab } from "./components/tabs/PlaceholderTab";
 import { cn } from "./lib/utils";
 import { nlService } from "./services/NaturalLanguageService";
 import { commandExecutor } from "./services/CommandExecutor";
-import type { Tab, SidebarItem, CEOCommand } from "./types";
+import type { Tab, SidebarItem } from "./types";
 
 // Create a client
 const queryClient = new QueryClient();
@@ -52,61 +52,75 @@ function CockpitApp() {
   const [isExecutingCommand, setIsExecutingCommand] = useState(false);
   const [showWelcomeMessage, setShowWelcomeMessage] = useState(true);
 
+  // Helper function to convert (message, type) calls to {message, type} objects
+  const notify = useCallback(
+    (message: string, type: "info" | "success" | "warning" | "error") => {
+      addNotification({ message, type });
+    },
+    [addNotification]
+  );
+
   // CEO Command Handler
-  const handleCEOCommand = useCallback(async (commandText: string) => {
-    if (isExecutingCommand) return;
+  const handleCEOCommand = useCallback(
+    async (commandText: string) => {
+      if (isExecutingCommand) return;
 
-    try {
-      setIsExecutingCommand(true);
-      
-      // Parse the natural language command
-      const command = nlService.parseCommand(commandText);
-      
-      // Validate command
-      const validation = nlService.validateCommand(command);
-      if (!validation.valid) {
-        addNotification(validation.reason || 'Invalid command', 'warning');
-        return;
+      try {
+        setIsExecutingCommand(true);
+
+        // Parse the natural language command
+        const command = nlService.parseCommand(commandText);
+
+        // Validate command
+        const validation = nlService.validateCommand(command);
+        if (!validation.valid) {
+          notify(validation.reason || "Invalid command", "warning");
+          return;
+        }
+
+        // Show confidence and intent to user
+        if (command.confidence < 0.7) {
+          notify(
+            `I think you want to ${command.intent.action}. Let me try...`,
+            "info"
+          );
+        }
+
+        // Execute the command
+        const executionContext = {
+          organizationId: "demo-org-1", // Default demo organization
+          onNotification: notify,
+          onTabAdd: addTab,
+        };
+
+        const result = await commandExecutor.executeCommand(
+          command,
+          executionContext
+        );
+
+        if (result.success) {
+          notify(result.message, "success");
+        } else {
+          notify(result.message, "error");
+        }
+      } catch (error) {
+        console.error("Command execution failed:", error);
+        notify(
+          "Something went wrong executing your command. Please try again.",
+          "error"
+        );
+      } finally {
+        setIsExecutingCommand(false);
       }
-
-      // Show confidence and intent to user
-      if (command.confidence < 0.7) {
-        addNotification(`I think you want to ${command.intent.action}. Let me try...`, 'info');
-      }
-
-      // Execute the command
-      const executionContext = {
-        organizationId: 'demo-org-1', // Default demo organization
-        onNotification: addNotification,
-        onTabAdd: addTab
-      };
-
-      const result = await commandExecutor.executeCommand(command, executionContext);
-      
-      if (result.success) {
-        addNotification(result.message, 'success');
-      } else {
-        addNotification(result.message, 'error');
-      }
-
-    } catch (error) {
-      console.error('Command execution failed:', error);
-      addNotification('Something went wrong executing your command. Please try again.', 'error');
-    } finally {
-      setIsExecutingCommand(false);
-    }
-  }, [isExecutingCommand, addNotification, addTab]);
+    },
+    [isExecutingCommand, notify, addTab]
+  );
 
   // Voice Commands Integration
-  const {
-    voiceState,
-    isSupported: voiceSupported,
-    toggleListening,
-    enableWakeWordMode
-  } = useVoiceCommands({
+  const { isSupported: voiceSupported, enableWakeWordMode } = useVoiceCommands({
     onCommand: handleCEOCommand,
-    onNotification: addNotification,
-    enabled: true
+    onNotification: notify,
+    enabled: true,
   });
 
   // Apply theme to document
@@ -184,48 +198,15 @@ function CockpitApp() {
       },
       agents: {
         id: "agents",
-        title: "Agent Management",
+        title: "AI Workforce",
         icon: "users",
         render: (ctx) => (
-          <PlaceholderTab
-            title="Agent Management"
-            description="Deploy, monitor, and optimize your AI agent workforce"
-            icon={<Users className="w-16 h-16" />}
-            features={[
-              "Agent Deployment Wizard",
-              "Real-time Performance Monitoring",
-              "Automated Scaling Rules",
-              "Agent Health Diagnostics",
-              "Task Assignment Engine",
-              "Agent Communication Hub",
-            ]}
-            quickActions={[
-              {
-                label: "Deploy New Agent",
-                description: "Launch a new AI agent with guided setup",
-                icon: <Users className="w-6 h-6" />,
-                color: "blue" as const,
-                action: () =>
-                  ctx.onNotification(
-                    "Agent deployment wizard would open here",
-                    "info"
-                  ),
-              },
-              {
-                label: "Scale Operations",
-                description: "Automatically scale your agent workforce",
-                icon: <TrendingUp className="w-6 h-6" />,
-                color: "green" as const,
-                action: () =>
-                  ctx.onNotification(
-                    "Auto-scaling configuration started",
-                    "info"
-                  ),
-              },
-            ]}
+          <OrganizationChartTab
+            theme={ctx.theme}
             onNotification={ctx.onNotification}
           />
         ),
+        closable: true,
       },
       revenue: {
         id: "revenue",
@@ -495,10 +476,7 @@ function CockpitApp() {
 
     const context = {
       theme,
-      onNotification: (
-        message: string,
-        type: "info" | "success" | "warning" | "error"
-      ) => addNotification({ message, type }),
+      onNotification: notify,
     };
 
     return activeTab.render(context);
@@ -518,14 +496,6 @@ function CockpitApp() {
         theme={theme}
       />
 
-      {/* Revolutionary CEO Command Bar */}
-      <CEOCommandBar
-        theme={theme}
-        onCommand={handleCEOCommand}
-        onNotification={addNotification}
-        isExecuting={isExecutingCommand}
-      />
-
       {/* Welcome Message for First-Time Users */}
       <AnimatePresence>
         {showWelcomeMessage && tabs.length <= 1 && (
@@ -542,9 +512,9 @@ function CockpitApp() {
               exit={{ opacity: 0, y: 20 }}
               className={cn(
                 "max-w-lg w-full rounded-2xl p-8 text-center",
-                theme === 'dark' 
-                  ? "bg-gray-800 border border-gray-700" 
-                  : "bg-white border border-gray-200"
+                theme === "dark" ?
+                  "bg-gray-800 border border-gray-700"
+                : "bg-white border border-gray-200"
               )}
               onClick={(e) => e.stopPropagation()}
             >
@@ -557,27 +527,31 @@ function CockpitApp() {
                   <Sparkles className="w-8 h-8 text-purple-600" />
                 </motion.div>
               </div>
-              
-              <h2 className={cn(
-                "text-2xl font-bold mb-3",
-                theme === 'dark' ? "text-white" : "text-gray-900"
-              )}>
+
+              <h2
+                className={cn(
+                  "text-2xl font-bold mb-3",
+                  theme === "dark" ? "text-white" : "text-gray-900"
+                )}
+              >
                 Welcome to Your AI-CEO Command Center! 🚀
               </h2>
-              
-              <p className={cn(
-                "text-lg mb-6",
-                theme === 'dark' ? "text-gray-300" : "text-gray-600"
-              )}>
+
+              <p
+                className={cn(
+                  "text-lg mb-6",
+                  theme === "dark" ? "text-gray-300" : "text-gray-600"
+                )}
+              >
                 Running your business is now as simple as talking. Try saying:
               </p>
-              
+
               <div className="space-y-3 mb-6">
                 {[
                   "🎯 'Hire 5 sales agents for Q1'",
-                  "📊 'Show me this month's metrics'", 
+                  "📊 'Show me this month's metrics'",
                   "⚡ 'Optimize marketing costs'",
-                  "🚀 'Generate board report'"
+                  "🚀 'Generate board report'",
                 ].map((example, index) => (
                   <motion.div
                     key={index}
@@ -586,32 +560,37 @@ function CockpitApp() {
                     transition={{ delay: index * 0.1 }}
                     className={cn(
                       "p-3 rounded-lg text-left",
-                      theme === 'dark' ? "bg-gray-700" : "bg-gray-50"
+                      theme === "dark" ? "bg-gray-700" : "bg-gray-50"
                     )}
                   >
-                    <span className={cn(
-                      "font-medium",
-                      theme === 'dark' ? "text-gray-200" : "text-gray-800"
-                    )}>
+                    <span
+                      className={cn(
+                        "font-medium",
+                        theme === "dark" ? "text-gray-200" : "text-gray-800"
+                      )}
+                    >
                       {example}
                     </span>
                   </motion.div>
                 ))}
               </div>
-              
+
               <div className="flex gap-3 justify-center">
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => {
                     setShowWelcomeMessage(false);
-                    addNotification("🎤 Try the command bar above or say 'Hey QuDAG' to get started!", "info");
+                    notify(
+                      "🎤 Try the command bar above or say 'Hey QuDAG' to get started!",
+                      "info"
+                    );
                   }}
                   className="px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
                 >
                   Let's Get Started!
                 </motion.button>
-                
+
                 {voiceSupported && (
                   <motion.button
                     whileHover={{ scale: 1.02 }}
@@ -622,20 +601,22 @@ function CockpitApp() {
                     }}
                     className={cn(
                       "px-6 py-3 rounded-lg font-medium transition-colors",
-                      theme === 'dark' 
-                        ? "bg-gray-700 text-gray-200 hover:bg-gray-600" 
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      theme === "dark" ?
+                        "bg-gray-700 text-gray-200 hover:bg-gray-600"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     )}
                   >
                     Enable Voice Mode
                   </motion.button>
                 )}
               </div>
-              
-              <p className={cn(
-                "text-xs mt-4",
-                theme === 'dark' ? "text-gray-500" : "text-gray-400"
-              )}>
+
+              <p
+                className={cn(
+                  "text-xs mt-4",
+                  theme === "dark" ? "text-gray-500" : "text-gray-400"
+                )}
+              >
                 Press Cmd+K or Ctrl+K anytime to access the command bar
               </p>
             </motion.div>
@@ -657,7 +638,11 @@ function CockpitApp() {
             <div className="flex items-center gap-3">
               <motion.div
                 animate={{ rotate: isExecutingCommand ? 360 : 0 }}
-                transition={{ duration: 1, repeat: isExecutingCommand ? Infinity : 0, ease: "linear" }}
+                transition={{
+                  duration: 1,
+                  repeat: isExecutingCommand ? Infinity : 0,
+                  ease: "linear",
+                }}
               >
                 <Sparkles className="w-6 h-6 text-purple-600" />
               </motion.div>
@@ -676,13 +661,22 @@ function CockpitApp() {
                     theme === "dark" ? "text-gray-400" : "text-gray-500"
                   )}
                 >
-                  {isExecutingCommand ? 
-                    "🧠 AI is thinking..." : 
-                    "Voice-First Business Operating System"
-                  }
+                  {isExecutingCommand ?
+                    "🧠 AI is thinking..."
+                  : "Voice-First Business Operating System"}
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Integrated CEO Command Bar in Header */}
+          <div className="flex-1 max-w-2xl mx-8">
+            <CEOCommandBar
+              theme={theme}
+              onCommand={handleCEOCommand}
+              onNotification={notify}
+              isExecuting={isExecutingCommand}
+            />
           </div>
 
           <div className="flex items-center gap-4">

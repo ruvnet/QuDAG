@@ -480,7 +480,7 @@ function CockpitApp() {
     <div
       className={cn(
         "h-screen w-screen overflow-hidden transition-colors duration-200",
-        theme === "dark" ? "bg-gray-900" : "bg-gray-50"
+        "bg-gray-50 dark:bg-gray-900"
       )}
     >
       {/* Notifications */}
@@ -622,9 +622,8 @@ function CockpitApp() {
       <header
         className={cn(
           "border-b transition-colors duration-200 z-10 relative",
-          theme === "dark" ?
-            "bg-gray-800 border-gray-700"
-          : "bg-white border-gray-200"
+          "bg-white border-gray-200",
+          "dark:bg-gray-800 dark:border-gray-700"
         )}
       >
         <div className="flex items-center justify-between h-16 px-4">
@@ -644,16 +643,13 @@ function CockpitApp() {
                 <h1
                   className={cn(
                     "text-xl font-bold",
-                    theme === "dark" ? "text-white" : "text-gray-900"
+                    "text-gray-900 dark:text-white"
                   )}
                 >
                   QuDAG Executive AI-CEO
                 </h1>
                 <span
-                  className={cn(
-                    "text-sm",
-                    theme === "dark" ? "text-gray-400" : "text-gray-500"
-                  )}
+                  className={cn("text-sm", "text-gray-500 dark:text-gray-400")}
                 >
                   {isExecutingCommand ?
                     "🧠 AI is thinking..."
@@ -683,9 +679,7 @@ function CockpitApp() {
         {/* Sidebar */}
         <Sidebar
           collapsed={sidebarCollapsed}
-          onToggle={toggleSidebar}
           onItemClick={handleSidebarItemClick}
-          theme={theme}
         />
 
         {/* Main Content Area */}

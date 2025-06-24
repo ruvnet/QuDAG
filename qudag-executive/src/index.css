@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Base layer for proper dark mode support */
+@layer base {
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    @apply m-0;
+  }
+}
+
+/* Commenting out root styles that might interfere with Tailwind dark mode
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -16,7 +28,19 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+*/
 
+/* Keep only necessary global styles that don't interfere with dark mode */
+body {
+  margin: 0;
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Remove all the other default styles that might interfere
 a {
   font-weight: 500;
   color: #646cff;
@@ -70,3 +94,4 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+*/

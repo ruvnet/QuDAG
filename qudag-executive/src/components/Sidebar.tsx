@@ -32,15 +32,9 @@ const iconMap = {
 interface SidebarProps {
   collapsed: boolean;
   onItemClick: (item: SidebarItem) => void;
-  theme: "light" | "dark";
 }
 
-export function Sidebar({
-  collapsed,
-  onItemClick,
-  theme,
-}: SidebarProps) {
-  console.log("Sidebar theme prop:", theme);
+export function Sidebar({ collapsed, onItemClick }: SidebarProps) {
   const sidebarItems: Array<{
     id: string;
     label: string;
@@ -129,11 +123,9 @@ export function Sidebar({
       }}
       className={cn(
         "flex flex-col border-r transition-colors duration-200",
-        theme === "dark" ?
-          "bg-gray-900 border-gray-800"
-        : "bg-white border-gray-200"
+        "bg-white border-gray-200",
+        "dark:bg-gray-900 dark:border-gray-800"
       )}
-      style={{ backgroundColor: theme === "dark" ? "#111827" : "#ffffff" }}
     >
       {/* Navigation Items */}
       <nav className="flex-1 p-2 space-y-1 relative">
@@ -147,9 +139,8 @@ export function Sidebar({
             className={cn(
               "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
               "group relative",
-              theme === "dark" ?
-                "text-gray-300 hover:text-white hover:bg-gray-800"
-              : "text-gray-700 hover:text-gray-900 hover:bg-gray-100",
+              "text-gray-700 hover:text-gray-900 hover:bg-gray-100",
+              "dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800",
               item.disabled && "opacity-50 cursor-not-allowed"
             )}
           >
@@ -180,9 +171,8 @@ export function Sidebar({
                     transition={{ duration: 0.2 }}
                     className={cn(
                       "px-2 py-0.5 text-xs font-medium rounded-full",
-                      theme === "dark" ?
-                        "bg-blue-900 text-blue-200"
-                      : "bg-blue-100 text-blue-800"
+                      "bg-blue-100 text-blue-800",
+                      "dark:bg-blue-900 dark:text-blue-200"
                     )}
                   >
                     {item.badge}
@@ -196,9 +186,8 @@ export function Sidebar({
               <div
                 className={cn(
                   "absolute left-full ml-2 px-2 py-1 text-sm rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50",
-                  theme === "dark" ?
-                    "bg-gray-800 text-white border border-gray-700"
-                  : "bg-gray-900 text-white"
+                  "bg-gray-900 text-white",
+                  "dark:bg-gray-800 dark:border dark:border-gray-700"
                 )}
               >
                 {item.label}
@@ -212,7 +201,6 @@ export function Sidebar({
           </motion.button>
         ))}
       </nav>
-
     </motion.div>
   );
 }

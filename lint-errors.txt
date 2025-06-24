@@ -1,0 +1,118 @@
+
+> qudag-executive@0.0.0 lint
+> eslint .
+
+
+/Users/god/_neucleos-1-all/QuDAG/qudag-executive/src/App.tsx
+  23:10  error  'DashboardTab' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/god/_neucleos-1-all/QuDAG/qudag-executive/src/components/AgentNode.tsx
+  13:3   error  'Zap' is defined but never used                       @typescript-eslint/no-unused-vars
+  16:3   error  'AlertTriangle' is defined but never used             @typescript-eslint/no-unused-vars
+  17:3   error  'CheckCircle' is defined but never used               @typescript-eslint/no-unused-vars
+  18:3   error  'Clock' is defined but never used                     @typescript-eslint/no-unused-vars
+  78:10  error  'showMiniDetails' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/god/_neucleos-1-all/QuDAG/qudag-executive/src/components/DataTable.tsx
+  17:3   error  'Filter' is defined but never used        @typescript-eslint/no-unused-vars
+  27:20  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  59:52  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/god/_neucleos-1-all/QuDAG/qudag-executive/src/components/LivingOrgChart.tsx
+   15:3   error  'Filter' is defined but never used            @typescript-eslint/no-unused-vars
+   18:3   error  'TrendingUp' is defined but never used        @typescript-eslint/no-unused-vars
+   20:3   error  'Settings' is defined but never used          @typescript-eslint/no-unused-vars
+   21:3   error  'Download' is defined but never used          @typescript-eslint/no-unused-vars
+  163:9   error  Unexpected lexical declaration in case block  no-case-declarations
+  167:9   error  Unexpected lexical declaration in case block  no-case-declarations
+  179:9   error  Unexpected lexical declaration in case block  no-case-declarations
+  183:9   error  Unexpected lexical declaration in case block  no-case-declarations
+  197:9   error  Unexpected lexical declaration in case block  no-case-declarations
+  198:53  error  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+  211:9   error  Unexpected lexical declaration in case block  no-case-declarations
+  214:9   error  Unexpected lexical declaration in case block  no-case-declarations
+  275:24  error  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+  499:30  error  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+  500:30  error  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+
+/Users/god/_neucleos-1-all/QuDAG/qudag-executive/src/components/tables/AgentsTable.tsx
+  232:47  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/god/_neucleos-1-all/QuDAG/qudag-executive/src/components/tables/MetricsTable.tsx
+  222:47  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/god/_neucleos-1-all/QuDAG/qudag-executive/src/components/tables/ProjectsTable.tsx
+   18:3   error  'DollarSign' is defined but never used    @typescript-eslint/no-unused-vars
+   20:3   error  'Target' is defined but never used        @typescript-eslint/no-unused-vars
+  284:47  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/god/_neucleos-1-all/QuDAG/qudag-executive/src/hooks/useVoiceCommands.ts
+   50:53  error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   51:51  error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   52:75  error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   53:71  error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   54:72  error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   55:59  error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   56:57  error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   57:58  error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   58:56  error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   59:58  error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+   60:56  error    Unexpected any. Specify a different type                                                                                                        @typescript-eslint/no-explicit-any
+  209:6   warning  React Hook useEffect has a missing dependency: 'processFinalTranscript'. Either include it or remove the dependency array                       react-hooks/exhaustive-deps
+  247:6   warning  React Hook useCallback has missing dependencies: 'processCommand' and 'setWakeWordTimeout'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/god/_neucleos-1-all/QuDAG/qudag-executive/src/services/CommandExecutor.tsx
+    8:10   error  'motion' is defined but never used               @typescript-eslint/no-unused-vars
+   15:3    error  'DollarSign' is defined but never used           @typescript-eslint/no-unused-vars
+   27:20   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  128:33   error  'systemRole' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  128:45   error  'department' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  153:18   error  'error' is defined but never used                @typescript-eslint/no-unused-vars
+  205:14   error  'error' is defined but never used                @typescript-eslint/no-unused-vars
+  227:25   error  'timeframe' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  275:14   error  'error' is defined but never used                @typescript-eslint/no-unused-vars
+  297:21   error  'objective' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  336:14   error  'error' is defined but never used                @typescript-eslint/no-unused-vars
+  398:14   error  'error' is defined but never used                @typescript-eslint/no-unused-vars
+  420:25   error  'format' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  459:14   error  'error' is defined but never used                @typescript-eslint/no-unused-vars
+  481:29   error  'depth' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  520:14   error  'error' is defined but never used                @typescript-eslint/no-unused-vars
+  538:51   error  'context' is defined but never used              @typescript-eslint/no-unused-vars
+  597:86   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  602:14   error  'error' is defined but never used                @typescript-eslint/no-unused-vars
+  614:39   error  'target' is defined but never used               @typescript-eslint/no-unused-vars
+  614:55   error  'organizationId' is defined but never used       @typescript-eslint/no-unused-vars
+  614:88   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  627:69   error  'organizationId' is defined but never used       @typescript-eslint/no-unused-vars
+  627:102  error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  636:32   error  'reportType' is defined but never used           @typescript-eslint/no-unused-vars
+  636:52   error  'organizationId' is defined but never used       @typescript-eslint/no-unused-vars
+  636:85   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+  646:33   error  'target' is defined but never used               @typescript-eslint/no-unused-vars
+  646:49   error  'organizationId' is defined but never used       @typescript-eslint/no-unused-vars
+  646:82   error  Unexpected any. Specify a different type         @typescript-eslint/no-explicit-any
+
+/Users/god/_neucleos-1-all/QuDAG/qudag-executive/src/services/NaturalLanguageService.ts
+    8:42  error  'CommandResult' is defined but never used     @typescript-eslint/no-unused-vars
+   10:11  error  'EntityExtraction' is defined but never used  @typescript-eslint/no-unused-vars
+   22:64  error  Unexpected any. Specify a different type      @typescript-eslint/no-explicit-any
+  224:56  error  'pattern' is defined but never used           @typescript-eslint/no-unused-vars
+
+/Users/god/_neucleos-1-all/QuDAG/qudag-executive/src/services/api.ts
+   62:28  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   74:28  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   96:35  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   97:28  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  111:28  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  128:28  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  145:35  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  149:28  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  159:15  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/god/_neucleos-1-all/QuDAG/qudag-executive/src/types/index.ts
+  54:28  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  70:10  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+✖ 87 problems (85 errors, 2 warnings)
+

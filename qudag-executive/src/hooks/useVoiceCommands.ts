@@ -47,17 +47,17 @@ interface SpeechRecognition extends EventTarget {
   stop(): void;
   abort(): void;
   
-  onstart: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onend: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any) | null;
-  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null;
-  onnomatch: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null;
-  onspeechstart: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onspeechend: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onsoundstart: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onsoundend: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onaudiostart: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onaudioend: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null;
+  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onnomatch: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onspeechstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onspeechend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onsoundstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onsoundend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onaudiostart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onaudioend: ((this: SpeechRecognition, ev: Event) => void) | null;
 }
 
 declare const SpeechRecognition: {
@@ -206,7 +206,7 @@ export function useVoiceCommands({
     return () => {
       recognition.abort();
     };
-  }, [isSupported, enabled, language, continuous, isWakeWordMode, onNotification]);
+  }, [isSupported, enabled, language, continuous, isWakeWordMode, onNotification, processFinalTranscript]);
 
   // Process final transcript from speech recognition
   const processFinalTranscript = useCallback((transcript: string, confidence: number) => {
@@ -244,7 +244,7 @@ export function useVoiceCommands({
 
     // Process command directly
     processCommand(transcript, confidence);
-  }, [isWakeWordMode, wakeWord, onNotification]);
+  }, [isWakeWordMode, wakeWord, onNotification, processCommand, setWakeWordTimeout]);
 
   // Process the actual command
   const processCommand = useCallback((command: string, confidence: number) => {

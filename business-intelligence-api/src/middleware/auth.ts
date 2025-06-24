@@ -5,11 +5,11 @@
  * @lastModified 2025-06-23 by CleoClaudeDesktop - Initial auth middleware
  */
 
-import { FastifyRequest, FastifyReply } from 'fastify';
-import { logger } from '../utils/logger';
+import { FastifyRequest, FastifyReply } from "fastify";
+import { logger } from "../utils/logger";
 
-// Extend FastifyRequest to include user
-declare module 'fastify' {
+// Extend FastifyRequest to include user and JWT
+declare module "fastify" {
   interface FastifyRequest {
     user?: {
       id: string;
@@ -19,6 +19,16 @@ declare module 'fastify' {
       isAdmin: boolean;
     };
   }
+}
+
+// JWT payload interface
+interface JWTPayload {
+  sub: string;
+  email: string;
+  organizationId: string;
+  role: string;
+  iat?: number;
+  exp?: number;
 }
 
 /**
@@ -37,13 +47,13 @@ export async function authMiddleware(
   try {
     // Get token from Authorization header
     const authHeader = request.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return reply.code(401).send({
         success: false,
         error: {
-          code: 'UNAUTHORIZED',
-          message: 'Missing or invalid authorization header',
+          code: "UNAUTHORIZED",
+          message: "Missing or invalid authorization header",
         },
       });
     }
@@ -51,38 +61,38 @@ export async function authMiddleware(
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
     try {
-      // Verify JWT token
-      const decoded = await request.jwtVerify();
-      
+      // Verify JWT token (cast to fix type issue)
+      const decoded = (await (request as any).jwtVerify()) as JWTPayload;
+
       // Attach user to request
       request.user = {
-        id: decoded.sub as string,
-        email: decoded.email as string,
-        organizationId: decoded.organizationId as string,
-        role: decoded.role as string,
-        isAdmin: decoded.role === 'admin',
+        id: decoded.sub,
+        email: decoded.email,
+        organizationId: decoded.organizationId,
+        role: decoded.role,
+        isAdmin: decoded.role === "admin",
       };
 
-      logger.debug({ userId: request.user.id }, 'User authenticated');
+      logger.debug({ userId: request.user.id }, "User authenticated");
     } catch (error: any) {
-      logger.warn({ error: error.message }, 'JWT verification failed');
-      
+      logger.warn({ error: error.message }, "JWT verification failed");
+
       return reply.code(401).send({
         success: false,
         error: {
-          code: 'INVALID_TOKEN',
-          message: 'Invalid or expired token',
+          code: "INVALID_TOKEN",
+          message: "Invalid or expired token",
         },
       });
     }
   } catch (error: any) {
-    logger.error({ error }, 'Authentication middleware error');
-    
+    logger.error({ error }, "Authentication middleware error");
+
     return reply.code(500).send({
       success: false,
       error: {
-        code: 'AUTH_ERROR',
-        message: 'Authentication failed',
+        code: "AUTH_ERROR",
+        message: "Authentication failed",
       },
     });
   }
@@ -102,8 +112,8 @@ export function requireRole(allowedRoles: string[]) {
       return reply.code(401).send({
         success: false,
         error: {
-          code: 'UNAUTHORIZED',
-          message: 'Authentication required',
+          code: "UNAUTHORIZED",
+          message: "Authentication required",
         },
       });
     }
@@ -112,8 +122,8 @@ export function requireRole(allowedRoles: string[]) {
       return reply.code(403).send({
         success: false,
         error: {
-          code: 'FORBIDDEN',
-          message: 'Insufficient permissions',
+          code: "FORBIDDEN",
+          message: "Insufficient permissions",
         },
       });
     }
@@ -134,20 +144,20 @@ export function requireOrganization(getOrgId: (req: FastifyRequest) => string) {
       return reply.code(401).send({
         success: false,
         error: {
-          code: 'UNAUTHORIZED',
-          message: 'Authentication required',
+          code: "UNAUTHORIZED",
+          message: "Authentication required",
         },
       });
     }
 
     const orgId = getOrgId(request);
-    
+
     if (request.user.organizationId !== orgId && !request.user.isAdmin) {
       return reply.code(403).send({
         success: false,
         error: {
-          code: 'FORBIDDEN',
-          message: 'Access denied to this organization',
+          code: "FORBIDDEN",
+          message: "Access denied to this organization",
         },
       });
     }
@@ -169,9 +179,9 @@ export function rateLimit(maxRequests: number = 100, windowMs: number = 60000) {
   return async function (request: FastifyRequest, reply: FastifyReply) {
     const key = request.user?.id || request.ip;
     const now = Date.now();
-    
+
     const userRequests = requests.get(key);
-    
+
     if (!userRequests || userRequests.resetTime < now) {
       // New window
       requests.set(key, {
@@ -181,12 +191,12 @@ export function rateLimit(maxRequests: number = 100, windowMs: number = 60000) {
     } else if (userRequests.count >= maxRequests) {
       // Rate limit exceeded
       const retryAfter = Math.ceil((userRequests.resetTime - now) / 1000);
-      
+
       return reply.code(429).send({
         success: false,
         error: {
-          code: 'RATE_LIMITED',
-          message: 'Too many requests',
+          code: "RATE_LIMITED",
+          message: "Too many requests",
           retryAfter,
         },
       });

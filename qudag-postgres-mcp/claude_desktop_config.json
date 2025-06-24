@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "node",
+      "args": [
+        "/Users/god/_neucleos-1-all/QuDAG/qudag-postgres-mcp/dist/server.js"
+      ],
+      "env": {
+        "DATABASE_URL": "postgresql://qudag_executive:password@localhost:5433/qudag_business",
+        "MCP_ACCESS_MODE": "restricted",
+        "MCP_ALLOWED_SCHEMAS": "executive"
+      }
+    }
+  }
+}

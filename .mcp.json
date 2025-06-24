@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "claude-directory-shared": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        ".claude/mcp-server.js"
+      ],
+      "env": {}
+    }
+  }
+}

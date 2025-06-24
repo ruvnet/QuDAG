@@ -20,7 +20,6 @@ import { TabBar } from "./components/TabBar";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { NotificationToast } from "./components/NotificationToast";
 import { CEOCommandBar } from "./components/CEOCommandBar";
-import { DashboardTab } from "./components/tabs/DashboardTab";
 import { DataDashboardTab } from "./components/tabs/DataDashboardTab";
 import { OrganizationChartTab } from "./components/tabs/OrganizationChartTab";
 import { PlaceholderTab } from "./components/tabs/PlaceholderTab";
@@ -86,9 +85,9 @@ function CockpitApp() {
           );
         }
 
-        // Execute the command
+        // Execute the command - organization ID should be passed from context/state
         const executionContext = {
-          organizationId: "demo-org-1", // Default demo organization
+          organizationId: "current-org", // TODO: Get from organization context
           onNotification: notify,
           onTabAdd: addTab,
         };
@@ -137,9 +136,9 @@ function CockpitApp() {
     if (tabs.length === 0) {
       addTab({
         id: "dashboard",
-        title: "Dashboard",
+        title: "Data Intelligence",
         icon: "home",
-        render: (context) => <DashboardTab theme={context.theme} />,
+        render: (context) => <DataDashboardTab theme={context.theme} />,
         closable: false,
       });
     }
@@ -149,9 +148,9 @@ function CockpitApp() {
     const tabConfigs: Record<string, Omit<Tab, "action">> = {
       dashboard: {
         id: "dashboard",
-        title: "Dashboard",
+        title: "Data Intelligence",
         icon: "home",
-        render: (ctx) => <DashboardTab theme={ctx.theme} />,
+        render: (ctx) => <DataDashboardTab theme={ctx.theme} />,
         closable: false,
       },
       analytics: {
@@ -337,13 +336,7 @@ function CockpitApp() {
           />
         ),
       },
-      storage: {
-        id: "storage",
-        title: "Data Intelligence",
-        icon: "database",
-        render: (ctx) => <DataDashboardTab theme={ctx.theme} />,
-        closable: true,
-      },
+
       security: {
         id: "security",
         title: "Security",

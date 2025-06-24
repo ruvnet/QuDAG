@@ -6,7 +6,7 @@ import type { Notification } from "../types";
 interface NotificationToastProps {
   notifications: Notification[];
   onRemove: (id: string) => void;
-  theme: "light" | "dark";
+  theme?: "light" | "dark";
 }
 
 const iconMap = {
@@ -44,6 +44,9 @@ export function NotificationToast({
   onRemove,
   theme,
 }: NotificationToastProps) {
+  // Defensive check for theme - fallback to 'light' if undefined
+  const safeTheme = theme || "light";
+
   return (
     <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm">
       <AnimatePresence mode="popLayout">
@@ -64,7 +67,7 @@ export function NotificationToast({
               }}
               className={cn(
                 "flex items-start gap-3 p-4 rounded-lg border shadow-lg backdrop-blur-sm",
-                colors[theme]
+                colors[safeTheme]
               )}
             >
               {/* Icon */}
@@ -89,7 +92,7 @@ export function NotificationToast({
                 onClick={() => onRemove(notification.id)}
                 className={cn(
                   "flex-shrink-0 p-1 rounded-full transition-colors",
-                  theme === "dark" ?
+                  safeTheme === "dark" ?
                     "hover:bg-gray-700 text-gray-400 hover:text-white"
                   : "hover:bg-gray-200 text-gray-500 hover:text-gray-700"
                 )}

@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # PostgreSQL Database
@@ -7,7 +7,7 @@ services:
     container_name: qudag-bi-postgres
     environment:
       POSTGRES_USER: qudag_executive
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: password123
       POSTGRES_DB: qudag_business
     ports:
       - "5433:5432"
@@ -43,7 +43,7 @@ services:
     container_name: qudag-bi-api
     environment:
       NODE_ENV: development
-      DATABASE_URL: postgresql://qudag_executive:password@postgres:5432/qudag_business
+      DATABASE_URL: postgresql://qudag_executive:password123@postgres:5432/qudag_business
       REDIS_URL: redis://redis:6379
       QUDAG_API_URL: http://host.docker.internal:8080
       QUDAG_EXCHANGE_URL: http://host.docker.internal:8081

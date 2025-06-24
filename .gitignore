@@ -80,3 +80,8 @@ Thumbs.db
 !/infra/
 !/research/
 /target/
+# Compiled output
+dist/
+*.d.ts
+*.d.ts.map
+*.js.map

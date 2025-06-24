@@ -2,22 +2,31 @@
  * @description Seed the PostgreSQL database with test data
  * @author CleoClaudeDesktop
  * @created 2025-06-23
- * @lastModified 2025-06-23 by CleoClaudeDesktop - Database seeding
+ * @lastModified 2025-01-27 by ClaudeAI - Fixed database connection to use dotenv
  */
 
-import { createPool, sql } from 'slonik';
-import { testOrganizations, testDepartments, testAgents, testMetrics, testProjects } from './test-data';
+import "dotenv/config";
+import { createPool, sql } from "slonik";
+import {
+  testOrganizations,
+  testDepartments,
+  testAgents,
+  testMetrics,
+  testProjects,
+} from "./test-data";
 
-const DATABASE_URL = 'postgresql://qudag_executive:password@localhost:5433/qudag_business';
+const DATABASE_URL =
+  process.env.DATABASE_URL ||
+  "postgresql://qudag_executive:password123@localhost:5433/qudag_business";
 
 async function seedDatabase() {
   const pool = await createPool(DATABASE_URL);
-  
+
   try {
-    console.log('🌱 Starting database seeding...');
-    
+    console.log("🌱 Starting database seeding...");
+
     // Clear existing data
-    console.log('🧹 Clearing existing data...');
+    console.log("🧹 Clearing existing data...");
     await pool.query(sql`DELETE FROM executive.scenarios`);
     await pool.query(sql`DELETE FROM executive.projects`);
     await pool.query(sql`DELETE FROM executive.business_metrics`);
@@ -29,9 +38,9 @@ async function seedDatabase() {
     await pool.query(sql`DELETE FROM executive.agent_profiles`);
     await pool.query(sql`DELETE FROM executive.departments`);
     await pool.query(sql`DELETE FROM executive.organizations`);
-    
+
     // Insert Organizations
-    console.log('🏢 Inserting organizations...');
+    console.log("🏢 Inserting organizations...");
     for (const org of testOrganizations) {
       await pool.query(sql`
         INSERT INTO executive.organizations (
@@ -44,9 +53,9 @@ async function seedDatabase() {
         )
       `);
     }
-    
+
     // Insert Departments
-    console.log('🏬 Inserting departments...');
+    console.log("🏬 Inserting departments...");
     for (const dept of testDepartments) {
       await pool.query(sql`
         INSERT INTO executive.departments (
@@ -59,9 +68,9 @@ async function seedDatabase() {
         )
       `);
     }
-    
+
     // Insert Agent Profiles
-    console.log('🤖 Inserting agent profiles...');
+    console.log("🤖 Inserting agent profiles...");
     for (const agent of testAgents) {
       await pool.query(sql`
         INSERT INTO executive.agent_profiles (
@@ -78,9 +87,9 @@ async function seedDatabase() {
         )
       `);
     }
-    
+
     // Insert Business Metrics
-    console.log('📊 Inserting business metrics...');
+    console.log("📊 Inserting business metrics...");
     for (const metric of testMetrics) {
       await pool.query(sql`
         INSERT INTO executive.business_metrics (
@@ -94,9 +103,9 @@ async function seedDatabase() {
         )
       `);
     }
-    
+
     // Insert Projects
-    console.log('🎯 Inserting projects...');
+    console.log("🎯 Inserting projects...");
     for (const project of testProjects) {
       await pool.query(sql`
         INSERT INTO executive.projects (
@@ -113,16 +122,15 @@ async function seedDatabase() {
         )
       `);
     }
-    
-    console.log('✅ Database seeding completed successfully!');
+
+    console.log("✅ Database seeding completed successfully!");
     console.log(`   - ${testOrganizations.length} organizations`);
     console.log(`   - ${testDepartments.length} departments`);
     console.log(`   - ${testAgents.length} agent profiles`);
     console.log(`   - ${testMetrics.length} business metrics`);
     console.log(`   - ${testProjects.length} projects`);
-    
   } catch (error) {
-    console.error('❌ Database seeding failed:', error);
+    console.error("❌ Database seeding failed:", error);
     throw error;
   } finally {
     await pool.end();

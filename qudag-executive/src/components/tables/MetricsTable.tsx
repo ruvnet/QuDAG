@@ -219,7 +219,7 @@ export function MetricsTable({ organizationId, metricType, theme = 'light' }: Me
       ...csvData.map(row => 
         columns.map(col => {
           const value = col.key.includes('.') 
-            ? col.key.split('.').reduce((obj: any, k) => obj?.[k], row)
+            ? col.key.split('.').reduce((obj: Record<string, unknown>, k) => obj?.[k] as Record<string, unknown>, row as Record<string, unknown>)
             : row[col.key as keyof BusinessMetric];
           return typeof value === 'object' ? JSON.stringify(value) : value;
         }).join(',')

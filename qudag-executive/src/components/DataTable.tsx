@@ -14,7 +14,6 @@ import {
   ChevronDown,
   Search,
   RefreshCw,
-  Filter,
   Download
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -24,7 +23,7 @@ export interface Column<T> {
   title: string;
   sortable?: boolean;
   filterable?: boolean;
-  render?: (value: any, row: T, index: number) => React.ReactNode;
+  render?: (value: unknown, row: T, index: number) => React.ReactNode;
   width?: string;
   className?: string;
 }
@@ -56,7 +55,7 @@ export interface DataTableProps<T> {
   actions?: React.ReactNode;
 }
 
-export function DataTable<T extends Record<string, any>>({
+export function DataTable<T extends Record<string, unknown>>({
   data,
   columns,
   loading = false,

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "qudag-postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://qudag_executive:password123@localhost:5433/qudag_business"
+      ]
+    }
+  }
+}

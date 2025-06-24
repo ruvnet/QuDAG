@@ -59,7 +59,7 @@ export interface Organization {
       auto_scaling: boolean;
     };
   };
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface Department {
@@ -71,7 +71,7 @@ export interface Department {
   manager_agent_id?: string;
   budget_allocation: number;
   created_at: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface AgentProfile {
@@ -93,8 +93,8 @@ export interface AgentProfile {
   last_active: string;
   status: 'active' | 'idle' | 'error' | 'maintenance' | 'retired';
   performance_rating: number;
-  custom_settings: Record<string, any>;
-  metadata: Record<string, any>;
+  custom_settings: Record<string, unknown>;
+  metadata: Record<string, unknown>;
 }
 
 export interface BusinessMetric {
@@ -108,7 +108,7 @@ export interface BusinessMetric {
   period_end: string;
   department_id?: string;
   agent_id?: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   created_at: string;
 }
 
@@ -125,7 +125,7 @@ export interface AgentPerformance {
   costs_incurred: number;
   roi: number;
   quality_score: number;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   created_at: string;
 }
 
@@ -142,11 +142,11 @@ export interface Project {
   start_date?: string;
   target_date?: string;
   completion_date?: string;
-  success_metrics: Record<string, any>;
+  success_metrics: Record<string, unknown>;
   assigned_agents: string[];
   created_at: string;
   updated_at: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 // API Response types
@@ -156,7 +156,7 @@ export interface ApiResponse<T> {
   error?: {
     code: string;
     message: string;
-    details?: any;
+    details?: unknown;
   };
   meta?: {
     timestamp: string;

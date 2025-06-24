@@ -82,11 +82,7 @@ export function Sidebar({
       icon: "activity",
       badge: "15.8K",
     },
-    {
-      id: "storage",
-      label: "Data Storage",
-      icon: "database",
-    },
+
     {
       id: "security",
       label: "Security",

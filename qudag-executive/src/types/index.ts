@@ -51,7 +51,7 @@ export interface CEOCommand {
   id: string;
   input: string;
   intent: CommandIntent;
-  entities: Record<string, any>;
+  entities: Record<string, string | number | boolean>;
   confidence: number;
   timestamp: number;
   status: 'pending' | 'executing' | 'completed' | 'failed';
@@ -67,7 +67,7 @@ export interface CommandIntent {
 export interface CommandResult {
   success: boolean;
   message: string;
-  data?: any;
+  data?: Record<string, unknown>;
   actions?: QuickAction[];
 }
 

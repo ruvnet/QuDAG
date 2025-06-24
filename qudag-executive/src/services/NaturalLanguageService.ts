@@ -5,21 +5,12 @@
  * @lastModified 2025-06-23 - Revolutionary NLP for business commands
  */
 
-import type { CEOCommand, CommandIntent, CommandResult } from '../types';
-
-interface EntityExtraction {
-  numbers: number[];
-  roles: string[];
-  departments: string[];
-  timeframes: string[];
-  metrics: string[];
-  actions: string[];
-}
+import type { CEOCommand, CommandIntent } from '../types';
 
 interface CommandPattern {
   pattern: RegExp;
   intent: CommandIntent;
-  entityExtractor: (match: RegExpMatchArray) => Record<string, any>;
+  entityExtractor: (match: RegExpMatchArray) => Record<string, string | number | boolean>;
   examples: string[];
 }
 
@@ -221,7 +212,7 @@ export class NaturalLanguageService {
   /**
    * Calculate confidence score for command recognition
    */
-  private calculateConfidence(match: RegExpMatchArray, pattern: CommandPattern): number {
+  private calculateConfidence(match: RegExpMatchArray, _pattern: CommandPattern): number {
     let confidence = 0.7; // Base confidence
     
     // Boost confidence for longer matches

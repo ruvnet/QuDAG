@@ -15,9 +15,7 @@ import {
   XCircle,
   Clock,
   Users,
-  DollarSign,
   Calendar,
-  Target,
   AlertTriangle
 } from 'lucide-react';
 import { DataTable } from '../DataTable';
@@ -281,7 +279,7 @@ export function ProjectsTable({ organizationId, status, theme = 'light' }: Proje
       ...csvData.map(row => 
         columns.map(col => {
           const value = col.key.includes('.') 
-            ? col.key.split('.').reduce((obj: any, k) => obj?.[k], row)
+            ? col.key.split('.').reduce((obj: Record<string, unknown>, k) => obj?.[k] as Record<string, unknown>, row as Record<string, unknown>)
             : row[col.key as keyof Project];
           return typeof value === 'object' ? JSON.stringify(value) : value;
         }).join(',')

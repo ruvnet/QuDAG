@@ -1,0 +1,11 @@
+{
+  "evil": true,
+  "regexdash": true,
+  "browser": true,
+  "wsh": true,
+  "trailing": true,
+  "sub": true,
+  "asi": true,
+  "lastsemic":true,
+  "esnext": true
+}

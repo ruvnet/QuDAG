@@ -92,6 +92,19 @@ QuDAG uses **LibP2P** for its **peer-to-peer networking**, enabling decentralize
 
 - **Kademlia DHT** ensures **efficient routing** and **high availability** in a fully decentralized network.
 
+### 11. **First-Class macOS ARM64 Support**
+
+QuDAG offers native, high-performance support for Apple Silicon (M1/M2/M3) through a sophisticated, multi-layered build system. This ensures developers on ARM64 have a seamless experience, from initial build to production deployment, without relying on emulation.
+
+- **Native Performance**: Builds are optimized for ARM64 using `-C target-cpu=native`, leveraging NEON optimizations in `libcrux-ml-kem` for superior cryptographic performance.
+- **Intelligent Crypto Backend**: Automatically uses `libcrux-ml-kem` and `oqs` for quantum-resistant cryptography on ARM64, ensuring both performance and security.
+- **Resilient Build Strategy**:
+  - **`build-arm64-native.sh`**: The recommended path for a fully optimized native build.
+  - **`build-arm64.sh`**: A rock-solid Docker-based build that isolates dependencies and guarantees a successful build of a portable binary.
+  - **`build-arm64-essential.sh`**: A partial build of core libraries for environments where full dependencies aren't available.
+
+This robust support makes QuDAG one of the most accessible quantum-resistant platforms for developers in the Apple ecosystem.
+
 **Technical Foundation:**
 
 - 🔒 Post-quantum cryptography using ML-KEM-768 & ML-DSA with BLAKE3

@@ -12,6 +12,8 @@ import {
   Database,
   Shield,
   Zap,
+  Menu,
+  PanelLeftClose,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import type { Tab } from "../types";
@@ -37,6 +39,8 @@ interface TabBarProps {
   onTabClose: (tabId: string) => void;
   onNewTab?: () => void;
   theme: "light" | "dark";
+  sidebarCollapsed: boolean;
+  onSidebarToggle: () => void;
 }
 
 export function TabBar({
@@ -46,6 +50,8 @@ export function TabBar({
   onTabClose,
   onNewTab,
   theme,
+  sidebarCollapsed,
+  onSidebarToggle,
 }: TabBarProps) {
   if (tabs.length === 0) {
     return null;
@@ -67,6 +73,24 @@ export function TabBar({
         : "bg-gray-50 border-gray-200"
       )}
     >
+      {/* Sidebar Toggle Button */}
+      <button
+        onClick={onSidebarToggle}
+        className={cn(
+          "p-2.5 border-r transition-colors",
+          theme === "dark" ?
+            "hover:bg-gray-700 text-gray-400 hover:text-white border-gray-700"
+          : "hover:bg-gray-100 text-gray-600 hover:text-gray-900 border-gray-200"
+        )}
+        title={sidebarCollapsed ? "Open sidebar" : "Close sidebar"}
+      >
+        {sidebarCollapsed ? (
+          <Menu className="w-4 h-4" />
+        ) : (
+          <PanelLeftClose className="w-4 h-4" />
+        )}
+      </button>
+
       {/* Tabs Container */}
       <div className="flex-1 flex items-center overflow-x-auto scrollbar-hide">
         <AnimatePresence mode="popLayout">

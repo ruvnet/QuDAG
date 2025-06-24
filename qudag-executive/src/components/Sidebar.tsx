@@ -10,8 +10,6 @@ import {
   Database,
   Shield,
   Zap,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import { Icon } from "@iconify/react";
 import { cn } from "../lib/utils";
@@ -33,14 +31,12 @@ const iconMap = {
 
 interface SidebarProps {
   collapsed: boolean;
-  onToggle: () => void;
   onItemClick: (item: SidebarItem) => void;
   theme: "light" | "dark";
 }
 
 export function Sidebar({
   collapsed,
-  onToggle,
   onItemClick,
   theme,
 }: SidebarProps) {
@@ -139,25 +135,8 @@ export function Sidebar({
       )}
       style={{ backgroundColor: theme === "dark" ? "#111827" : "#ffffff" }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-end p-4 border-b border-inherit">
-        <button
-          onClick={onToggle}
-          className={cn(
-            "p-2 rounded-lg transition-colors",
-            theme === "dark" ?
-              "hover:bg-gray-800 text-gray-400 hover:text-white"
-            : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
-          )}
-        >
-          {collapsed ?
-            <ChevronRight className="w-4 h-4" />
-          : <ChevronLeft className="w-4 h-4" />}
-        </button>
-      </div>
-
       {/* Navigation Items */}
-      <nav className="flex-1 p-2 space-y-1">
+      <nav className="flex-1 p-2 space-y-1 relative">
         {sidebarItems.map((item) => (
           <motion.button
             key={item.id}
@@ -233,6 +212,7 @@ export function Sidebar({
           </motion.button>
         ))}
       </nav>
+
     </motion.div>
   );
 }

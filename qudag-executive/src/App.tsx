@@ -697,6 +697,8 @@ function CockpitApp() {
             onTabClick={setActiveTab}
             onTabClose={removeTab}
             theme={theme}
+            sidebarCollapsed={sidebarCollapsed}
+            onSidebarToggle={toggleSidebar}
           />
 
           {/* Tab Content */}

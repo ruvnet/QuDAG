@@ -1,0 +1,13 @@
+{
+  "objective": "research the next big breakthough agentics using 5 agents in parallel",
+  "strategy": "auto",
+  "mode": "centralized",
+  "maxAgents": 5,
+  "timeout": 60,
+  "parallel": false,
+  "monitor": false,
+  "output": "json",
+  "outputDir": "./reports",
+  "timestamp": "2025-06-23T14:10:02.957Z",
+  "id": "swarm-auto-centralized-1750687802957"
+}

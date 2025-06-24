@@ -1,26 +1,50 @@
 [package]
-name = "qudag-mcp-standalone"
+name = "qudag-mcp-real-crypto"
 version = "0.1.0"
 edition = "2021"
 
 [workspace]
 
 [[bin]]
-name = "qudag-mcp-standalone"
-path = "qudag-mcp-standalone-fixed.rs"
+name = "qudag-mcp-real"
+path = "qudag-mcp-corrected.rs"
 
 [dependencies]
+# Core async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Web framework
 warp = "0.3"
+
+# Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1.0", features = ["full"] }
-log = "0.4"
-env_logger = "0.10"
-sha2 = "0.10"
+
+# Encoding
 base64 = "0.22"
 hex = "0.4"
-uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Crypto and hashing
+sha2 = "0.10"
+
+# Regex for validation
+regex = "1.10"
+
+# Time handling
 chrono = { version = "0.4", features = ["serde"] }
+
+# Logging
+log = "0.4"
+env_logger = "0.10"
+
+# UUID generation
+uuid = { version = "1.0", features = ["v4"] }
+
+# Random number generation
 rand = "0.8"
-sysinfo = "0.32"
-regex = "1.0"
+
+# QuDAG crypto library (relative path)
+qudag-crypto = { path = "../../core/crypto" }
+
+[features]
+default = []

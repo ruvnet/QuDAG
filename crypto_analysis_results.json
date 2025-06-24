@@ -1,0 +1,68 @@
+[
+  {
+    "test": "Server connectivity",
+    "success": true,
+    "details": "MCP server is accessible",
+    "data": null
+  },
+  {
+    "test": "Key generation (ml-dsa)",
+    "success": false,
+    "details": null,
+    "data": null
+  },
+  {
+    "test": "Key generation (ml-kem)",
+    "success": false,
+    "details": null,
+    "data": null
+  },
+  {
+    "test": "Key generation (hqc)",
+    "success": false,
+    "details": null,
+    "data": null
+  },
+  {
+    "test": "Sign/Verify (ml-dsa)",
+    "success": false,
+    "details": "No keys available for testing",
+    "data": null
+  },
+  {
+    "test": "Encrypt/Decrypt (ml-kem)",
+    "success": false,
+    "details": "No keys available for testing",
+    "data": null
+  },
+  {
+    "test": "Encrypt/Decrypt (hqc)",
+    "success": false,
+    "details": "No keys available for testing",
+    "data": null
+  },
+  {
+    "test": "Missing operation error",
+    "success": true,
+    "details": "Correctly rejected missing operation",
+    "data": null
+  },
+  {
+    "test": "Invalid algorithm error",
+    "success": true,
+    "details": "Correctly rejected invalid algorithm",
+    "data": null
+  },
+  {
+    "test": "Invalid key format error",
+    "success": true,
+    "details": "Correctly rejected invalid key format",
+    "data": null
+  },
+  {
+    "test": "Missing parameters error",
+    "success": true,
+    "details": "Correctly rejected missing parameters",
+    "data": null
+  }
+]

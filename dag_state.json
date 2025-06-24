@@ -1,0 +1,8 @@
+{
+  "genesis": {
+    "id": "genesis",
+    "parents": [],
+    "data": "Genesis block",
+    "timestamp": "2025-06-24T02:16:08.820404023+00:00"
+  }
+}

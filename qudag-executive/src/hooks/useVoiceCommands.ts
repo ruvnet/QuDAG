@@ -5,12 +5,15 @@
  * @lastModified 2025-06-23 - Revolutionary voice-first business interface
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import type { VoiceState } from '../types';
+import { useState, useEffect, useRef, useCallback } from "react";
+import type { VoiceState } from "../types";
 
 interface UseVoiceCommandsOptions {
   onCommand: (transcript: string) => void;
-  onNotification: (message: string, type: 'info' | 'success' | 'warning' | 'error') => void;
+  onNotification: (
+    message: string,
+    type: "info" | "success" | "warning" | "error"
+  ) => void;
   enabled?: boolean;
   language?: string;
   wakeWord?: string;
@@ -42,16 +45,22 @@ interface SpeechRecognition extends EventTarget {
   lang: string;
   maxAlternatives: number;
   serviceURI: string;
-  
+
   start(): void;
   stop(): void;
   abort(): void;
-  
+
   onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
   onend: ((this: SpeechRecognition, ev: Event) => void) | null;
-  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null;
-  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
-  onnomatch: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onerror:
+    | ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void)
+    | null;
+  onresult:
+    | ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void)
+    | null;
+  onnomatch:
+    | ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void)
+    | null;
   onspeechstart: ((this: SpeechRecognition, ev: Event) => void) | null;
   onspeechend: ((this: SpeechRecognition, ev: Event) => void) | null;
   onsoundstart: ((this: SpeechRecognition, ev: Event) => void) | null;
@@ -62,22 +71,22 @@ interface SpeechRecognition extends EventTarget {
 
 declare const SpeechRecognition: {
   prototype: SpeechRecognition;
-  new(): SpeechRecognition;
+  new (): SpeechRecognition;
 };
 
 export function useVoiceCommands({
   onCommand,
   onNotification,
   enabled = true,
-  language = 'en-US',
-  wakeWord = 'hey qudag',
-  continuous = false
+  language = "en-US",
+  wakeWord = "hey qudag",
+  continuous = false,
 }: UseVoiceCommandsOptions) {
   const [voiceState, setVoiceState] = useState<VoiceState>({
     isListening: false,
     isProcessing: false,
-    transcript: '',
-    confidence: 0
+    transcript: "",
+    confidence: 0,
   });
 
   const [isSupported, setIsSupported] = useState(false);
@@ -88,19 +97,123 @@ export function useVoiceCommands({
 
   // Check browser support
   useEffect(() => {
-    const hasSupport = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+    const hasSupport =
+      "webkitSpeechRecognition" in window || "SpeechRecognition" in window;
     setIsSupported(hasSupport);
-    
+
     if (!hasSupport && enabled) {
-      onNotification('Voice commands not supported in this browser. Try Chrome or Edge.', 'warning');
+      onNotification(
+        "Voice commands not supported in this browser. Try Chrome or Edge.",
+        "warning"
+      );
     }
   }, [enabled, onNotification]);
+
+  // Process the actual command
+  const processCommand = useCallback(
+    (command: string, confidence: number) => {
+      if (command.length < 3) {
+        onNotification("Command too short. Please try again.", "warning");
+        return;
+      }
+
+      if (confidence < 0.3) {
+        onNotification(
+          "I didn't catch that clearly. Please repeat your command.",
+          "warning"
+        );
+        return;
+      }
+
+      setVoiceState((prev) => ({
+        ...prev,
+        isProcessing: true,
+      }));
+
+      // Execute the command
+      onCommand(command);
+
+      // Reset state after processing
+      setTimeout(() => {
+        setVoiceState((prev) => ({
+          ...prev,
+          isProcessing: false,
+          transcript: "",
+        }));
+      }, 1000);
+    },
+    [onCommand, onNotification]
+  );
+
+  // Set timeout for wake word mode
+  const setWakeWordTimeout = useCallback(() => {
+    if (wakeWordTimeoutRef.current) {
+      clearTimeout(wakeWordTimeoutRef.current);
+    }
+
+    wakeWordTimeoutRef.current = setTimeout(() => {
+      setIsWakeWordMode(true);
+      onNotification('🔇 Wake word mode. Say "Hey QuDAG" to activate.', "info");
+    }, 10000); // 10 seconds timeout
+  }, [onNotification]);
+
+  // Process final transcript from speech recognition
+  const processFinalTranscript = useCallback(
+    (transcript: string, confidence: number) => {
+      const now = Date.now();
+
+      // Prevent duplicate commands (within 2 seconds)
+      if (now - lastCommandTimeRef.current < 2000) {
+        return;
+      }
+
+      lastCommandTimeRef.current = now;
+
+      const normalizedTranscript = transcript.toLowerCase().trim();
+
+      // Check for wake word
+      if (isWakeWordMode) {
+        if (normalizedTranscript.includes(wakeWord.toLowerCase())) {
+          onNotification("🎤 I'm listening...", "info");
+          setIsWakeWordMode(false);
+
+          // Extract command after wake word
+          const wakeWordIndex = normalizedTranscript.indexOf(
+            wakeWord.toLowerCase()
+          );
+          const commandPart = transcript
+            .substring(wakeWordIndex + wakeWord.length)
+            .trim();
+
+          if (commandPart) {
+            processCommand(commandPart, confidence);
+          } else {
+            // Wait for follow-up command
+            setWakeWordTimeout();
+          }
+          return;
+        }
+        return; // Ignore other speech in wake word mode
+      }
+
+      // Process command directly
+      processCommand(transcript, confidence);
+    },
+    [
+      isWakeWordMode,
+      wakeWord,
+      onNotification,
+      processCommand,
+      setWakeWordTimeout,
+    ]
+  );
 
   // Initialize speech recognition
   useEffect(() => {
     if (!isSupported || !enabled) return;
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
 
     // Configure recognition
@@ -111,16 +224,16 @@ export function useVoiceCommands({
 
     // Event handlers
     recognition.onstart = () => {
-      setVoiceState(prev => ({
+      setVoiceState((prev) => ({
         ...prev,
         isListening: true,
-        error: undefined
+        error: undefined,
       }));
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interimTranscript = '';
-      let finalTranscript = '';
+      let interimTranscript = "";
+      let finalTranscript = "";
       let maxConfidence = 0;
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -137,10 +250,10 @@ export function useVoiceCommands({
       }
 
       // Update state with interim results
-      setVoiceState(prev => ({
+      setVoiceState((prev) => ({
         ...prev,
         transcript: finalTranscript || interimTranscript,
-        confidence: maxConfidence || 0.8
+        confidence: maxConfidence || 0.8,
       }));
 
       // Process final transcript
@@ -150,43 +263,44 @@ export function useVoiceCommands({
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error('Speech recognition error:', event.error);
-      
-      let errorMessage = 'Voice recognition error. ';
+      console.error("Speech recognition error:", event.error);
+
+      let errorMessage = "Voice recognition error. ";
       switch (event.error) {
-        case 'no-speech':
-          errorMessage += 'No speech detected. Try speaking louder.';
+        case "no-speech":
+          errorMessage += "No speech detected. Try speaking louder.";
           break;
-        case 'audio-capture':
-          errorMessage += 'Microphone not found or permission denied.';
+        case "audio-capture":
+          errorMessage += "Microphone not found or permission denied.";
           break;
-        case 'not-allowed':
-          errorMessage += 'Microphone access denied. Please allow microphone access.';
+        case "not-allowed":
+          errorMessage +=
+            "Microphone access denied. Please allow microphone access.";
           break;
-        case 'network':
-          errorMessage += 'Network error. Check your internet connection.';
+        case "network":
+          errorMessage += "Network error. Check your internet connection.";
           break;
-        case 'aborted':
+        case "aborted":
           // Don't show error for user-initiated stops
           return;
         default:
-          errorMessage += 'Please try again.';
+          errorMessage += "Please try again.";
       }
 
-      setVoiceState(prev => ({
+      setVoiceState((prev) => ({
         ...prev,
         isListening: false,
-        error: event.error
+        error: event.error,
       }));
 
-      onNotification(errorMessage, 'error');
+      onNotification(errorMessage, "error");
     };
 
     recognition.onend = () => {
-      setVoiceState(prev => ({
+      setVoiceState((prev) => ({
         ...prev,
         isListening: false,
-        isProcessing: false
+        isProcessing: false,
       }));
 
       // Restart if in wake word mode
@@ -195,7 +309,7 @@ export function useVoiceCommands({
           try {
             recognition.start();
           } catch (error) {
-            console.warn('Failed to restart voice recognition:', error);
+            console.warn("Failed to restart voice recognition:", error);
           }
         }, 1000);
       }
@@ -206,101 +320,31 @@ export function useVoiceCommands({
     return () => {
       recognition.abort();
     };
-  }, [isSupported, enabled, language, continuous, isWakeWordMode, onNotification, processFinalTranscript]);
-
-  // Process final transcript from speech recognition
-  const processFinalTranscript = useCallback((transcript: string, confidence: number) => {
-    const now = Date.now();
-    
-    // Prevent duplicate commands (within 2 seconds)
-    if (now - lastCommandTimeRef.current < 2000) {
-      return;
-    }
-    
-    lastCommandTimeRef.current = now;
-
-    const normalizedTranscript = transcript.toLowerCase().trim();
-
-    // Check for wake word
-    if (isWakeWordMode) {
-      if (normalizedTranscript.includes(wakeWord.toLowerCase())) {
-        onNotification('🎤 I\'m listening...', 'info');
-        setIsWakeWordMode(false);
-        
-        // Extract command after wake word
-        const wakeWordIndex = normalizedTranscript.indexOf(wakeWord.toLowerCase());
-        const commandPart = transcript.substring(wakeWordIndex + wakeWord.length).trim();
-        
-        if (commandPart) {
-          processCommand(commandPart, confidence);
-        } else {
-          // Wait for follow-up command
-          setWakeWordTimeout();
-        }
-        return;
-      }
-      return; // Ignore other speech in wake word mode
-    }
-
-    // Process command directly
-    processCommand(transcript, confidence);
-  }, [isWakeWordMode, wakeWord, onNotification, processCommand, setWakeWordTimeout]);
-
-  // Process the actual command
-  const processCommand = useCallback((command: string, confidence: number) => {
-    if (command.length < 3) {
-      onNotification('Command too short. Please try again.', 'warning');
-      return;
-    }
-
-    if (confidence < 0.3) {
-      onNotification('I didn\'t catch that clearly. Please repeat your command.', 'warning');
-      return;
-    }
-
-    setVoiceState(prev => ({
-      ...prev,
-      isProcessing: true
-    }));
-
-    // Execute the command
-    onCommand(command);
-
-    // Reset state after processing
-    setTimeout(() => {
-      setVoiceState(prev => ({
-        ...prev,
-        isProcessing: false,
-        transcript: ''
-      }));
-    }, 1000);
-
-  }, [onCommand, onNotification]);
-
-  // Set timeout for wake word mode
-  const setWakeWordTimeout = useCallback(() => {
-    if (wakeWordTimeoutRef.current) {
-      clearTimeout(wakeWordTimeoutRef.current);
-    }
-
-    wakeWordTimeoutRef.current = setTimeout(() => {
-      setIsWakeWordMode(true);
-      onNotification('🔇 Wake word mode. Say "Hey QuDAG" to activate.', 'info');
-    }, 10000); // 10 seconds timeout
-  }, [onNotification]);
+  }, [
+    isSupported,
+    enabled,
+    language,
+    continuous,
+    isWakeWordMode,
+    onNotification,
+    processFinalTranscript,
+  ]);
 
   // Start listening
   const startListening = useCallback(() => {
     if (!recognitionRef.current || !isSupported || !enabled) {
-      onNotification('Voice recognition not available', 'error');
+      onNotification("Voice recognition not available", "error");
       return;
     }
 
     try {
       recognitionRef.current.start();
     } catch (error) {
-      console.error('Failed to start speech recognition:', error);
-      onNotification('Failed to start voice recognition. Please try again.', 'error');
+      console.error("Failed to start speech recognition:", error);
+      onNotification(
+        "Failed to start voice recognition. Please try again.",
+        "error"
+      );
     }
   }, [isSupported, enabled, onNotification]);
 
@@ -309,9 +353,9 @@ export function useVoiceCommands({
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
-    
+
     setIsWakeWordMode(false);
-    
+
     if (wakeWordTimeoutRef.current) {
       clearTimeout(wakeWordTimeoutRef.current);
       wakeWordTimeoutRef.current = null;
@@ -330,12 +374,15 @@ export function useVoiceCommands({
   // Enable wake word mode
   const enableWakeWordMode = useCallback(() => {
     if (!isSupported || !enabled) {
-      onNotification('Wake word mode not supported', 'warning');
+      onNotification("Wake word mode not supported", "warning");
       return;
     }
 
     setIsWakeWordMode(true);
-    onNotification(`🎤 Wake word mode enabled. Say "${wakeWord}" to activate.`, 'info');
+    onNotification(
+      `🎤 Wake word mode enabled. Say "${wakeWord}" to activate.`,
+      "info"
+    );
     startListening();
   }, [isSupported, enabled, wakeWord, startListening, onNotification]);
 
@@ -343,7 +390,7 @@ export function useVoiceCommands({
   const disableWakeWordMode = useCallback(() => {
     setIsWakeWordMode(false);
     stopListening();
-    onNotification('Wake word mode disabled', 'info');
+    onNotification("Wake word mode disabled", "info");
   }, [stopListening, onNotification]);
 
   // Cleanup on unmount
@@ -374,6 +421,6 @@ export function useVoiceCommands({
 
     // Utilities
     hasPermission: isSupported,
-    canUseVoice: isSupported && enabled
+    canUseVoice: isSupported && enabled,
   };
 }

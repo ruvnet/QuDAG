@@ -116,10 +116,11 @@ function CockpitApp() {
   );
 
   // Voice Commands Integration
+  const voiceEnabled = import.meta.env.VITE_ENABLE_VOICE_COMMANDS !== "false";
   const { isSupported: voiceSupported, enableWakeWordMode } = useVoiceCommands({
     onCommand: handleCEOCommand,
     onNotification: notify,
-    enabled: true,
+    enabled: voiceEnabled,
   });
 
   // Apply theme to document

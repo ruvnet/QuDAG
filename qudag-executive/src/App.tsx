@@ -10,7 +10,6 @@ import {
   Database,
   Shield,
   Zap,
-  Sparkles,
 } from "lucide-react";
 
 import { useCockpit } from "./hooks/useCockpit";
@@ -513,13 +512,11 @@ function CockpitApp() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-center mb-4">
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                  className="p-3 rounded-full bg-purple-100 dark:bg-purple-900"
-                >
-                  <Sparkles className="w-8 h-8 text-purple-600" />
-                </motion.div>
+                <img
+                  src="/agentics_org_logo.jpeg"
+                  alt="Agentics Logo"
+                  className="w-8 h-8 object-contain rounded"
+                />
               </div>
 
               <h2
@@ -629,16 +626,11 @@ function CockpitApp() {
         <div className="flex items-center justify-between h-16 px-4">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
-              <motion.div
-                animate={{ rotate: isExecutingCommand ? 360 : 0 }}
-                transition={{
-                  duration: 1,
-                  repeat: isExecutingCommand ? Infinity : 0,
-                  ease: "linear",
-                }}
-              >
-                <Sparkles className="w-6 h-6 text-purple-600" />
-              </motion.div>
+              <img
+                src="/agentics_org_logo.jpeg"
+                alt="Agentics Logo"
+                className="w-8 h-8 object-contain rounded"
+              />
               <div>
                 <h1
                   className={cn(
@@ -648,13 +640,6 @@ function CockpitApp() {
                 >
                   QuDAG Executive AI-CEO
                 </h1>
-                <span
-                  className={cn("text-sm", "text-gray-500 dark:text-gray-400")}
-                >
-                  {isExecutingCommand ?
-                    "🧠 AI is thinking..."
-                  : "Voice-First Business Operating System"}
-                </span>
               </div>
             </div>
           </div>

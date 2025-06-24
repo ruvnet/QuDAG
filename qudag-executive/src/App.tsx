@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -11,18 +11,23 @@ import {
   Database,
   Shield,
   Zap,
+  Sparkles,
 } from "lucide-react";
 
 import { useCockpit } from "./hooks/useCockpit";
+import { useVoiceCommands } from "./hooks/useVoiceCommands";
 import { Sidebar } from "./components/Sidebar";
 import { TabBar } from "./components/TabBar";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { NotificationToast } from "./components/NotificationToast";
+import { CEOCommandBar } from "./components/CEOCommandBar";
 import { DashboardTab } from "./components/tabs/DashboardTab";
 import { DataDashboardTab } from "./components/tabs/DataDashboardTab";
 import { PlaceholderTab } from "./components/tabs/PlaceholderTab";
 import { cn } from "./lib/utils";
-import type { Tab, SidebarItem } from "./types";
+import { nlService } from "./services/NaturalLanguageService";
+import { commandExecutor } from "./services/CommandExecutor";
+import type { Tab, SidebarItem, CEOCommand } from "./types";
 
 // Create a client
 const queryClient = new QueryClient();
@@ -42,6 +47,67 @@ function CockpitApp() {
     addNotification,
     removeNotification,
   } = useCockpit();
+
+  // CEO Command Center State
+  const [isExecutingCommand, setIsExecutingCommand] = useState(false);
+  const [showWelcomeMessage, setShowWelcomeMessage] = useState(true);
+
+  // CEO Command Handler
+  const handleCEOCommand = useCallback(async (commandText: string) => {
+    if (isExecutingCommand) return;
+
+    try {
+      setIsExecutingCommand(true);
+      
+      // Parse the natural language command
+      const command = nlService.parseCommand(commandText);
+      
+      // Validate command
+      const validation = nlService.validateCommand(command);
+      if (!validation.valid) {
+        addNotification(validation.reason || 'Invalid command', 'warning');
+        return;
+      }
+
+      // Show confidence and intent to user
+      if (command.confidence < 0.7) {
+        addNotification(`I think you want to ${command.intent.action}. Let me try...`, 'info');
+      }
+
+      // Execute the command
+      const executionContext = {
+        organizationId: 'demo-org-1', // Default demo organization
+        onNotification: addNotification,
+        onTabAdd: addTab
+      };
+
+      const result = await commandExecutor.executeCommand(command, executionContext);
+      
+      if (result.success) {
+        addNotification(result.message, 'success');
+      } else {
+        addNotification(result.message, 'error');
+      }
+
+    } catch (error) {
+      console.error('Command execution failed:', error);
+      addNotification('Something went wrong executing your command. Please try again.', 'error');
+    } finally {
+      setIsExecutingCommand(false);
+    }
+  }, [isExecutingCommand, addNotification, addTab]);
+
+  // Voice Commands Integration
+  const {
+    voiceState,
+    isSupported: voiceSupported,
+    toggleListening,
+    enableWakeWordMode
+  } = useVoiceCommands({
+    onCommand: handleCEOCommand,
+    onNotification: addNotification,
+    enabled: true
+  });
 
   // Apply theme to document
   useEffect(() => {
@@ -452,6 +518,131 @@ function CockpitApp() {
         theme={theme}
       />
 
+      {/* Revolutionary CEO Command Bar */}
+      <CEOCommandBar
+        theme={theme}
+        onCommand={handleCEOCommand}
+        onNotification={addNotification}
+        isExecuting={isExecutingCommand}
+      />
+
+      {/* Welcome Message for First-Time Users */}
+      <AnimatePresence>
+        {showWelcomeMessage && tabs.length <= 1 && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-center justify-center p-4"
+            onClick={() => setShowWelcomeMessage(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className={cn(
+                "max-w-lg w-full rounded-2xl p-8 text-center",
+                theme === 'dark' 
+                  ? "bg-gray-800 border border-gray-700" 
+                  : "bg-white border border-gray-200"
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-center mb-4">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  className="p-3 rounded-full bg-purple-100 dark:bg-purple-900"
+                >
+                  <Sparkles className="w-8 h-8 text-purple-600" />
+                </motion.div>
+              </div>
+              
+              <h2 className={cn(
+                "text-2xl font-bold mb-3",
+                theme === 'dark' ? "text-white" : "text-gray-900"
+              )}>
+                Welcome to Your AI-CEO Command Center! 🚀
+              </h2>
+              
+              <p className={cn(
+                "text-lg mb-6",
+                theme === 'dark' ? "text-gray-300" : "text-gray-600"
+              )}>
+                Running your business is now as simple as talking. Try saying:
+              </p>
+              
+              <div className="space-y-3 mb-6">
+                {[
+                  "🎯 'Hire 5 sales agents for Q1'",
+                  "📊 'Show me this month's metrics'", 
+                  "⚡ 'Optimize marketing costs'",
+                  "🚀 'Generate board report'"
+                ].map((example, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className={cn(
+                      "p-3 rounded-lg text-left",
+                      theme === 'dark' ? "bg-gray-700" : "bg-gray-50"
+                    )}
+                  >
+                    <span className={cn(
+                      "font-medium",
+                      theme === 'dark' ? "text-gray-200" : "text-gray-800"
+                    )}>
+                      {example}
+                    </span>
+                  </motion.div>
+                ))}
+              </div>
+              
+              <div className="flex gap-3 justify-center">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setShowWelcomeMessage(false);
+                    addNotification("🎤 Try the command bar above or say 'Hey QuDAG' to get started!", "info");
+                  }}
+                  className="px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
+                >
+                  Let's Get Started!
+                </motion.button>
+                
+                {voiceSupported && (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setShowWelcomeMessage(false);
+                      enableWakeWordMode();
+                    }}
+                    className={cn(
+                      "px-6 py-3 rounded-lg font-medium transition-colors",
+                      theme === 'dark' 
+                        ? "bg-gray-700 text-gray-200 hover:bg-gray-600" 
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    )}
+                  >
+                    Enable Voice Mode
+                  </motion.button>
+                )}
+              </div>
+              
+              <p className={cn(
+                "text-xs mt-4",
+                theme === 'dark' ? "text-gray-500" : "text-gray-400"
+              )}>
+                Press Cmd+K or Ctrl+K anytime to access the command bar
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <header
         className={cn(
@@ -463,22 +654,35 @@ function CockpitApp() {
       >
         <div className="flex items-center justify-between h-16 px-4">
           <div className="flex items-center gap-4">
-            <h1
-              className={cn(
-                "text-xl font-bold",
-                theme === "dark" ? "text-white" : "text-gray-900"
-              )}
-            >
-              QuDAG Executive
-            </h1>
-            <span
-              className={cn(
-                "text-sm",
-                theme === "dark" ? "text-gray-400" : "text-gray-500"
-              )}
-            >
-              Zero Person Enterprise Dashboard
-            </span>
+            <div className="flex items-center gap-3">
+              <motion.div
+                animate={{ rotate: isExecutingCommand ? 360 : 0 }}
+                transition={{ duration: 1, repeat: isExecutingCommand ? Infinity : 0, ease: "linear" }}
+              >
+                <Sparkles className="w-6 h-6 text-purple-600" />
+              </motion.div>
+              <div>
+                <h1
+                  className={cn(
+                    "text-xl font-bold",
+                    theme === "dark" ? "text-white" : "text-gray-900"
+                  )}
+                >
+                  QuDAG Executive AI-CEO
+                </h1>
+                <span
+                  className={cn(
+                    "text-sm",
+                    theme === "dark" ? "text-gray-400" : "text-gray-500"
+                  )}
+                >
+                  {isExecutingCommand ? 
+                    "🧠 AI is thinking..." : 
+                    "Voice-First Business Operating System"
+                  }
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">

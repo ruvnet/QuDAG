@@ -1,180 +1,195 @@
-# Claude Code Configuration for QuDAG Executive
+# CLAUDE.md
 
-## ARM64 Build Support (Added 2025-06-23)
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-QuDAG now has full ARM64 (Apple Silicon) support! This section provides all the information you need to build and run QuDAG on ARM64 systems.
+## QuDAG Executive Intelligence Center
 
-### Quick Start for ARM64
+The QuDAG Executive is a React-based dashboard application that provides a "Business Operating System for zero-person companies" - an AI-CEO interface for managing autonomous AI agent workforces.
 
-#### Option 1: Full Functionality (Docker)
-```bash
-# Builds complete QuDAG using Docker (works on any architecture)
-./build-arm64.sh
-```
-
-#### Option 2: Native ARM64 Performance
-```bash
-# Builds native ARM64 binaries with libcrux
-./build-arm64-native.sh
-```
-
-#### Option 3: Essential Components Only
-```bash
-# Builds core components that work on ARM64
-./build-arm64-essential.sh
-```
-
-### ARM64 Technical Details
-
-#### What Works on ARM64
--  ML-KEM-768 encryption (via libcrux with NEON optimization)
--  DAG consensus
--  Vault operations
--  Exchange core (with Ed25519 signatures)
--  All basic cryptography (BLAKE3, SHA3, AES-GCM)
-
-#### Currently x86_64 Only
-- L ML-DSA signatures (no ARM64 implementation yet)
-- L HQC encryption
-- L Dark domain resolver
-- L Full protocol implementation
-
-### Key Changes Made
-
-1. **Crypto Module**: Replaced `pqcrypto-kyber` with `libcrux-ml-kem` for ARM64
-2. **Exchange Module**: Created `crypto_compat.rs` abstraction layer
-3. **Conditional Compilation**: ML-DSA/HQC modules only compile on x86_64 with AVX2
-
-### Documentation
-
-- `ARM64_SUPPORT.md` - Complete ARM64 support guide
-- `ARM64_SOLUTION_SUMMARY.md` - Executive summary of the solution
-- `BEST_PRACTICE_BUILD.md` - Detailed technical implementation
-
-## Executive Frontend Build Commands
+## Build Commands
 
 ### Development
 ```bash
-cd qudag-executive
-npm install
-npm run dev          # Start development server
+npm install              # Install dependencies
+npm run dev             # Start Vite development server (http://localhost:5173)
+npm run preview         # Preview production build locally
 ```
 
 ### Production Build
 ```bash
-npm run build        # Build for production
-npm run start        # Start production server
+npm run build           # Build with TypeScript compilation + Vite build
+npm run lint            # Run ESLint
 ```
 
 ### Testing
 ```bash
-npm test            # Run tests
-npm run test:watch  # Run tests in watch mode
-npm run lint        # Run linting
+# Note: Test commands not yet implemented in package.json
+# npm run test           # Run tests
+# npm run test:watch     # Run tests in watch mode
 ```
 
-## Integration with ARM64 Backend
+## Key Architecture
 
-When running the executive frontend on ARM64 systems:
+### Frontend Stack
+- **Framework**: React 19 with TypeScript
+- **Build Tool**: Vite with React plugin
+- **Styling**: Tailwind CSS with custom design system
+- **State Management**: Custom React hooks (useCockpit)
+- **Data Fetching**: TanStack Query (React Query)
+- **HTTP Client**: Axios
+- **Animations**: Framer Motion
+- **Icons**: Lucide React
+- **Charts**: Recharts
+- **UI Components**: Custom components built on Radix UI primitives
 
-1. **Use Docker Backend**:
-   ```bash
-   # Terminal 1: Start backend
-   ./build-arm64.sh
-   ./qudag-binary start --port 8080
-   
-   # Terminal 2: Start frontend
-   cd qudag-executive
-   npm run dev
-   ```
+### Core Architecture Patterns
 
-2. **Use Native Components**:
-   ```bash
-   # Build essential components
-   ./build-arm64-essential.sh
-   
-   # Import in your Node.js app
-   # Note: You'll need to create WASM bindings
-   ```
+1. **Tab-Based Navigation System**: Dynamic tabs with configurable content, closable tabs, and sidebar navigation
+2. **Theme System**: Light/dark theme with persistent localStorage state
+3. **Real-Time Data Dashboard**: Live API integration with business intelligence metrics
+4. **Modular Component Architecture**: Reusable components for tables, metrics, charts, and forms
 
-## Environment Variables
+### Key Directories Structure
+```
+src/
+├── components/          # Reusable UI components
+│   ├── tables/         # Data table components (Agents, Metrics, Projects)
+│   └── tabs/           # Tab content components (Dashboard, DataDashboard, Placeholder)
+├── hooks/              # Custom React hooks (useCockpit for state management)
+├── lib/                # Utility functions (utils.ts, api.ts)
+├── services/           # API service layer (comprehensive backend integration)
+├── styles/             # Global styles and fonts
+└── types/              # TypeScript type definitions
+```
 
+### State Management Pattern
+
+The `useCockpit` hook manages global application state:
+- **Theme**: Light/dark mode with localStorage persistence
+- **Tab System**: Dynamic tab creation, removal, and navigation
+- **Sidebar**: Collapsible sidebar state
+- **Notifications**: Toast notification system with auto-dismiss
+
+### API Integration
+
+The application integrates with a backend API (default: `http://localhost:8090`) through a comprehensive service layer:
+
+- **Organizations**: Multi-tenant organization management
+- **Agents**: AI agent profiles with performance tracking
+- **Departments**: Organizational structure management
+- **Business Metrics**: Revenue, costs, efficiency tracking
+- **Projects**: Project portfolio management
+- **Performance Data**: Real-time agent performance analytics
+
+### Data Dashboard Features
+
+The DataDashboardTab provides real-time business intelligence:
+- **Overview**: System health, key metrics, and quick summaries
+- **Agents Table**: AI workforce management with performance data
+- **Metrics Table**: Business performance indicators and analytics
+- **Projects Table**: Project portfolio tracking and budget management
+
+## Development Guidelines
+
+### Component Patterns
+- Use TypeScript for all components with proper type definitions
+- Implement dark/light theme support via className conditionals
+- Use Tailwind CSS with the `cn()` utility for conditional classes
+- Implement proper loading states and error handling for API calls
+- Follow the established tab system pattern for new features
+
+### API Service Layer
+- All backend communication goes through `src/services/api.ts`
+- Use TanStack Query for data fetching with proper caching
+- Implement proper TypeScript interfaces for all API responses
+- Handle errors gracefully with user-friendly notifications
+
+### State Management
+- Use the `useCockpit` hook for global state
+- Avoid prop drilling by using the established context patterns
+- Implement proper cleanup for side effects
+- Use localStorage only for persistent preferences (theme, sidebar state)
+
+### Styling Conventions
+- Use Tailwind CSS utility classes
+- Dark theme: `dark:` prefixes with gray color palette
+- Light theme: Standard classes with white/gray backgrounds
+- Consistent spacing: `p-6`, `gap-4`, `space-y-6` patterns
+- Animation: Use Framer Motion for page transitions and interactions
+
+## Business Intelligence Data Types
+
+The application handles these core business entities:
+- **Organizations**: Multi-tenant business entities with settings and metadata
+- **AgentProfiles**: AI agents with roles, performance ratings, and personality types
+- **BusinessMetrics**: Revenue, cost, profit, and efficiency tracking
+- **Projects**: Business projects with budgets, timelines, and agent assignments
+- **Departments**: Organizational hierarchy with budget allocations
+
+## Integration Points
+
+### Backend API Integration
+- Default API base: `http://localhost:8090`
+- RESTful endpoints with standardized response format
+- Pagination support for large datasets
+- Real-time data updates via polling (refetchInterval in queries)
+
+### Planned Desktop Integration
+- The README mentions future Tauri desktop app integration
+- Web version serves as the base for native desktop applications
+- Platform detection for desktop-specific features
+
+## Environment Configuration
+
+Create `.env.local` for local development:
 ```bash
-# .env.local
-NEXT_PUBLIC_QUDAG_API_URL=http://localhost:8080
-NEXT_PUBLIC_NETWORK_TYPE=mainnet
-NEXT_PUBLIC_ENABLE_QUANTUM_CRYPTO=true
+# API Configuration
+VITE_API_BASE_URL=http://localhost:8090
+VITE_API_TIMEOUT=10000
+
+# Feature Flags  
+VITE_ENABLE_QUANTUM_CRYPTO=true
+VITE_ENABLE_VOICE_COMMANDS=false
 ```
 
-## Performance Considerations
+## Common Development Tasks
 
-### ARM64 vs x86_64 Performance
+### Adding New Dashboard Tabs
+1. Create component in `src/components/tabs/`
+2. Add tab configuration in `App.tsx` tab configs object
+3. Implement proper theme support and loading states
+4. Add API integration if needed via services layer
 
-| Operation | x86_64 (AVX2) | ARM64 (NEON) | ARM64 (Docker) |
-|-----------|---------------|--------------|----------------|
-| ML-KEM    | 100%          | 90%          | 40%            |
-| Consensus | 100%          | 100%         | 95%            |
-| Overall   | Native        | Native       | Emulated       |
+### Adding New Data Tables
+1. Create table component in `src/components/tables/`
+2. Implement sorting, filtering, and pagination
+3. Use consistent styling patterns from existing tables
+4. Add proper TypeScript interfaces for data types
 
-### Recommendations
+### Adding New API Endpoints
+1. Add TypeScript interfaces in `src/services/api.ts`
+2. Implement service functions with proper error handling
+3. Add TanStack Query integration for caching
+4. Update components to use new endpoints
 
-1. **Development**: Use `build-arm64-essential.sh` for fast iteration
-2. **Testing**: Use `build-arm64.sh` for full functionality
-3. **Production**: Wait for CI/CD ARM64 releases or use Docker
+## ARM64 Support Notes
 
-## Troubleshooting ARM64 Builds
+This frontend application runs on any Node.js environment and doesn't have ARM64-specific requirements. However, it connects to QuDAG backend services that have ARM64 considerations:
 
-### Common Issues
+### Backend Integration
+```bash
+# For ARM64 systems, start the backend with:
+./build-arm64.sh              # Docker-based (full functionality)
+./build-arm64-native.sh       # Native ARM64 build
+./build-arm64-essential.sh    # Core components only
 
-1. **AVX2 Errors**:
-   ```
-   error: the feature named `avx2` is not valid for this target
-   ```
-   Solution: Use one of the ARM64 build scripts
+# Then start frontend normally:
+npm run dev
+```
 
-2. **Missing ML-DSA**:
-   ```
-   error: could not find `ml_dsa` in `qudag_crypto`
-   ```
-   Solution: ML-DSA is currently x86_64 only, use Docker build
-
-3. **Performance Issues**:
-   - Docker builds run slower due to emulation
-   - Use native builds when possible
-   - Consider using M1/M2/M3 optimized flags
-
-## Future Roadmap
-
-### Short Term (1-2 weeks)
-- Complete Ed25519 fallback for all signature operations
-- Make dark resolver fully optional
-- Update protocol module for ARM64 compatibility
-
-### Medium Term (1 month)
-- Implement liboqs backend for full algorithm support
-- Add runtime CPU feature detection
-- Set up GitHub Actions for ARM64 releases
-
-### Long Term (2-3 months)
-- Native ARM64 ML-DSA implementation
-- Full feature parity across architectures
-- Performance optimization for Apple Silicon
-
-## Contributing
-
-When contributing to QuDAG with ARM64 support:
-
-1. Test on both x86_64 and ARM64
-2. Use conditional compilation for architecture-specific code
-3. Update this document with any new build procedures
-4. Add ARM64 CI tests to your PRs
-
-## Support
-
-For ARM64-specific issues:
-- Check `ARM64_SUPPORT.md` first
-- Run `./test-arm64-build.sh` to validate your setup
-- Open issues with `[ARM64]` prefix
-
----
-*Last updated: 2025-06-23 by Claude Code*
+### Environment Variables for ARM64 Backend
+```bash
+# .env.local - Adjust API URL based on backend deployment
+VITE_API_BASE_URL=http://localhost:8080   # Standard backend port
+VITE_API_BASE_URL=http://localhost:8090   # Alternative port
+```

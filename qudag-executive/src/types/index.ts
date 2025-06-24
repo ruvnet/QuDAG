@@ -45,3 +45,52 @@ export interface SidebarItem {
   badge?: string | number;
   disabled?: boolean;
 }
+
+// CEO Command System Types
+export interface CEOCommand {
+  id: string;
+  input: string;
+  intent: CommandIntent;
+  entities: Record<string, any>;
+  confidence: number;
+  timestamp: number;
+  status: 'pending' | 'executing' | 'completed' | 'failed';
+  result?: CommandResult;
+}
+
+export interface CommandIntent {
+  action: 'hire' | 'analyze' | 'optimize' | 'scale' | 'show' | 'generate' | 'deploy' | 'help';
+  target: 'agent' | 'department' | 'metrics' | 'report' | 'project' | 'system' | 'general';
+  modifier?: 'quick' | 'detailed' | 'urgent' | 'scheduled';
+}
+
+export interface CommandResult {
+  success: boolean;
+  message: string;
+  data?: any;
+  actions?: QuickAction[];
+}
+
+export interface QuickAction {
+  id: string;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  action: () => void;
+  primary?: boolean;
+}
+
+export interface VoiceState {
+  isListening: boolean;
+  isProcessing: boolean;
+  transcript: string;
+  confidence: number;
+  error?: string;
+}
+
+export interface CommandSuggestion {
+  text: string;
+  description: string;
+  category: 'hiring' | 'analytics' | 'operations' | 'optimization';
+  examples: string[];
+}

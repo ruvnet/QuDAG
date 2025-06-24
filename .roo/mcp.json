@@ -1,12 +1,4 @@
 {
-  "_comment": "QuDAG MCP Configurations - See mcp-configs-explained.json for details",
-  "_status": "Real MCP implementation deployed and WORKING at quadag-mcp.fly.dev",
-  "_deployment": {
-    "remote_server": "LIVE at https://quadag-mcp.fly.dev - FULLY FUNCTIONAL",
-    "local_server": "Also running on http://localhost:3000",
-    "local_docker": "docker run -d -p 3000:3000 qudag-mcp-real:standalone",
-    "tools": ["qudag_dag", "qudag_network", "qudag_crypto", "qudag_vault", "qudag_exchange", "qudag_dark", "qudag_system"]
-  },
   "mcpServers": {
     "qudag": {
       "command": "qudag",
@@ -25,25 +17,6 @@
         "network",
         "system"
       ],
-      "timeout": 600
-    },
-    "qudag-local": {
-      "_comment": "Local MCP server for testing - run: docker run -p 3000:3000 qudag-mcp-real:standalone",
-      "command": "node",
-      "args": [
-        "/workspaces/QuDAG/.roo/mcp-http-proxy.js",
-        "http://localhost:3000"
-      ],
-      "alwaysAllow": [
-        "qudag_crypto",
-        "qudag_vault",
-        "qudag_dag",
-        "qudag_network",
-        "qudag_exchange",
-        "qudag_dark",
-        "qudag_system"
-      ],
-      "description": "QuDAG Local MCP Server (Docker)",
       "timeout": 600
     },
     "qudag-testnet": {

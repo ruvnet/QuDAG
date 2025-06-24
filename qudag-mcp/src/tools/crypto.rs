@@ -1,22 +1,22 @@
 //! Real Quantum-Resistant Cryptographic Tool Implementation for MCP
-//! 
+//!
 //! This replaces the mock implementation with actual QuDAG quantum-resistant crypto
 
 use async_trait::async_trait;
 use base64::Engine;
-use serde_json::{json, Value};
 use rand::thread_rng;
+use serde_json::{json, Value};
 
 use super::{get_optional_string_arg, get_required_string_arg, McpTool};
 use crate::error::{Error, Result};
 
 // Import real QuDAG crypto
 use qudag_crypto::{
-    ml_dsa::{MlDsaKeyPair, MlDsaPublicKey, MlDsaError},
-    ml_kem::{MlKem768, KeyEncapsulation},
-    hqc::{Hqc, Hqc128, SecurityParameter},
     fingerprint::Fingerprint,
-    kem::{KEMError},
+    hqc::{Hqc, Hqc128, SecurityParameter},
+    kem::KEMError,
+    ml_dsa::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey},
+    ml_kem::{KeyEncapsulation, MlKem768},
 };
 
 /// Real crypto tool using QuDAG quantum-resistant cryptography
@@ -45,8 +45,9 @@ impl RealCryptoTool {
         match algorithm.as_str() {
             "ml-dsa" | "ml-dsa-65" => {
                 // Use real ML-DSA key generation
-                let keypair = MlDsaKeyPair::generate(&mut rng)
-                    .map_err(|e| Error::internal_error(format!("ML-DSA key generation failed: {}", e)))?;
+                let keypair = MlDsaKeyPair::generate(&mut rng).map_err(|e| {
+                    Error::internal_error(format!("ML-DSA key generation failed: {}", e))
+                })?;
 
                 let public_key = keypair.public_key();
                 let private_key = keypair.secret_key();
@@ -63,8 +64,9 @@ impl RealCryptoTool {
             }
             "ml-kem" | "ml-kem-768" => {
                 // Use real ML-KEM key generation
-                let (public_key, secret_key) = MlKem768::keygen()
-                    .map_err(|e| Error::internal_error(format!("ML-KEM key generation failed: {:?}", e)))?;
+                let (public_key, secret_key) = MlKem768::keygen().map_err(|e| {
+                    Error::internal_error(format!("ML-KEM key generation failed: {:?}", e))
+                })?;
 
                 Ok(json!({
                     "algorithm": "ml-kem",
@@ -79,8 +81,9 @@ impl RealCryptoTool {
             "hqc" | "hqc-128" => {
                 // Use real HQC key generation
                 let hqc = Hqc::new(SecurityParameter::Hqc128);
-                let (public_key, secret_key) = hqc.keygen(&mut rng)
-                    .map_err(|e| Error::internal_error(format!("HQC key generation failed: {:?}", e)))?;
+                let (public_key, secret_key) = hqc.keygen(&mut rng).map_err(|e| {
+                    Error::internal_error(format!("HQC key generation failed: {:?}", e))
+                })?;
 
                 Ok(json!({
                     "algorithm": "hqc",
@@ -95,7 +98,7 @@ impl RealCryptoTool {
             _ => Err(Error::invalid_params(format!(
                 "Unsupported algorithm: {}. Supported: ml-dsa, ml-kem, hqc",
                 algorithm
-            )))
+            ))),
         }
     }
 
@@ -116,15 +119,19 @@ impl RealCryptoTool {
                 // Decode private key
                 let private_key_bytes = base64::engine::general_purpose::STANDARD
                     .decode(private_key_b64)
-                    .map_err(|e| Error::invalid_params(format!("Invalid private key format: {}", e)))?;
+                    .map_err(|e| {
+                        Error::invalid_params(format!("Invalid private key format: {}", e))
+                    })?;
 
                 // Create ML-DSA keypair from private key
-                let keypair = MlDsaKeyPair::from_secret_key(&private_key_bytes)
-                    .map_err(|e| Error::invalid_params(format!("Invalid ML-DSA private key: {}", e)))?;
+                let keypair = MlDsaKeyPair::from_secret_key(&private_key_bytes).map_err(|e| {
+                    Error::invalid_params(format!("Invalid ML-DSA private key: {}", e))
+                })?;
 
                 // Sign message
                 let mut rng = thread_rng();
-                let signature = keypair.sign(message.as_bytes(), &mut rng)
+                let signature = keypair
+                    .sign(message.as_bytes(), &mut rng)
                     .map_err(|e| Error::internal_error(format!("Signing failed: {}", e)))?;
 
                 Ok(json!({
@@ -135,16 +142,14 @@ impl RealCryptoTool {
                     "timestamp": chrono::Utc::now().to_rfc3339()
                 }))
             }
-            "ml-kem" | "hqc" => {
-                Err(Error::invalid_params(format!(
-                    "Algorithm {} is for encryption, not signing. Use ml-dsa for signatures.",
-                    algorithm
-                )))
-            }
+            "ml-kem" | "hqc" => Err(Error::invalid_params(format!(
+                "Algorithm {} is for encryption, not signing. Use ml-dsa for signatures.",
+                algorithm
+            ))),
             _ => Err(Error::invalid_params(format!(
                 "Unsupported signing algorithm: {}. Use ml-dsa for signatures.",
                 algorithm
-            )))
+            ))),
         }
     }
 
@@ -162,15 +167,20 @@ impl RealCryptoTool {
                 // Decode public key and signature
                 let public_key_bytes = base64::engine::general_purpose::STANDARD
                     .decode(public_key_b64)
-                    .map_err(|e| Error::invalid_params(format!("Invalid public key format: {}", e)))?;
+                    .map_err(|e| {
+                        Error::invalid_params(format!("Invalid public key format: {}", e))
+                    })?;
 
                 let signature_bytes = base64::engine::general_purpose::STANDARD
                     .decode(signature_b64)
-                    .map_err(|e| Error::invalid_params(format!("Invalid signature format: {}", e)))?;
+                    .map_err(|e| {
+                        Error::invalid_params(format!("Invalid signature format: {}", e))
+                    })?;
 
                 // Create ML-DSA public key
-                let public_key = MlDsaPublicKey::from_bytes(&public_key_bytes)
-                    .map_err(|e| Error::invalid_params(format!("Invalid ML-DSA public key: {}", e)))?;
+                let public_key = MlDsaPublicKey::from_bytes(&public_key_bytes).map_err(|e| {
+                    Error::invalid_params(format!("Invalid ML-DSA public key: {}", e))
+                })?;
 
                 // Verify signature
                 let verification_result = public_key.verify(message.as_bytes(), &signature_bytes);
@@ -181,10 +191,10 @@ impl RealCryptoTool {
                     "algorithm": "ml-dsa",
                     "message_length": message.len(),
                     "signature_size": signature_bytes.len(),
-                    "verification_error": if !is_valid { 
-                        Some(format!("{:?}", verification_result.unwrap_err())) 
-                    } else { 
-                        None 
+                    "verification_error": if !is_valid {
+                        Some(format!("{:?}", verification_result.unwrap_err()))
+                    } else {
+                        None
                     },
                     "timestamp": chrono::Utc::now().to_rfc3339()
                 }))
@@ -192,7 +202,7 @@ impl RealCryptoTool {
             _ => Err(Error::invalid_params(format!(
                 "Unsupported verification algorithm: {}. Use ml-dsa for signature verification.",
                 algorithm
-            )))
+            ))),
         }
     }
 
@@ -216,10 +226,14 @@ impl RealCryptoTool {
             "ml-kem" | "ml-kem-768" => {
                 // Use ML-KEM for key encapsulation (hybrid encryption)
                 let public_key = qudag_crypto::kem::PublicKey::from_bytes(&public_key_bytes)
-                    .map_err(|e| Error::invalid_params(format!("Invalid ML-KEM public key: {:?}", e)))?;
+                    .map_err(|e| {
+                        Error::invalid_params(format!("Invalid ML-KEM public key: {:?}", e))
+                    })?;
 
-                let (ciphertext, shared_secret) = MlKem768::encapsulate(&public_key)
-                    .map_err(|e| Error::internal_error(format!("ML-KEM encapsulation failed: {:?}", e)))?;
+                let (ciphertext, shared_secret) =
+                    MlKem768::encapsulate(&public_key).map_err(|e| {
+                        Error::internal_error(format!("ML-KEM encapsulation failed: {:?}", e))
+                    })?;
 
                 // Use shared secret to encrypt message (simplified - in practice would use AES-GCM)
                 let mut encrypted_message = message.as_bytes().to_vec();
@@ -240,8 +254,10 @@ impl RealCryptoTool {
             "hqc" | "hqc-128" => {
                 // Use HQC for direct encryption
                 let hqc = Hqc::new(SecurityParameter::Hqc128);
-                let (ciphertext, shared_secret) = hqc.encapsulate(&public_key_bytes)
-                    .map_err(|e| Error::internal_error(format!("HQC encryption failed: {:?}", e)))?;
+                let (ciphertext, shared_secret) =
+                    hqc.encapsulate(&public_key_bytes).map_err(|e| {
+                        Error::internal_error(format!("HQC encryption failed: {:?}", e))
+                    })?;
 
                 // Use shared secret to encrypt message
                 let mut encrypted_message = message.as_bytes().to_vec();
@@ -258,15 +274,13 @@ impl RealCryptoTool {
                     "timestamp": chrono::Utc::now().to_rfc3339()
                 }))
             }
-            "ml-dsa" => {
-                Err(Error::invalid_params(
-                    "ML-DSA is for signatures, not encryption. Use ml-kem or hqc for encryption."
-                ))
-            }
+            "ml-dsa" => Err(Error::invalid_params(
+                "ML-DSA is for signatures, not encryption. Use ml-kem or hqc for encryption.",
+            )),
             _ => Err(Error::invalid_params(format!(
                 "Unsupported encryption algorithm: {}. Use ml-kem or hqc for encryption.",
                 algorithm
-            )))
+            ))),
         }
     }
 
@@ -290,13 +304,19 @@ impl RealCryptoTool {
             "ml-kem" | "ml-kem-768" => {
                 // Use ML-KEM for decapsulation
                 let secret_key = qudag_crypto::kem::SecretKey::from_bytes(&private_key_bytes)
-                    .map_err(|e| Error::invalid_params(format!("Invalid ML-KEM secret key: {:?}", e)))?;
+                    .map_err(|e| {
+                        Error::invalid_params(format!("Invalid ML-KEM secret key: {:?}", e))
+                    })?;
 
                 let ciphertext = qudag_crypto::kem::Ciphertext::from_bytes(&ciphertext_bytes)
-                    .map_err(|e| Error::invalid_params(format!("Invalid ML-KEM ciphertext: {:?}", e)))?;
+                    .map_err(|e| {
+                        Error::invalid_params(format!("Invalid ML-KEM ciphertext: {:?}", e))
+                    })?;
 
-                let shared_secret = MlKem768::decapsulate(&secret_key, &ciphertext)
-                    .map_err(|e| Error::internal_error(format!("ML-KEM decapsulation failed: {:?}", e)))?;
+                let shared_secret =
+                    MlKem768::decapsulate(&secret_key, &ciphertext).map_err(|e| {
+                        Error::internal_error(format!("ML-KEM decapsulation failed: {:?}", e))
+                    })?;
 
                 // Note: In a real implementation, we'd need the encrypted message too
                 // For now, return the shared secret as hex for demonstration
@@ -310,8 +330,11 @@ impl RealCryptoTool {
             "hqc" | "hqc-128" => {
                 // Use HQC for decryption
                 let hqc = Hqc::new(SecurityParameter::Hqc128);
-                let shared_secret = hqc.decapsulate(&private_key_bytes, &ciphertext_bytes)
-                    .map_err(|e| Error::internal_error(format!("HQC decryption failed: {:?}", e)))?;
+                let shared_secret = hqc
+                    .decapsulate(&private_key_bytes, &ciphertext_bytes)
+                    .map_err(|e| {
+                        Error::internal_error(format!("HQC decryption failed: {:?}", e))
+                    })?;
 
                 Ok(json!({
                     "plaintext": format!("Shared secret: {}", hex::encode(&shared_secret)),
@@ -323,21 +346,22 @@ impl RealCryptoTool {
             _ => Err(Error::invalid_params(format!(
                 "Unsupported decryption algorithm: {}. Use ml-kem or hqc for decryption.",
                 algorithm
-            )))
+            ))),
         }
     }
 
     /// Generate quantum fingerprint
     async fn generate_fingerprint(&self, args: &Value) -> Result<Value> {
         let data = get_required_string_arg(args, "data")?;
-        
+
         if data.trim().is_empty() {
             return Err(Error::invalid_params("Data cannot be empty"));
         }
 
         // Use real QuDAG fingerprint
-        let fingerprint = Fingerprint::new(data.as_bytes())
-            .map_err(|e| Error::internal_error(format!("Fingerprint generation failed: {:?}", e)))?;
+        let fingerprint = Fingerprint::new(data.as_bytes()).map_err(|e| {
+            Error::internal_error(format!("Fingerprint generation failed: {:?}", e))
+        })?;
 
         Ok(json!({
             "fingerprint": hex::encode(fingerprint.as_bytes()),

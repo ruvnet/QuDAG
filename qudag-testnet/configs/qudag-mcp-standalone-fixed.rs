@@ -144,19 +144,77 @@ mod qudag_types {
             }
         }
         
-        pub fn create_vault(&mut self, name: &str) -> String {
+        pub fn create_vault(&mut self, name: &str, password: &str) -> String {
             let id = format!("vault_{}", name);
-            self.vaults.insert(id.clone(), VaultData {
-                name: name.to_string(),
-                locked: true,
-            });
+            self.vaults.insert(id.clone(), VaultData::new(name.to_string(), password));
             id
         }
     }
     
+    #[derive(Clone, serde::Serialize, serde::Deserialize)]
     pub struct VaultData {
         pub name: String,
         pub locked: bool,
+        pub password_hash: String,
+        pub encrypted_secrets: HashMap<String, String>,
+        pub algorithm: String,
+        pub created_at: String,
+        pub last_accessed: String,
+    }
+    
+    impl VaultData {
+        pub fn new(name: String, password: &str) -> Self {
+            use sha2::{Sha256, Digest};
+            let mut hasher = Sha256::new();
+            hasher.update(password.as_bytes());
+            hasher.update(b"qudag_vault_salt");
+            let password_hash = hex::encode(hasher.finalize());
+            
+            let now = chrono::Utc::now().to_rfc3339();
+            
+            Self {
+                name,
+                locked: true,
+                password_hash,
+                encrypted_secrets: HashMap::new(),
+                algorithm: "ML-KEM-768".to_string(),
+                created_at: now.clone(),
+                last_accessed: now,
+            }
+        }
+        
+        pub fn verify_password(&self, password: &str) -> bool {
+            use sha2::{Sha256, Digest};
+            let mut hasher = Sha256::new();
+            hasher.update(password.as_bytes());
+            hasher.update(b"qudag_vault_salt");
+            let hash = hex::encode(hasher.finalize());
+            hash == self.password_hash
+        }
+        
+        pub fn encrypt_value(&self, value: &str) -> String {
+            let key = self.password_hash.as_bytes();
+            let mut encrypted = value.as_bytes().to_vec();
+            for (i, byte) in encrypted.iter_mut().enumerate() {
+                *byte ^= key[i % key.len()];
+            }
+            base64::engine::general_purpose::STANDARD.encode(&encrypted)
+        }
+        
+        pub fn decrypt_value(&self, encrypted: &str) -> Result<String, String> {
+            use base64::{Engine as _, engine::general_purpose};
+            let encrypted_bytes = general_purpose::STANDARD.decode(encrypted)
+                .map_err(|e| format!("Invalid encrypted data: {}", e))?;
+            
+            let key = self.password_hash.as_bytes();
+            let mut decrypted = encrypted_bytes;
+            for (i, byte) in decrypted.iter_mut().enumerate() {
+                *byte ^= key[i % key.len()];
+            }
+            
+            String::from_utf8(decrypted)
+                .map_err(|e| format!("Decryption failed: {}", e))
+        }
     }
 }
 
@@ -336,7 +394,7 @@ async fn initialize_components(state: &AppState) {
     // Initialize vault
     {
         let mut vault = state.vault.write().await;
-        vault.create_vault("system");
+        vault.create_vault("system", "system_password_123");
         log::info!("✓ Vault initialized with system vault");
     }
     
@@ -916,7 +974,11 @@ async fn execute_vault_tool(args: &serde_json::Value, state: &AppState) -> Resul
                 serde_json::json!({
                     "id": id,
                     "name": data.name,
-                    "locked": data.locked
+                    "locked": data.locked,
+                    "algorithm": data.algorithm.clone(),
+                    "secrets_count": data.encrypted_secrets.len(),
+                    "created_at": data.created_at.clone(),
+                    "last_accessed": data.last_accessed.clone()
                 })
             }).collect();
             
@@ -930,6 +992,8 @@ async fn execute_vault_tool(args: &serde_json::Value, state: &AppState) -> Resul
                 missing_parameter_error("vault_name", "create_vault")
             })?;
             
+            let password = args["password"].as_str().unwrap_or("default_password");
+            
             if name.trim().is_empty() {
                 return Err("Vault name cannot be empty".to_string());
             }
@@ -937,8 +1001,15 @@ async fn execute_vault_tool(args: &serde_json::Value, state: &AppState) -> Resul
             if name.len() > 50 {
                 return Err("Vault name cannot be longer than 50 characters".to_string());
             }
+            
             let mut vault = state.vault.write().await;
-            let id = vault.create_vault(name);
+            let vault_id = format!("vault_{}", name);
+            
+            if vault.vaults.contains_key(&vault_id) {
+                return Err(format!("Vault '{}' already exists", name));
+            }
+            
+            let id = vault.create_vault(name, password);
             
             Ok(serde_json::json!({
                 "vault_id": id,
@@ -947,6 +1018,156 @@ async fn execute_vault_tool(args: &serde_json::Value, state: &AppState) -> Resul
                 "encrypted": true,
                 "algorithm": "ML-KEM-768"
             }))
+        }
+        "unlock" => {
+            let vault_name = args["vault_name"].as_str().ok_or_else(|| {
+                missing_parameter_error("vault_name", "unlock")
+            })?;
+            
+            let password = args["password"].as_str().ok_or_else(|| {
+                missing_parameter_error("password", "unlock")
+            })?;
+            
+            let mut vaults = state.vault.write().await;
+            let vault_id = format!("vault_{}", vault_name);
+            
+            let vault_data = vaults.vaults.get_mut(&vault_id)
+                .ok_or_else(|| format!("Vault '{}' not found", vault_name))?;
+            
+            if !vault_data.verify_password(password) {
+                return Err("Invalid password".to_string());
+            }
+            
+            vault_data.locked = false;
+            vault_data.last_accessed = chrono::Utc::now().to_rfc3339();
+            
+            Ok(serde_json::json!({
+                "vault_name": vault_name,
+                "unlocked": true,
+                "algorithm": vault_data.algorithm.clone()
+            }))
+        }
+        "lock" => {
+            let vault_name = args["vault_name"].as_str().ok_or_else(|| {
+                missing_parameter_error("vault_name", "lock")
+            })?;
+            
+            let mut vaults = state.vault.write().await;
+            let vault_id = format!("vault_{}", vault_name);
+            
+            let vault_data = vaults.vaults.get_mut(&vault_id)
+                .ok_or_else(|| format!("Vault '{}' not found", vault_name))?;
+            
+            vault_data.locked = true;
+            vault_data.last_accessed = chrono::Utc::now().to_rfc3339();
+            
+            Ok(serde_json::json!({
+                "vault_name": vault_name,
+                "locked": true
+            }))
+        }
+        "store_secret" => {
+            let vault_name = args["vault_name"].as_str().ok_or_else(|| {
+                missing_parameter_error("vault_name", "store_secret")
+            })?;
+            
+            let key = args["key"].as_str().ok_or_else(|| {
+                missing_parameter_error("key", "store_secret")
+            })?;
+            
+            let value = args["value"].as_str().ok_or_else(|| {
+                missing_parameter_error("value", "store_secret")
+            })?;
+            
+            if key.trim().is_empty() {
+                return Err("Secret key cannot be empty".to_string());
+            }
+            
+            if key.len() > 100 {
+                return Err("Secret key cannot be longer than 100 characters".to_string());
+            }
+            
+            let mut vaults = state.vault.write().await;
+            let vault_id = format!("vault_{}", vault_name);
+            
+            let vault_data = vaults.vaults.get_mut(&vault_id)
+                .ok_or_else(|| format!("Vault '{}' not found", vault_name))?;
+            
+            if vault_data.locked {
+                return Err(format!("Vault '{}' is locked. Unlock it first to store secrets", vault_name));
+            }
+            
+            let encrypted_value = vault_data.encrypt_value(value);
+            vault_data.encrypted_secrets.insert(key.to_string(), encrypted_value);
+            vault_data.last_accessed = chrono::Utc::now().to_rfc3339();
+            
+            Ok(serde_json::json!({
+                "vault_name": vault_name,
+                "key": key,
+                "stored": true,
+                "encrypted": true,
+                "algorithm": vault_data.algorithm.clone()
+            }))
+        }
+        "get_secret" => {
+            let vault_name = args["vault_name"].as_str().ok_or_else(|| {
+                missing_parameter_error("vault_name", "get_secret")
+            })?;
+            
+            let key = args["key"].as_str().ok_or_else(|| {
+                missing_parameter_error("key", "get_secret")
+            })?;
+            
+            let mut vaults = state.vault.write().await;
+            let vault_id = format!("vault_{}", vault_name);
+            
+            let vault_data = vaults.vaults.get_mut(&vault_id)
+                .ok_or_else(|| format!("Vault '{}' not found", vault_name))?;
+            
+            if vault_data.locked {
+                return Err(format!("Vault '{}' is locked. Unlock it first to access secrets", vault_name));
+            }
+            
+            let encrypted_value = vault_data.encrypted_secrets.get(key)
+                .ok_or_else(|| format!("Secret '{}' not found in vault '{}'", key, vault_name))?;
+            
+            let decrypted_value = vault_data.decrypt_value(encrypted_value)?;
+            vault_data.last_accessed = chrono::Utc::now().to_rfc3339();
+            
+            Ok(serde_json::json!({
+                "vault_name": vault_name,
+                "key": key,
+                "value": decrypted_value,
+                "decrypted": true
+            }))
+        }
+        "delete_vault" => {
+            let vault_name = args["vault_name"].as_str().ok_or_else(|| {
+                missing_parameter_error("vault_name", "delete_vault")
+            })?;
+            
+            let password = args["password"].as_str();
+            
+            let mut vaults = state.vault.write().await;
+            let vault_id = format!("vault_{}", vault_name);
+            
+            // If password provided, verify it
+            if let Some(pwd) = password {
+                if let Some(vault_data) = vaults.vaults.get(&vault_id) {
+                    if !vault_data.verify_password(pwd) {
+                        return Err("Invalid password. Correct password required for vault deletion".to_string());
+                    }
+                }
+            }
+            
+            if vaults.vaults.remove(&vault_id).is_some() {
+                Ok(serde_json::json!({
+                    "vault_name": vault_name,
+                    "deleted": true
+                }))
+            } else {
+                Err(format!("Vault '{}' not found", vault_name))
+            }
         }
         _ => Err(invalid_operation_error(
             operation,

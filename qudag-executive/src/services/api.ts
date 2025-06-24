@@ -9,12 +9,12 @@ import axios from 'axios';
 import type { AxiosInstance } from 'axios';
 
 // Base API configuration
-const API_BASE_URL = 'http://localhost:8090';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8090';
 
 // Create axios instance
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: import.meta.env.VITE_API_TIMEOUT ? parseInt(import.meta.env.VITE_API_TIMEOUT) : 10000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -35,7 +35,30 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error('API Error:', error);
-    return Promise.reject(error);
+    
+    // Create a more user-friendly error message
+    let errorMessage = 'An unexpected error occurred';
+    
+    if (error.code === 'ECONNREFUSED') {
+      errorMessage = `Cannot connect to API at ${API_BASE_URL}. Please ensure the backend is running.`;
+    } else if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      errorMessage = error.response.data?.error?.message || 
+                    error.response.data?.message || 
+                    `API Error: ${error.response.status} ${error.response.statusText}`;
+    } else if (error.request) {
+      // The request was made but no response was received
+      errorMessage = 'No response from server. Please check your connection.';
+    }
+    
+    const enhancedError = {
+      ...error,
+      message: errorMessage,
+      originalError: error
+    };
+    
+    return Promise.reject(enhancedError);
   }
 );
 

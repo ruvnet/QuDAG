@@ -111,15 +111,15 @@ app.get("/api/v1/agents", async (request, reply) => {
     let countQuery, dataQuery;
     if (organizationId) {
       countQuery = sql`SELECT COUNT(*) as total FROM executive.agent_profiles WHERE organization_id = ${organizationId}`;
-      dataQuery = sql.unsafe`
+      dataQuery = sql`
         SELECT * FROM executive.agent_profiles 
-        WHERE organization_id = '${organizationId}'
+        WHERE organization_id = ${organizationId}
         ORDER BY hired_at DESC
         LIMIT ${pageSize} OFFSET ${offset}
       `;
     } else {
       countQuery = sql`SELECT COUNT(*) as total FROM executive.agent_profiles`;
-      dataQuery = sql.unsafe`
+      dataQuery = sql`
         SELECT * FROM executive.agent_profiles 
         ORDER BY hired_at DESC
         LIMIT ${pageSize} OFFSET ${offset}
@@ -161,20 +161,25 @@ app.get("/api/v1/metrics", async (request, reply) => {
     const pageSize = parseInt((request.query as any)?.pageSize || "10", 10);
     const offset = (page - 1) * pageSize;
 
-    let whereClause = "WHERE 1=1";
+    let conditions = [];
     if (organizationId) {
-      whereClause += ` AND organization_id = '${organizationId}'`;
+      conditions.push(sql`organization_id = ${organizationId}`);
     }
     if (type) {
-      whereClause += ` AND metric_type = '${type}'`;
+      conditions.push(sql`metric_type = ${type}`);
     }
 
-    const countResult = await pool.query(sql.unsafe`
+    const whereClause =
+      conditions.length > 0 ?
+        sql`WHERE ${sql.join(conditions, sql` AND `)}`
+      : sql``;
+
+    const countResult = await pool.query(sql`
       SELECT COUNT(*) as total FROM executive.business_metrics ${whereClause}
     `);
     const totalItems = parseInt(countResult.rows[0].total as string, 10);
 
-    const result = await pool.query(sql.unsafe`
+    const result = await pool.query(sql`
       SELECT * FROM executive.business_metrics 
       ${whereClause}
       ORDER BY created_at DESC
@@ -208,12 +213,10 @@ app.get("/api/v1/metrics/summary", async (request, reply) => {
   try {
     const organizationId = (request.query as any)?.organizationId;
 
-    let whereClause = "WHERE 1=1";
-    if (organizationId) {
-      whereClause += ` AND organization_id = '${organizationId}'`;
-    }
+    const whereClause =
+      organizationId ? sql`WHERE organization_id = ${organizationId}` : sql``;
 
-    const result = await pool.query(sql.unsafe`
+    const result = await pool.query(sql`
       SELECT 
         metric_type,
         SUM(value) as total_value,
@@ -267,20 +270,25 @@ app.get("/api/v1/projects", async (request, reply) => {
     const pageSize = parseInt((request.query as any)?.pageSize || "10", 10);
     const offset = (page - 1) * pageSize;
 
-    let whereClause = "WHERE 1=1";
+    let conditions = [];
     if (organizationId) {
-      whereClause += ` AND organization_id = '${organizationId}'`;
+      conditions.push(sql`organization_id = ${organizationId}`);
     }
     if (status) {
-      whereClause += ` AND status = '${status}'`;
+      conditions.push(sql`status = ${status}`);
     }
 
-    const countResult = await pool.query(sql.unsafe`
+    const whereClause =
+      conditions.length > 0 ?
+        sql`WHERE ${sql.join(conditions, sql` AND `)}`
+      : sql``;
+
+    const countResult = await pool.query(sql`
       SELECT COUNT(*) as total FROM executive.projects ${whereClause}
     `);
     const totalItems = parseInt(countResult.rows[0].total as string, 10);
 
-    const result = await pool.query(sql.unsafe`
+    const result = await pool.query(sql`
       SELECT * FROM executive.projects 
       ${whereClause}
       ORDER BY created_at DESC
@@ -317,17 +325,15 @@ app.get("/api/v1/departments", async (request, reply) => {
     const pageSize = parseInt((request.query as any)?.pageSize || "10", 10);
     const offset = (page - 1) * pageSize;
 
-    let whereClause = "WHERE 1=1";
-    if (organizationId) {
-      whereClause += ` AND organization_id = '${organizationId}'`;
-    }
+    const whereClause =
+      organizationId ? sql`WHERE organization_id = ${organizationId}` : sql``;
 
-    const countResult = await pool.query(sql.unsafe`
+    const countResult = await pool.query(sql`
       SELECT COUNT(*) as total FROM executive.departments ${whereClause}
     `);
     const totalItems = parseInt(countResult.rows[0].total as string, 10);
 
-    const result = await pool.query(sql.unsafe`
+    const result = await pool.query(sql`
       SELECT * FROM executive.departments 
       ${whereClause}
       ORDER BY created_at DESC

@@ -70,7 +70,12 @@ export function AgentsTable({ organizationId, theme = 'light' }: AgentsTableProp
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['agents', organizationId, page, search, sortKey, sortDirection],
-    queryFn: () => apiService.agents.list(organizationId, page, 10),
+    queryFn: async () => {
+      console.log('AgentsTable: Fetching agents with organizationId:', organizationId);
+      const result = await apiService.agents.list(organizationId, page, 10);
+      console.log('AgentsTable: API Response:', result);
+      return result;
+    },
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
@@ -244,6 +249,15 @@ export function AgentsTable({ organizationId, theme = 'light' }: AgentsTableProp
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  console.log('AgentsTable render:', {
+    isLoading,
+    error: error?.message,
+    dataReceived: data,
+    dataArray: data?.data,
+    dataLength: data?.data?.length,
+    pagination: data?.pagination
+  });
 
   return (
     <DataTable

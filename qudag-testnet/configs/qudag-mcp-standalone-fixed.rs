@@ -7,7 +7,6 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use std::collections::HashMap;
 use sha2::{Sha256, Digest};
-use base64::{Engine as _, engine::general_purpose};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use regex::Regex;
 use std::fs;
@@ -198,12 +197,11 @@ mod qudag_types {
             for (i, byte) in encrypted.iter_mut().enumerate() {
                 *byte ^= key[i % key.len()];
             }
-            base64::engine::general_purpose::STANDARD.encode(&encrypted)
+            base64::encode(&encrypted)
         }
         
         pub fn decrypt_value(&self, encrypted: &str) -> Result<String, String> {
-            use base64::{Engine as _, engine::general_purpose};
-            let encrypted_bytes = general_purpose::STANDARD.decode(encrypted)
+            let encrypted_bytes = base64::decode(encrypted)
                 .map_err(|e| format!("Invalid encrypted data: {}", e))?;
             
             let key = self.password_hash.as_bytes();
@@ -391,11 +389,26 @@ async fn initialize_components(state: &AppState) {
     log::info!("✓ Crypto manager initialized");
     log::info!("  - Algorithm: ML-DSA-65 (quantum-resistant)");
     
-    // Initialize vault
+    // Initialize vault with persistence
     {
         let mut vault = state.vault.write().await;
-        vault.create_vault("system", "system_password_123");
-        log::info!("✓ Vault initialized with system vault");
+        let loaded_vaults = load_vaults_from_file("/tmp/qudag_vaults.json");
+        
+        if !loaded_vaults.is_empty() {
+            vault.vaults = loaded_vaults;
+            log::info!("✓ Vaults loaded from persistence with {} vaults", vault.vaults.len());
+        } else {
+            // Ensure system vault exists
+            if !vault.vaults.contains_key("vault_system") {
+                vault.create_vault("system", "system_password_123");
+                // Save vaults with system vault
+                save_vaults_to_file(&vault.vaults, "/tmp/qudag_vaults.json");
+                log::info!("✓ Vault initialized with system vault and saved to persistence");
+            } else {
+                log::info!("✓ Vault initialized with existing system vault");
+            }
+        }
+        log::info!("  - Total vaults: {}", vault.vaults.len());
     }
     
     // Pre-populate some test dark domains
@@ -916,8 +929,8 @@ async fn execute_crypto_tool(args: &serde_json::Value, state: &AppState) -> Resu
             let keypair = state.crypto.generate_keypair();
             
             Ok(serde_json::json!({
-                "public_key": general_purpose::STANDARD.encode(&keypair.public_key()),
-                "private_key": general_purpose::STANDARD.encode(&keypair.private),
+                "public_key": base64::encode(&keypair.public_key()),
+                "private_key": base64::encode(&keypair.private),
                 "algorithm": algorithm,
                 "quantum_resistant": true,
                 "key_size_bits": 2048
@@ -935,7 +948,7 @@ async fn execute_crypto_tool(args: &serde_json::Value, state: &AppState) -> Resu
             let signature = state.crypto.sign(message.as_bytes(), &keypair);
             
             Ok(serde_json::json!({
-                "signature": general_purpose::STANDARD.encode(&signature),
+                "signature": base64::encode(&signature),
                 "algorithm": "ML-DSA-65",
                 "message_hash": hex::encode(Sha256::digest(message.as_bytes())),
                 "timestamp": chrono::Utc::now().to_rfc3339()
@@ -1011,6 +1024,9 @@ async fn execute_vault_tool(args: &serde_json::Value, state: &AppState) -> Resul
             
             let id = vault.create_vault(name, password);
             
+            // Save vaults to persistence after creating new vault
+            save_vaults_to_file(&vault.vaults, "/tmp/qudag_vaults.json");
+            
             Ok(serde_json::json!({
                 "vault_id": id,
                 "name": name,
@@ -1041,10 +1057,15 @@ async fn execute_vault_tool(args: &serde_json::Value, state: &AppState) -> Resul
             vault_data.locked = false;
             vault_data.last_accessed = chrono::Utc::now().to_rfc3339();
             
+            let algorithm = vault_data.algorithm.clone();
+            
+            // Save vaults to persistence after unlocking
+            save_vaults_to_file(&vaults.vaults, "/tmp/qudag_vaults.json");
+            
             Ok(serde_json::json!({
                 "vault_name": vault_name,
                 "unlocked": true,
-                "algorithm": vault_data.algorithm.clone()
+                "algorithm": algorithm
             }))
         }
         "lock" => {
@@ -1060,6 +1081,9 @@ async fn execute_vault_tool(args: &serde_json::Value, state: &AppState) -> Resul
             
             vault_data.locked = true;
             vault_data.last_accessed = chrono::Utc::now().to_rfc3339();
+            
+            // Save vaults to persistence after locking
+            save_vaults_to_file(&vaults.vaults, "/tmp/qudag_vaults.json");
             
             Ok(serde_json::json!({
                 "vault_name": vault_name,
@@ -1101,12 +1125,17 @@ async fn execute_vault_tool(args: &serde_json::Value, state: &AppState) -> Resul
             vault_data.encrypted_secrets.insert(key.to_string(), encrypted_value);
             vault_data.last_accessed = chrono::Utc::now().to_rfc3339();
             
+            let algorithm = vault_data.algorithm.clone();
+            
+            // Save vaults to persistence after storing secret
+            save_vaults_to_file(&vaults.vaults, "/tmp/qudag_vaults.json");
+            
             Ok(serde_json::json!({
                 "vault_name": vault_name,
                 "key": key,
                 "stored": true,
                 "encrypted": true,
-                "algorithm": vault_data.algorithm.clone()
+                "algorithm": algorithm
             }))
         }
         "get_secret" => {
@@ -1134,10 +1163,18 @@ async fn execute_vault_tool(args: &serde_json::Value, state: &AppState) -> Resul
             let decrypted_value = vault_data.decrypt_value(encrypted_value)?;
             vault_data.last_accessed = chrono::Utc::now().to_rfc3339();
             
+            // Clone values before save to avoid borrow issues
+            let vault_name_clone = vault_name.to_string();
+            let key_clone = key.to_string();
+            let decrypted_value_clone = decrypted_value.clone();
+            
+            // Save vaults to persistence after accessing secret (updates last_accessed)
+            save_vaults_to_file(&vaults.vaults, "/tmp/qudag_vaults.json");
+            
             Ok(serde_json::json!({
-                "vault_name": vault_name,
-                "key": key,
-                "value": decrypted_value,
+                "vault_name": vault_name_clone,
+                "key": key_clone,
+                "value": decrypted_value_clone,
                 "decrypted": true
             }))
         }
@@ -1161,6 +1198,9 @@ async fn execute_vault_tool(args: &serde_json::Value, state: &AppState) -> Resul
             }
             
             if vaults.vaults.remove(&vault_id).is_some() {
+                // Save vaults to persistence after deleting vault
+                save_vaults_to_file(&vaults.vaults, "/tmp/qudag_vaults.json");
+                
                 Ok(serde_json::json!({
                     "vault_name": vault_name,
                     "deleted": true
@@ -1367,7 +1407,7 @@ async fn execute_dark_tool(args: &serde_json::Value, state: &AppState) -> Result
                 serde_json::json!({
                     "hop": i + 1,
                     "node_id": format!("node_{}", uuid::Uuid::new_v4().simple()),
-                    "encrypted_layer": general_purpose::STANDARD.encode(format!("layer_{}", i))
+                    "encrypted_layer": base64::encode(format!("layer_{}", i))
                 })
             }).collect();
             
@@ -1436,9 +1476,6 @@ use hex;
 use uuid;
 use base64;
 use chrono;
-use sysinfo;
-use regex;
-
 // Address validation utilities
 fn validate_peer_address(address: &str) -> Result<(), String> {
     if address.trim().is_empty() {
@@ -1612,6 +1649,50 @@ fn save_dag_to_file(vertices: &HashMap<String, DagVertex>, path: &str) {
         },
         Err(e) => {
             log::error!("Failed to serialize DAG: {}", e);
+        }
+    }
+}
+
+fn load_vaults_from_file(path: &str) -> HashMap<String, VaultData> {
+    if Path::new(path).exists() {
+        match fs::read_to_string(path) {
+            Ok(content) => {
+                match serde_json::from_str(&content) {
+                    Ok(vaults) => {
+                        log::info!("✓ Loaded vaults from {}", path);
+                        vaults
+                    },
+                    Err(e) => {
+                        log::warn!("Failed to parse vaults from {}: {}", path, e);
+                        HashMap::new()
+                    }
+                }
+            },
+            Err(e) => {
+                log::warn!("Failed to read vaults from {}: {}", path, e);
+                HashMap::new()
+            }
+        }
+    } else {
+        log::info!("No vault persistence file found at {}, starting with empty vaults", path);
+        HashMap::new()
+    }
+}
+
+fn save_vaults_to_file(vaults: &HashMap<String, VaultData>, path: &str) {
+    match serde_json::to_string_pretty(vaults) {
+        Ok(content) => {
+            match fs::write(path, content) {
+                Ok(()) => {
+                    log::debug!("✓ Saved vaults to {} ({} vaults)", path, vaults.len());
+                },
+                Err(e) => {
+                    log::error!("Failed to save vaults to {}: {}", path, e);
+                }
+            }
+        },
+        Err(e) => {
+            log::error!("Failed to serialize vaults: {}", e);
         }
     }
 }

@@ -10,6 +10,7 @@ members = [
     "qudag-mcp",
     "qudag-wasm",
     "qudag-exchange",
+    "packages/napi-core",
 ]
 resolver = "2"
 

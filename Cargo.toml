@@ -11,6 +11,7 @@ members = [
     "qudag-wasm",
     "qudag-exchange",
     "packages/napi-core",
+    "packages/qudag-jujutsu",
 ]
 resolver = "2"
 

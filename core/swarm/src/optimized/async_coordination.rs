@@ -74,7 +74,7 @@ pub struct Task {
 }
 
 /// Task priority
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum TaskPriority {
     Low = 0,
     Normal = 1,
@@ -431,7 +431,7 @@ impl HierarchicalSwarm {
     /// Execute parallel tasks across the swarm
     pub async fn parallel_execute<F, R>(&self, tasks: Vec<Task>, handler: F) -> Vec<Result<R, AgentError>>
     where
-        F: Fn(Task) -> R + Send + Sync + Clone,
+        F: Fn(Task) -> R + Send + Sync + Clone + 'static,
         R: Send + 'static,
     {
         let semaphore = Arc::new(Semaphore::new(self.agents.read().await.len()));

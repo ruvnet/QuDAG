@@ -1,0 +1,59 @@
+[package]
+name = "qudag-jujutsu"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Quantum-resistant version control with Jujutsu VCS and QuDAG multi-agent coordination"
+repository = "https://github.com/ruvnet/QuDAG"
+keywords = ["quantum", "vcs", "jujutsu", "multi-agent", "cryptography"]
+categories = ["cryptography", "development-tools::version-control"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Jujutsu VCS library
+jj-lib = "0.35"
+
+# QuDAG core components
+qudag-crypto = { path = "../../core/crypto" }
+qudag-dag = { path = "../../core/dag" }
+qudag-swarm = { path = "../../core/swarm" }
+
+# Async runtime
+tokio = { version = "1.42", features = ["full"] }
+futures = "0.3"
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Cryptography
+blake3 = "1.5"
+rand = "0.8"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# N-API bindings (optional, for Node.js support)
+napi = { version = "2", optional = true, default-features = false, features = ["napi4", "tokio_rt"] }
+napi-derive = { version = "2", optional = true }
+
+[dev-dependencies]
+tempfile = "3.14"
+criterion = "0.6"
+
+[features]
+default = []
+napi-bindings = ["napi", "napi-derive"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3

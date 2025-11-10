@@ -6,8 +6,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
 use qudag_dag::{Dag, DagMessage};
+use qudag_dag::vertex::VertexId;
 
-use crate::{QuantumCommit, QuantumVcsError};
+use crate::QuantumVcsError;
 
 /// Operation type for trajectory tracking
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -182,7 +183,7 @@ impl TrajectoryConsensus {
 
         // Add to DAG for consensus
         let dag_message = DagMessage {
-            id: trajectory_id.clone(),
+            id: VertexId::from_bytes(trajectory_id.as_bytes().to_vec()),
             payload: format!(
                 "trajectory:{}:{}",
                 agent_id,
@@ -193,7 +194,7 @@ impl TrajectoryConsensus {
             timestamp: trajectory.start_time,
         };
 
-        self.dag.add_message(dag_message).await?;
+        self.dag.submit_message(dag_message).await?;
 
         // Store trajectory
         let mut trajectories = self.trajectories.write().await;
@@ -288,7 +289,8 @@ impl TrajectoryConsensus {
             .filter(|t| t.agent_id == agent_id)
             .map(|trajectory| {
                 // Check if trajectory has DAG consensus
-                let consensus_confirmed = dag_vertices.contains_key(&trajectory.id);
+                let vertex_id = VertexId::from_bytes(trajectory.id.as_bytes().to_vec());
+                let consensus_confirmed = dag_vertices.contains_key(&vertex_id);
                 let confirmation_count = if consensus_confirmed { 1 } else { 0 };
 
                 VerifiedTrajectory {
@@ -504,6 +506,9 @@ mod tests {
             .await
             .unwrap();
 
+        // Allow DAG to process the message
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
         consensus.finalize_trajectory(&traj_id, true).await.unwrap();
 
         let verified = consensus
@@ -511,6 +516,6 @@ mod tests {
             .await;
 
         assert_eq!(verified.len(), 1);
-        assert!(verified[0].consensus_confirmed);
+        assert!(verified[0].consensus_confirmed, "Expected trajectory to be confirmed by DAG consensus");
     }
 }

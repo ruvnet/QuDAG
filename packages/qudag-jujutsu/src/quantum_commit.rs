@@ -3,8 +3,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
-use qudag_crypto::ml_dsa::{MlDsaPublicKey, MlDsaSignature};
-use qudag_crypto::fingerprint::Fingerprint;
+use qudag_crypto::ml_dsa::{MlDsaPublicKey, MlDsaError};
+use qudag_crypto::fingerprint::{Fingerprint, FingerprintError};
 use qudag_crypto::CryptoError;
 
 /// Errors specific to quantum commit operations
@@ -17,6 +17,14 @@ pub enum QuantumCommitError {
     /// Fingerprint verification failed
     #[error("Fingerprint verification failed")]
     FingerprintVerificationFailed,
+
+    /// ML-DSA error
+    #[error("ML-DSA error: {0}")]
+    MlDsaError(#[from] MlDsaError),
+
+    /// Fingerprint error
+    #[error("Fingerprint error: {0}")]
+    FingerprintError(#[from] FingerprintError),
 
     /// Cryptographic operation failed
     #[error("Crypto error: {0}")]
@@ -33,7 +41,7 @@ pub struct QuantumCommit {
     jj_hash: String,
 
     /// ML-DSA signature
-    signature: MlDsaSignature,
+    signature: Vec<u8>,
 
     /// Quantum fingerprint (BLAKE3 + ML-DSA)
     fingerprint: Fingerprint,
@@ -66,7 +74,7 @@ impl QuantumCommit {
     pub fn new(
         message: String,
         jj_hash: String,
-        signature: MlDsaSignature,
+        signature: Vec<u8>,
         fingerprint: Fingerprint,
         fingerprint_public_key: MlDsaPublicKey,
         agent_id: String,
@@ -100,7 +108,7 @@ impl QuantumCommit {
     }
 
     /// Get ML-DSA signature
-    pub fn signature(&self) -> &MlDsaSignature {
+    pub fn signature(&self) -> &[u8] {
         &self.signature
     }
 
@@ -134,13 +142,10 @@ impl QuantumCommit {
     pub async fn verify(&self) -> Result<bool, QuantumCommitError> {
         // Verify ML-DSA signature
         let signature_data = format!("{}:{}", self.jj_hash, self.fingerprint.as_hex());
-        let sig_valid = self.public_key
-            .verify(signature_data.as_bytes(), &self.signature)
-            .map_err(|e| QuantumCommitError::CryptoError(e))?;
-
-        if !sig_valid {
-            return Ok(false);
-        }
+        let sig_valid = match self.public_key.verify(signature_data.as_bytes(), &self.signature) {
+            Ok(()) => true,
+            Err(e) => return Err(QuantumCommitError::MlDsaError(e)),
+        };
 
         // Verify quantum fingerprint
         let fp_valid = self.fingerprint
@@ -153,17 +158,18 @@ impl QuantumCommit {
     /// Verify only the ML-DSA signature (faster than full verification)
     pub fn verify_signature(&self) -> Result<bool, QuantumCommitError> {
         let signature_data = format!("{}:{}", self.jj_hash, self.fingerprint.as_hex());
-        self.public_key
-            .verify(signature_data.as_bytes(), &self.signature)
-            .map_err(|e| QuantumCommitError::CryptoError(e))
+        match self.public_key.verify(signature_data.as_bytes(), &self.signature) {
+            Ok(()) => Ok(true),
+            Err(e) => Err(QuantumCommitError::MlDsaError(e)),
+        }
     }
 
     /// Verify only the quantum fingerprint
     pub fn verify_fingerprint(&self) -> Result<bool, QuantumCommitError> {
-        self.fingerprint
-            .verify(&self.fingerprint_public_key)
-            .map(|_| true)
-            .map_err(|e| QuantumCommitError::CryptoError(e))
+        match self.fingerprint.verify(&self.fingerprint_public_key) {
+            Ok(()) => Ok(true),
+            Err(e) => Err(QuantumCommitError::FingerprintError(e)),
+        }
     }
 
     /// Get commit age in seconds
@@ -194,15 +200,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_quantum_commit_creation() {
-        let keypair = MlDsaKeyPair::generate().unwrap();
+        let mut rng = rand::rngs::OsRng;
+        let keypair = MlDsaKeyPair::generate(&mut rng).unwrap();
         let commit_data = b"test:hash:message";
 
-        let mut rng = rand::rngs::OsRng;
         let (fingerprint, fp_public_key) =
             Fingerprint::generate(commit_data, &mut rng).unwrap();
 
         let signature_data = format!("hash:{}", fingerprint.as_hex());
-        let signature = keypair.sign(signature_data.as_bytes()).unwrap();
+        let signature = keypair.sign(signature_data.as_bytes(), &mut rng).unwrap();
+
+        let public_key = MlDsaPublicKey::from_bytes(keypair.public_key()).unwrap();
 
         let commit = QuantumCommit::new(
             "test: Initial commit".to_string(),
@@ -211,7 +219,7 @@ mod tests {
             fingerprint,
             fp_public_key,
             "agent-test".to_string(),
-            keypair.public_key(),
+            public_key,
         );
 
         assert_eq!(commit.message(), "test: Initial commit");
@@ -221,15 +229,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_quantum_commit_verification() {
-        let keypair = MlDsaKeyPair::generate().unwrap();
+        let mut rng = rand::rngs::OsRng;
+        let keypair = MlDsaKeyPair::generate(&mut rng).unwrap();
         let commit_data = b"test:hash:message";
 
-        let mut rng = rand::rngs::OsRng;
         let (fingerprint, fp_public_key) =
             Fingerprint::generate(commit_data, &mut rng).unwrap();
 
         let signature_data = format!("hash:{}", fingerprint.as_hex());
-        let signature = keypair.sign(signature_data.as_bytes()).unwrap();
+        let signature = keypair.sign(signature_data.as_bytes(), &mut rng).unwrap();
+
+        let public_key = MlDsaPublicKey::from_bytes(keypair.public_key()).unwrap();
 
         let commit = QuantumCommit::new(
             "test: Verify this".to_string(),
@@ -238,7 +248,7 @@ mod tests {
             fingerprint,
             fp_public_key,
             "agent-test".to_string(),
-            keypair.public_key(),
+            public_key,
         );
 
         let verified = commit.verify().await.unwrap();
@@ -247,15 +257,17 @@ mod tests {
 
     #[test]
     fn test_commit_helpers() {
-        let keypair = MlDsaKeyPair::generate().unwrap();
+        let mut rng = rand::rngs::OsRng;
+        let keypair = MlDsaKeyPair::generate(&mut rng).unwrap();
         let commit_data = b"test:hash:message";
 
-        let mut rng = rand::rngs::OsRng;
         let (fingerprint, fp_public_key) =
             Fingerprint::generate(commit_data, &mut rng).unwrap();
 
         let signature_data = format!("hash:{}", fingerprint.as_hex());
-        let signature = keypair.sign(signature_data.as_bytes()).unwrap();
+        let signature = keypair.sign(signature_data.as_bytes(), &mut rng).unwrap();
+
+        let public_key = MlDsaPublicKey::from_bytes(keypair.public_key()).unwrap();
 
         let commit = QuantumCommit::new(
             "feat: Add feature\n\nDetailed description".to_string(),
@@ -264,7 +276,7 @@ mod tests {
             fingerprint,
             fp_public_key,
             "agent-001".to_string(),
-            keypair.public_key(),
+            public_key,
         );
 
         assert_eq!(commit.summary(), "feat: Add feature");

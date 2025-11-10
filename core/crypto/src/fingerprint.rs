@@ -44,7 +44,7 @@ pub enum FingerprintError {
 /// }
 /// # example().unwrap();
 /// ```
-#[derive(Debug, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct Fingerprint {
     /// The actual fingerprint data
     data: Vec<u8>,
@@ -94,6 +94,27 @@ impl Fingerprint {
     /// Get a reference to the signature
     pub fn signature(&self) -> &[u8] {
         &self.signature
+    }
+
+    /// Get the fingerprint data as a hexadecimal string
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use qudag_crypto::fingerprint::Fingerprint;
+    /// # use rand::thread_rng;
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let mut rng = thread_rng();
+    /// # let data = b"test";
+    /// # let (fingerprint, _) = Fingerprint::generate(data, &mut rng)?;
+    /// let hex = fingerprint.as_hex();
+    /// assert_eq!(hex.len(), 128); // 64 bytes * 2 hex chars
+    /// # Ok(())
+    /// # }
+    /// # example().unwrap();
+    /// ```
+    pub fn as_hex(&self) -> String {
+        hex::encode(&self.data)
     }
 }
 

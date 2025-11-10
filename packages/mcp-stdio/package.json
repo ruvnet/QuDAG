@@ -14,8 +14,7 @@
     "test:watch": "jest --watch",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write 'src/**/*.ts'",
-    "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "qudag",

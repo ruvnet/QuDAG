@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "qudag": {
+      "command": "node",
+      "args": [
+        "/path/to/QuDAG/packages/mcp-stdio/dist/index.js"
+      ],
+      "env": {
+        "QUDAG_LOG_LEVEL": "info",
+        "QUDAG_ENABLE_METRICS": "true"
+      }
+    }
+  }
+}

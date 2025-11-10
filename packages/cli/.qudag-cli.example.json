@@ -1,0 +1,108 @@
+{
+  "global": {
+    "format": "json",
+    "verbose": false,
+    "debug": false,
+    "quiet": false,
+    "no_color": false,
+    "timeout": 30000,
+    "output_dir": "./output"
+  },
+  "profiles": {
+    "default": {
+      "parallel": 1,
+      "continue_on_error": false,
+      "keep_temp": false
+    },
+    "production": {
+      "parallel": 8,
+      "continue_on_error": false,
+      "keep_temp": false,
+      "timeout": 60000,
+      "quiet": true,
+      "format": "json"
+    },
+    "development": {
+      "parallel": 1,
+      "continue_on_error": true,
+      "keep_temp": true,
+      "verbose": true,
+      "debug": true
+    },
+    "ci_cd": {
+      "parallel": 4,
+      "format": "json",
+      "quiet": true,
+      "timeout": 120000
+    }
+  },
+  "exec": {
+    "default_strategy": "balanced",
+    "validate_on_start": true,
+    "stream_enabled": false,
+    "chunk_size": 100,
+    "max_batch_size": 10000
+  },
+  "optimize": {
+    "simulation_enabled": true,
+    "default_strategy": "balanced",
+    "max_iterations": 1000,
+    "comparison_enabled": true,
+    "report_detailed": true
+  },
+  "analyze": {
+    "default_metrics": "all",
+    "comprehensive_by_default": false,
+    "temporal_analysis": true,
+    "visualization_format": "ascii",
+    "anomaly_threshold": 2.0
+  },
+  "benchmark": {
+    "default_mode": "quick",
+    "warmup_iterations": 100,
+    "min_samples": 1000,
+    "regression_threshold": 5.0,
+    "graph_generation": false
+  },
+  "crypto": {
+    "kem_algorithm": "ML-KEM-768",
+    "signature_algorithm": "ML-DSA",
+    "hash_algorithm": "BLAKE3"
+  },
+  "dag": {
+    "consensus_algorithm": "qr-avalanche",
+    "byzantine_fault_tolerance": 0.33,
+    "consensus_threshold": 0.67,
+    "finality_threshold": 0.9,
+    "max_vertices": 100000
+  },
+  "network": {
+    "bootstrap_nodes": [
+      "node1.qudag.network:8000",
+      "node2.qudag.network:8000"
+    ],
+    "default_peers": 50,
+    "peer_discovery_enabled": true,
+    "peer_discovery_interval": 300
+  },
+  "performance": {
+    "worker_threads": 4,
+    "max_memory_mb": 4096,
+    "cache_enabled": true,
+    "cache_size_mb": 512
+  },
+  "logging": {
+    "level": "info",
+    "format": "text",
+    "output": "console",
+    "file": "/var/log/qudag-cli.log",
+    "file_rotation": "daily",
+    "file_retention_days": 7
+  },
+  "security": {
+    "enable_memory_protection": true,
+    "enable_constant_time": true,
+    "tls_enabled": false,
+    "tls_verify": true
+  }
+}

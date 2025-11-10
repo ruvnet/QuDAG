@@ -1,0 +1,285 @@
+apiVersion: agentic-flow/v1
+kind: Workflow
+metadata:
+  name: resource-exchange-settlement
+  description: rUv token exchange with dynamic fee calculation and payout distribution
+  version: "1.0"
+  labels:
+    domain: exchange
+    criticality: critical
+
+spec:
+  inputs:
+    exchange_request:
+      type: object
+      required: true
+      properties:
+        from_account_id:
+          type: string
+        to_account_id:
+          type: string
+        amount_ruv:
+          type: integer
+        timestamp_ms:
+          type: integer
+        request_id:
+          type: string
+
+  agents:
+    exchange_validators:
+      type: agent-group
+      count: 3
+      agent_type: exchange_validator
+      capabilities:
+        - verify_account_balance
+        - calculate_dynamic_fee
+        - ml_dsa_sign_transaction
+
+    fee_calculator:
+      type: agent
+      agent_type: fee_coordinator
+      capabilities:
+        - calculate_fee_tier
+        - apply_verification_discount
+        - record_fee_metrics
+        - optimize_dynamic_pricing
+
+    transaction_finalizer:
+      type: agent
+      agent_type: ledger_keeper
+      capabilities:
+        - update_ledger
+        - issue_signature
+        - record_transaction
+        - distribute_rewards
+
+  workflow:
+    # Stage 1: Validate Exchange Request
+    - stage: validate_request
+      description: Validate exchange request format and account existence
+      action: parallel_validate
+      to: exchange_validators
+      task:
+        operation: validate_exchange_request
+        parameters:
+          from_account: "{{ input.exchange_request.from_account_id }}"
+          to_account: "{{ input.exchange_request.to_account_id }}"
+          amount: "{{ input.exchange_request.amount_ruv }}"
+          timestamp: "{{ input.exchange_request.timestamp_ms }}"
+      aggregation: majority_vote
+      timeout_ms: 5000
+
+    # Stage 2: Dynamic Fee Calculation
+    - stage: calculate_fee
+      description: Calculate dynamic fee based on multiple factors
+      action: agent_decision
+      agent: fee_calculator
+      decision_parameters:
+        amount_ruv: "{{ input.exchange_request.amount_ruv }}"
+        from_account_verification_status: "{{ stage.validate_request.from_account_status }}"
+        current_network_load: "{{ context.network_load_percentage }}"
+        sender_verification_level: "{{ context.sender_verification }}"
+        algorithm: dynamic_fee_calculation
+        fee_ranges:
+          unverified:
+            min: 0.001
+            max: 0.01
+          verified:
+            min: 0.0025
+            max: 0.005
+          premium:
+            min: 0.001
+            max: 0.002
+        memory_context: "{{ memory['exchange_fee_model'] }}"
+      outputs:
+        calculated_fee_ruv:
+          type: integer
+        fee_tier:
+          type: string
+        fee_percentage:
+          type: number
+
+    # Stage 3: Check Account Balance
+    - stage: check_balance
+      description: Verify sender has sufficient balance
+      action: agent_action
+      agent: exchange_validators
+      action_details:
+        operation: verify_account_balance
+        parameters:
+          account_id: "{{ input.exchange_request.from_account_id }}"
+          required_amount: "{{ input.exchange_request.amount_ruv + stage.calculate_fee.calculated_fee_ruv }}"
+      error_handling:
+        condition: "insufficient_balance"
+        action: reject_transaction
+        reason: "Insufficient balance for transaction and fees"
+        output_status: "failed"
+
+    # Stage 4: Create ML-DSA Signature
+    - stage: sign_transaction
+      description: Create ML-DSA signature of transaction
+      action: agent_action
+      agent: exchange_validators
+      action_details:
+        operation: ml_dsa_sign
+        parameters:
+          transaction_data:
+            from: "{{ input.exchange_request.from_account_id }}"
+            to: "{{ input.exchange_request.to_account_id }}"
+            amount: "{{ input.exchange_request.amount_ruv }}"
+            fee: "{{ stage.calculate_fee.calculated_fee_ruv }}"
+            timestamp: "{{ input.exchange_request.timestamp_ms }}"
+            nonce: "{{ context.transaction_nonce }}"
+          signing_key: transaction_signer_key
+      timeout_ms: 5000
+      outputs:
+        transaction_signature:
+          type: string
+        signature_timestamp_ms:
+          type: integer
+
+    # Stage 5: Atomic Ledger Update
+    - stage: ledger_update
+      description: Update ledger with new balances atomically
+      action: agent_action
+      agent: transaction_finalizer
+      action_details:
+        operation: update_ledger_atomic
+        parameters:
+          from_account: "{{ input.exchange_request.from_account_id }}"
+          to_account: "{{ input.exchange_request.to_account_id }}"
+          debit_amount: "{{ input.exchange_request.amount_ruv + stage.calculate_fee.calculated_fee_ruv }}"
+          credit_amount: "{{ input.exchange_request.amount_ruv }}"
+          fee_amount: "{{ stage.calculate_fee.calculated_fee_ruv }}"
+          transaction_signature: "{{ stage.sign_transaction.transaction_signature }}"
+      error_handling:
+        condition: "ledger_locked"
+        action: retry_with_backoff
+        max_attempts: 5
+        backoff_ms: 100
+
+    # Stage 6: Record Transaction and Distribute Rewards
+    - stage: record_transaction
+      description: Record transaction in AgenticDB and distribute rewards
+      action: agent_action
+      agent: transaction_finalizer
+      action_details:
+        operation: record_exchange_transaction
+        parameters:
+          transaction_data: "{{ stage.sign_transaction.transaction_data }}"
+          fee_calculated: "{{ stage.calculate_fee.calculated_fee_ruv }}"
+          fee_tier: "{{ stage.calculate_fee.fee_tier }}"
+          ledger_update_result: "{{ stage.ledger_update.result }}"
+          status: "confirmed"
+          distribution_enabled: true
+          payout_configuration: "{{ context.business_plan_config }}"
+
+  outputs:
+    transaction_result:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+        request_id:
+          type: string
+        status:
+          type: string
+        amount_ruv:
+          type: integer
+        fee_ruv:
+          type: integer
+        fee_percentage:
+          type: number
+        fee_tier:
+          type: string
+        from_account:
+          type: string
+        to_account:
+          type: string
+        timestamp_ms:
+          type: integer
+        signature:
+          type: string
+        confirmation_time_ms:
+          type: integer
+        participating_validators:
+          type: array
+
+  recording:
+    enabled: true
+    db_table: exchange_transactions
+    record_on:
+      - stage: validate_request
+      - stage: calculate_fee
+      - stage: sign_transaction
+      - stage: ledger_update
+      - stage: record_transaction
+    record_fields:
+      - workflow_id
+      - request_id
+      - transaction_id
+      - from_account_id
+      - to_account_id
+      - amount_ruv
+      - fee_ruv
+      - fee_tier
+      - status
+      - participating_validators
+      - execution_time_ms
+      - payout_distribution
+
+  error_handling:
+    - error: insufficient_balance
+      recovery: notify_sender
+      message: "Insufficient balance for transaction"
+      response_code: 400
+
+    - error: validation_failed
+      recovery: reject_transaction
+      message: "Transaction validation failed"
+      response_code: 400
+
+    - error: ledger_update_failed
+      recovery: rollback_transaction
+      message: "Ledger update failed, transaction rolled back"
+      response_code: 500
+
+    - error: signature_generation_failed
+      recovery: retry_signing
+      message: "Failed to generate ML-DSA signature"
+      max_attempts: 3
+
+    - error: fee_calculation_timeout
+      recovery: use_default_fee_tier
+      message: "Fee calculation timed out, using default tier"
+
+  timeout_policy:
+    total_workflow_timeout_ms: 30000
+    stage_default_timeout_ms: 10000
+    validation_timeout_ms: 5000
+    ledger_update_timeout_ms: 5000
+
+  success_criteria:
+    - Validation passes majority vote
+    - Balance check succeeds
+    - Ledger updates atomically
+    - Transaction signature generated
+    - AgenticDB recording successful
+
+  performance_targets:
+    transaction_latency_ms: 3000
+    throughput_txns_per_sec: 500
+    success_rate: 0.995
+    fee_calculation_accuracy: 0.99
+
+  monitoring:
+    track_fee_distribution: true
+    track_transaction_velocity: true
+    track_account_balances: true
+    track_payout_distributions: true
+
+  compliance:
+    audit_trail: enabled
+    record_all_decisions: true
+    signature_verification: required
+    transaction_immutability: enforced

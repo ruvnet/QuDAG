@@ -1,0 +1,210 @@
+apiVersion: claude-flow/v1
+kind: Task
+metadata:
+  name: agent-behavior-analysis
+  title: "Analyze Agent Decision Patterns in Swarm"
+  description: "Analyze agent behavior logs to identify patterns and optimization opportunities"
+  priority: medium
+  assigned_agent: analyzer
+  estimated_duration_hours: 10
+
+spec:
+  objective: |
+    Query AgenticDB execution history to identify agent decision patterns,
+    detect anomalies, and recommend behavioral optimizations for swarm efficiency
+    and resource utilization improvements.
+
+  context:
+    data_source: agenticdb
+    tables:
+      - agents
+      - tasks
+      - swarm_states
+      - consensus_rounds
+      - exchange_transactions
+      - workflow_executions
+    time_window_hours: 168
+    min_sample_size: 1000
+    analysis_depth: comprehensive
+
+  dependencies:
+    - agenticdb_integration_complete: required
+    - execution_history_populated: "at_least_1_week"
+    - minimum_agent_count: 5
+
+  execution_steps:
+    - step: 1
+      name: Data Collection and Aggregation
+      description: |
+        Query AgenticDB for comprehensive agent execution history and metrics
+        from the past week of operations.
+      sub_tasks:
+        - query_agent_task_performance_metrics
+        - query_consensus_participation_data
+        - query_error_and_failure_patterns
+        - query_resource_utilization_metrics
+        - query_network_latency_data
+        - aggregate_and_normalize_data
+      deliverables:
+        - aggregated_execution_data_json
+        - data_quality_report
+        - missing_data_analysis
+      target_duration_minutes: 120
+
+    - step: 2
+      name: Pattern Recognition and Analysis
+      description: |
+        Identify recurring patterns in agent behavior including
+        decision frequencies, success patterns, and resource consumption.
+      sub_tasks:
+        - analyze_decision_frequency_distribution
+        - analyze_consensus_agreement_patterns
+        - analyze_task_completion_patterns
+        - analyze_resource_consumption_patterns
+        - identify_agent_specialization_patterns
+        - analyze_error_correlation_patterns
+        - identify_temporal_patterns
+      outputs:
+        - decision_patterns:
+            type: object
+            description: Frequency and distribution of agent decisions
+        - consensus_patterns:
+            type: object
+            description: Quorum voting and consensus patterns
+        - task_patterns:
+            type: object
+            description: Task execution success patterns
+        - specialization_map:
+            type: object
+            description: Agent capabilities utilization analysis
+      deliverables:
+        - pattern_analysis_report
+        - statistical_findings
+        - visualization_data
+      target_duration_minutes: 120
+
+    - step: 3
+      name: Anomaly Detection and Investigation
+      description: |
+        Identify unusual or inefficient agent behaviors that may indicate
+        issues or improvement opportunities.
+      sub_tasks:
+        - statistical_outlier_detection
+        - ml_clustering_anomaly_detection
+        - time_series_anomaly_analysis
+        - compare_agent_performance_distributions
+        - identify_performance_degradation_trends
+        - detect_coordination_failures
+      outputs:
+        - anomalies_detected:
+            type: list
+            items:
+              - anomaly_type
+              - affected_agents
+              - severity_level
+              - recommended_action
+      deliverables:
+        - anomaly_detection_report
+        - affected_agents_list
+        - severity_rankings
+      target_duration_minutes: 100
+
+    - step: 4
+      name: Optimization Recommendations
+      description: |
+        Provide data-driven recommendations for behavioral optimization and
+        efficiency improvements based on pattern analysis.
+      sub_tasks:
+        - recommend_task_assignment_improvements
+        - recommend_consensus_efficiency_enhancements
+        - recommend_resource_allocation_optimizations
+        - recommend_agent_specialization_strategies
+        - recommend_failure_recovery_improvements
+        - estimate_improvement_potential
+      outputs:
+        - task_assignment_improvements:
+            type: list
+            description: Recommended changes to task distribution strategy
+        - consensus_efficiency_recommendations:
+            type: list
+            description: Ways to improve consensus efficiency
+        - resource_allocation_recommendations:
+            type: list
+            description: Optimizations to resource allocation
+        - agent_specialization_recommendations:
+            type: list
+            description: Agent role and capability optimizations
+      deliverables:
+        - optimization_recommendations_report
+        - implementation_guide
+        - expected_impact_analysis
+      target_duration_minutes: 90
+
+  memory_slots:
+    - agent_behavior_analysis:
+        ttl_hours: 360
+        description: "Agent behavior analysis findings and recommendations"
+    - swarm_optimization_insights:
+        ttl_hours: 360
+        description: "Insights from swarm behavior analysis and optimization"
+    - agent_performance_metrics:
+        ttl_hours: 360
+        description: "Agent performance benchmarks and comparisons"
+
+  outputs:
+    behavioral_analysis:
+      type: markdown
+      path: docs/analysis/agent-behavior-analysis.md
+      sections:
+        - Executive Summary
+        - Analysis Methodology
+        - Data Collection and Aggregation
+        - Execution Summary
+        - Agent Performance Metrics
+        - Decision Pattern Analysis
+        - Anomaly Findings
+        - Efficiency Recommendations
+        - Implementation Impact Estimates
+        - Timeline for Implementation
+
+    analysis_database:
+      type: sqlite
+      path: docs/analysis/behavior-analysis.db
+      tables:
+        - agent_performance_metrics
+        - behavior_patterns
+        - detected_anomalies
+        - recommendations
+
+    visualization_data:
+      type: json
+      path: docs/analysis/behavior-visualizations.json
+      includes:
+        - performance_distributions
+        - decision_frequency_charts
+        - consensus_patterns
+        - resource_utilization_trends
+
+  recording:
+    enabled: true
+    db_table: claude_flow_tasks
+    task_type: behavior_analysis
+    record_patterns: true
+    record_anomalies: true
+    link_memory_slots: true
+
+  follow_up_actions:
+    - analyze_top_performing_agents
+    - benchmark_agent_specialization
+    - design_improved_assignment_strategy
+
+  success_metrics:
+    - Analyzed 1000+ task executions
+    - Identified 10+ behavior patterns
+    - Detected anomalies in 95%+ accuracy
+    - Recommendations with measurable impact estimates
+    - Data quality validation > 95%
+
+  integration_with_workflow_optimization:
+    input_to: workflow-optimization-design
+    provides: behavior_insights_and_recommendations

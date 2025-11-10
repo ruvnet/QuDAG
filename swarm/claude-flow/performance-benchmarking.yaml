@@ -1,0 +1,281 @@
+apiVersion: claude-flow/v1
+kind: Task
+metadata:
+  name: performance-benchmark-swarm
+  title: "Performance Benchmark and Optimization"
+  description: "Benchmark swarm coordination, crypto operations, and exchange throughput"
+  priority: high
+  assigned_agent: performance_engineer
+  estimated_duration_hours: 16
+
+spec:
+  objective: |
+    Establish baseline performance metrics for QuDAG swarm coordination,
+    identify optimization opportunities, and recommend configuration tuning
+    to achieve target performance SLOs.
+
+  benchmarks:
+    - category: quantum_cryptography
+      operations:
+        - ml_kem_keygen
+        - ml_kem_encapsulate
+        - ml_kem_decapsulate
+        - ml_dsa_sign
+        - ml_dsa_verify
+        - blake3_hash
+        - hqc_encrypt
+        - hqc_decrypt
+      metrics:
+        - operation_latency_us
+        - throughput_ops_per_sec
+        - memory_usage_bytes
+        - power_consumption_mw
+      targets:
+        - ml_dsa_sign: 50_us
+        - ml_dsa_verify: 60_us
+        - ml_kem_encapsulate: 70_us
+        - blake3_hash_1mb: 5_ms
+
+    - category: swarm_coordination
+      operations:
+        - task_distribution
+        - agent_health_check
+        - work_stealing
+        - consensus_voting
+      metrics:
+        - coordination_latency_ms
+        - throughput_tasks_per_sec
+        - scalability_efficiency_percent
+        - fault_recovery_time_ms
+      targets:
+        - task_distribution: 100_ms
+        - consensus_voting: 5_sec
+        - work_stealing: 18_percent_improvement
+
+    - category: exchange_operations
+      operations:
+        - transaction_validation
+        - fee_calculation
+        - ledger_update
+        - transaction_signing
+      metrics:
+        - transaction_latency_ms
+        - throughput_txns_per_sec
+        - signature_verification_us
+        - storage_overhead_bytes
+      targets:
+        - transaction_latency: 3_ms
+        - throughput: 500_txns_per_sec
+
+    - category: dark_domain_operations
+      operations:
+        - domain_resolution
+        - quantum_fingerprint_verification
+        - onion_routing_lookup
+      metrics:
+        - resolution_latency_ms
+        - fingerprint_verification_us
+        - routing_overhead_percent
+        - cache_hit_rate_percent
+      targets:
+        - resolution_latency: 2_sec
+        - cache_hit_rate: 70_percent
+
+  execution_steps:
+    - step: 1
+      name: Setup
+      description: |
+        Configure isolated benchmark environment with all dependencies.
+        Set up monitoring and establish baseline measurements.
+      sub_tasks:
+        - setup_isolated_benchmark_environment
+        - install_monitoring_tools
+        - disable_cpu_frequency_scaling
+        - disable_background_processes
+        - establish_baseline_measurement
+        - verify_environment_stability
+      deliverables:
+        - benchmark_environment_config
+        - baseline_measurements
+        - environment_verification_report
+      target_duration_minutes: 60
+
+    - step: 2
+      name: Baseline Benchmarking
+      description: |
+        Run comprehensive benchmarks on current implementation to establish
+        baseline metrics and identify current performance characteristics.
+      sub_tasks:
+        - benchmark_crypto_operations
+        - benchmark_swarm_coordination
+        - benchmark_exchange_operations
+        - benchmark_network_operations
+        - run_load_tests
+        - run_stress_tests
+        - collect_raw_measurements
+      deliverables:
+        - baseline_metrics_json
+        - raw_measurement_data
+        - statistical_analysis
+      output_file: baseline_metrics.json
+      target_duration_minutes: 180
+
+    - step: 3
+      name: Profiling
+      description: |
+        Profile hot paths and identify optimization opportunities using
+        CPU, memory, and latency profilers.
+      sub_tasks:
+        - cpu_profiling_analysis
+        - memory_profiling_analysis
+        - latency_tracing
+        - lock_contention_analysis
+        - call_graph_analysis
+        - identify_bottlenecks
+        - correlate_with_source_code
+      deliverables:
+        - cpu_profile_report
+        - memory_profile_report
+        - latency_trace_analysis
+        - bottleneck_identification_report
+      target_duration_minutes: 150
+
+    - step: 4
+      name: Optimization Recommendations
+      description: |
+        Recommend specific optimizations with estimated impact,
+        implementation complexity, and priority scores.
+      sub_tasks:
+        - analyze_bottleneck_causes
+        - identify_optimization_opportunities
+        - estimate_optimization_impact
+        - estimate_implementation_complexity
+        - research_alternative_algorithms
+        - evaluate_library_upgrades
+        - prioritize_optimizations
+      outputs:
+        - optimization_recommendations:
+            type: list
+            items:
+              - optimization_description
+              - estimated_impact_percent
+              - implementation_complexity
+              - priority_score
+              - code_examples
+      deliverables:
+        - optimization_recommendations_report
+        - prioritized_optimization_list
+      target_duration_minutes: 120
+
+    - step: 5
+      name: Tuning Recommendations
+      description: |
+        Recommend configuration tuning for workload optimization including
+        thread pool sizing, buffer sizing, and timeout configuration.
+      sub_tasks:
+        - analyze_thread_pool_performance
+        - recommend_thread_pool_sizing
+        - analyze_buffer_sizing
+        - recommend_buffer_optimization
+        - analyze_timeout_configuration
+        - recommend_timeout_tuning
+        - analyze_memory_allocation
+        - recommend_memory_tuning
+      outputs:
+        - tuning_recommendations:
+            type: object
+            properties:
+              - thread_pool_size
+              - buffer_sizes
+              - timeout_values
+              - memory_allocation_strategy
+      deliverables:
+        - tuning_guide_document
+        - configuration_recommendations
+      target_duration_minutes: 90
+
+  timeline_hours: 16
+  resources:
+    - benchmark_infrastructure: required
+    - profiling_tools: required
+    - load_generation_tools: required
+    - monitoring_system: required
+
+  memory_slots:
+    - performance_baselines:
+        ttl_hours: 360
+        description: "Performance benchmark results and optimization recommendations"
+    - optimization_insights:
+        ttl_hours: 360
+        description: "Performance optimization insights and tuning recommendations"
+
+  outputs:
+    benchmark_report:
+      type: markdown
+      path: docs/performance/benchmark-report.md
+      sections:
+        - Executive Summary
+        - Methodology and Environment
+        - Baseline Metrics
+        - Current Performance Analysis
+        - Bottleneck Analysis
+        - Profiling Results
+        - Optimization Opportunities
+        - Tuning Recommendations
+        - Performance Projections
+        - Implementation Roadmap
+        - References
+
+    benchmark_data:
+      type: json
+      file: docs/performance/benchmark_results.json
+      schema:
+        - raw_measurements
+        - aggregated_statistics
+        - performance_distributions
+        - comparison_metrics
+
+    optimization_database:
+      type: sqlite
+      file: docs/performance/optimizations.db
+      tables:
+        - optimization_opportunities
+        - estimated_improvements
+        - implementation_tracking
+
+    performance_profiles:
+      type: binary
+      files:
+        - cpu_profile.prof
+        - memory_profile.prof
+        - latency_trace.dat
+
+  recording:
+    enabled: true
+    db_table: claude_flow_tasks
+    task_type: performance_benchmark
+    record_baseline_metrics: true
+    link_memory_slots: true
+
+  comparison_with_targets:
+    compare_to: target_slos
+    slo_definition: docs/performance/slos.json
+    report_variance: true
+    highlight_misses: true
+
+  follow_up_tasks:
+    - task: implement_optimizations
+      when: benchmarking_complete
+      dependencies: [prioritized_optimizations_defined]
+
+    - task: retest_optimized_system
+      when: optimizations_deployed
+      dependencies: [all_optimizations_implemented]
+
+  success_metrics:
+    - Baseline metrics established for all categories
+    - Bottlenecks identified and documented
+    - Optimization recommendations prioritized
+    - Tuning guide created and validated
+    - Performance projections calculated
+    - Projected improvement: 10-25%

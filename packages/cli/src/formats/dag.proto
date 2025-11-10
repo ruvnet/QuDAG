@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+package qudag.cli;
+
+// DAG Definition - complete DAG structure
+message DagDefinition {
+  string version = 1;
+  string dag_id = 2;
+  string created_at = 3;
+  Metadata metadata = 4;
+  repeated Vertex vertices = 5;
+  repeated Edge edges = 6;
+  ConsensusState consensus_state = 7;
+}
+
+// Vertex in the DAG
+message Vertex {
+  string id = 1;
+  string timestamp = 2;
+  bytes data = 3;
+  string data_encoding = 4;
+  repeated string parents = 5;
+  string quantum_fingerprint = 6;
+  string ml_dsa_signature = 7;
+  VertexConsensusData consensus_data = 8;
+}
+
+// Edge connecting vertices
+message Edge {
+  string from = 1;
+  string to = 2;
+  float weight = 3;
+  string type = 4;
+}
+
+// Consensus state for the entire DAG
+message ConsensusState {
+  string algorithm = 1;
+  int32 current_round = 2;
+  int32 finality_height = 3;
+  double byzantine_fault_tolerance = 4;
+}
+
+// Consensus data for individual vertex
+message VertexConsensusData {
+  int32 round = 1;
+  bool finalized = 2;
+}
+
+// Metadata for DAG
+message Metadata {
+  string description = 1;
+  repeated string tags = 2;
+  string author = 3;
+}
+
+// Transaction message
+message Transaction {
+  string id = 1;
+  string timestamp = 2;
+  string type = 3;
+  string from = 4;
+  string to = 5;
+  int64 amount = 6;
+  string currency = 7;
+  double fee = 8;
+  string ml_dsa_signature = 9;
+  string status = 10;
+  TransactionMetadata metadata = 11;
+}
+
+message TransactionMetadata {
+  string reason = 1;
+  string reference = 2;
+}
+
+// Operation result
+message OperationResult {
+  string operation = 1;
+  string command = 2;
+  string status = 3;
+  string timestamp = 4;
+  int64 duration_ms = 5;
+  string version = 6;
+  bytes results = 7;  // JSON-encoded results
+  repeated string warnings = 8;
+  repeated string errors = 9;
+  ResultMetadata metadata = 10;
+}
+
+message ResultMetadata {
+  string input_file = 1;
+  string output_file = 2;
+  string profile = 3;
+  SystemInfo system_info = 4;
+}
+
+message SystemInfo {
+  int32 cpu_cores = 1;
+  int32 memory_gb = 2;
+  string node_id = 3;
+}

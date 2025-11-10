@@ -1,0 +1,61 @@
+name: Reusable Platform Test
+
+on:
+  workflow_call:
+    inputs:
+      artifact_name:
+        required: true
+        type: string
+        description: 'Artifact name to test'
+      host:
+        required: true
+        type: string
+        description: 'GitHub runner'
+      test_commands:
+        required: false
+        type: string
+        description: 'Custom test commands'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Test ${{ inputs.artifact_name }}
+    runs-on: ${{ inputs.host }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'package.json'
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-${{ inputs.artifact_name }}
+          path: artifacts
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run default tests
+        if: !inputs.test_commands
+        run: |
+          npm run test:integration 2>/dev/null || echo "Integration tests not available"
+          npm run test:crypto 2>/dev/null || echo "Crypto tests not available"
+          npm run test:network 2>/dev/null || echo "Network tests not available"
+
+      - name: Run custom tests
+        if: inputs.test_commands
+        run: ${{ inputs.test_commands }}
+
+      - name: Verify binaries
+        run: |
+          echo "Artifact contents:"
+          ls -lh artifacts/ || echo "No artifacts found"

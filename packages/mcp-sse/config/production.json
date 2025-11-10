@@ -1,0 +1,44 @@
+{
+  "host": "0.0.0.0",
+  "port": 8443,
+  "protocol": "https",
+  "tls": {
+    "cert_path": "/etc/qudag/certs/server.crt",
+    "key_path": "/etc/qudag/certs/server.key",
+    "ca_path": "/etc/qudag/certs/ca.crt"
+  },
+  "oauth2": {
+    "issuer_url": "https://auth.qudag.io",
+    "audience": "qudag-mcp-api",
+    "jwks_url": "https://auth.qudag.io/.well-known/jwks.json",
+    "verify_signature": true,
+    "verify_expiry": true
+  },
+  "cors": {
+    "origins": [
+      "https://app.qudag.io",
+      "https://quantum.qudag.io",
+      "https://*.qudag.io"
+    ],
+    "credentials": true,
+    "methods": ["GET", "POST", "OPTIONS"],
+    "allowed_headers": ["Content-Type", "Authorization", "X-Request-ID"]
+  },
+  "security": {
+    "require_auth": true,
+    "rate_limit_requests_per_minute": 1000,
+    "rate_limit_per_user": true,
+    "helmet_enabled": true,
+    "csp_enabled": true
+  },
+  "logging": {
+    "level": "warn",
+    "format": "json",
+    "audit_enabled": true
+  },
+  "redis": {
+    "url": "redis://redis.qudag.svc.cluster.local:6379",
+    "db": 0,
+    "ttl_seconds": 3600
+  }
+}

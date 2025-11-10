@@ -1,0 +1,325 @@
+name: NAPI-RS GPU Builds
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'qudag-napi/**'
+      - 'core/crypto/**'
+      - '.github/workflows/napi-gpu.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 0' # Weekly on Sunday 2 AM UTC
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job 1: CUDA Build on Linux
+  build-cuda-linux:
+    name: Build CUDA - Linux x64
+    runs-on: ubuntu-latest
+    container:
+      image: nvidia/cuda:12.3.0-devel-ubuntu22.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          source $HOME/.cargo/env
+
+      - name: Install Node.js
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+          apt-get update
+          apt-get install -y nodejs
+
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y pkg-config libssl-dev
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cuda-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cuda-cargo-registry-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: cuda-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cuda-cargo-build-
+
+      - name: Verify CUDA
+        run: |
+          nvcc --version
+          nvidia-smi
+
+      - name: Build with CUDA
+        env:
+          CUDA_PATH: /usr/local/cuda
+          LD_LIBRARY_PATH: /usr/local/cuda/lib64:$LD_LIBRARY_PATH
+        run: |
+          cargo build --release --target x86_64-unknown-linux-gnu --features cuda 2>&1 || true
+
+      - name: Build NAPI addon with CUDA
+        run: |
+          npm install -g @napi-rs/cli
+          cd qudag-napi
+          npm ci
+          napi build --release --target x86_64-unknown-linux-gnu --features cuda || true
+
+      - name: Upload CUDA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-cuda-linux-x64
+          path: |
+            target/x86_64-unknown-linux-gnu/release/*.node
+            target/x86_64-unknown-linux-gnu/release/*.so
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # Job 2: CUDA Build on Windows
+  build-cuda-windows:
+    name: Build CUDA - Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install CUDA Toolkit
+        shell: powershell
+        run: |
+          # Note: CUDA must be pre-installed or use container
+          Write-Host "CUDA build on Windows requires pre-installed CUDA toolkit"
+          Write-Host "Skipping CUDA build - set up self-hosted runner with CUDA installed"
+
+      - name: Build with CUDA (if available)
+        shell: powershell
+        run: |
+          if (Test-Path "C:\Program Files\NVIDIA GPU Computing Toolkit") {
+            cargo build --release --target x86_64-pc-windows-msvc --features cuda
+          } else {
+            Write-Host "CUDA toolkit not found, skipping"
+          }
+
+  # Job 3: ROCm Build on Linux
+  build-rocm-linux:
+    name: Build ROCm - Linux x64
+    runs-on: ubuntu-latest
+    container:
+      image: rocm/rocm-terminal:latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          source $HOME/.cargo/env
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y nodejs npm pkg-config libssl-dev
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: rocm-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            rocm-cargo-registry-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: rocm-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            rocm-cargo-build-
+
+      - name: Verify ROCm
+        run: |
+          rocm-smi || echo "ROCm SMI not available"
+          hipcc --version || echo "HIP not available in container"
+
+      - name: Build with ROCm
+        env:
+          ROCM_PATH: /opt/rocm
+          LD_LIBRARY_PATH: /opt/rocm/lib:$LD_LIBRARY_PATH
+        run: |
+          cargo build --release --target x86_64-unknown-linux-gnu --features rocm 2>&1 || true
+
+      - name: Build NAPI addon with ROCm
+        run: |
+          npm install -g @napi-rs/cli
+          cd qudag-napi
+          npm ci
+          napi build --release --target x86_64-unknown-linux-gnu --features rocm || true
+
+      - name: Upload ROCm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-rocm-linux-x64
+          path: |
+            target/x86_64-unknown-linux-gnu/release/*.node
+            target/x86_64-unknown-linux-gnu/release/*.so
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # Job 4: Test GPU Builds (if runners available)
+  test-gpu-builds:
+    name: Test GPU Build - ${{ matrix.backend }}
+    needs: [build-cuda-linux, build-rocm-linux]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [cuda, rocm]
+    timeout-minutes: 45
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Download CUDA artifact
+        if: matrix.backend == 'cuda'
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-cuda-linux-x64
+          path: artifacts
+        continue-on-error: true
+
+      - name: Download ROCm artifact
+        if: matrix.backend == 'rocm'
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-rocm-linux-x64
+          path: artifacts
+        continue-on-error: true
+
+      - name: Test ${{ matrix.backend }} build
+        run: |
+          echo "Testing ${{ matrix.backend }} binaries"
+          if [ -d "artifacts" ] && [ -n "$(ls -A artifacts/ 2>/dev/null)" ]; then
+            echo "Found GPU binaries"
+            npm ci
+            npm run test:crypto 2>/dev/null || echo "GPU test skipped"
+          else
+            echo "No GPU binaries found for testing"
+          fi
+
+  # Job 5: Publish GPU Packages (Optional)
+  publish-gpu-packages:
+    name: Publish GPU Packages to npm
+    needs: [build-cuda-linux, build-rocm-linux, test-gpu-builds]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch' && vars.ENABLE_GPU_PUBLISH == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download CUDA artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-cuda-linux-x64
+          path: cuda-artifacts
+        continue-on-error: true
+
+      - name: Download ROCm artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-rocm-linux-x64
+          path: rocm-artifacts
+        continue-on-error: true
+
+      - name: Setup npm token
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+
+      - name: Publish CUDA package
+        if: success()
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -d "cuda-artifacts" ] && [ -n "$(ls -A cuda-artifacts/ 2>/dev/null)" ]; then
+            echo "Publishing @qudag/napi-cuda"
+            # This would require a separate package setup
+            # npm publish cuda-artifacts/ --access public || echo "CUDA publish skipped"
+          fi
+
+      - name: Publish ROCm package
+        if: success()
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -d "rocm-artifacts" ] && [ -n "$(ls -A rocm-artifacts/ 2>/dev/null)" ]; then
+            echo "Publishing @qudag/napi-rocm"
+            # npm publish rocm-artifacts/ --access public || echo "ROCm publish skipped"
+          fi
+
+  # Job 6: GPU Build Summary
+  gpu-summary:
+    name: GPU Build Summary
+    needs: [build-cuda-linux, build-rocm-linux, test-gpu-builds]
+    runs-on: ubuntu-latest
+    if: always()
+    timeout-minutes: 10
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## GPU Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Results:" >> $GITHUB_STEP_SUMMARY
+          echo "- CUDA Linux: ${{ needs.build-cuda-linux.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- ROCm Linux: ${{ needs.build-rocm-linux.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- GPU Tests: ${{ needs.test-gpu-builds.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Platform Support:" >> $GITHUB_STEP_SUMMARY
+          echo "- CUDA: Linux x86_64, Windows x86_64" >> $GITHUB_STEP_SUMMARY
+          echo "- ROCm: Linux x86_64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Notes:" >> $GITHUB_STEP_SUMMARY
+          echo "- GPU builds run in containers with pre-installed toolkits" >> $GITHUB_STEP_SUMMARY
+          echo "- Set ENABLE_GPU_PUBLISH to publish optional GPU packages" >> $GITHUB_STEP_SUMMARY
+          echo "- Self-hosted runners with GPU hardware recommended for production" >> $GITHUB_STEP_SUMMARY

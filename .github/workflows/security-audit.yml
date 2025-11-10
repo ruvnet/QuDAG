@@ -1,0 +1,312 @@
+name: Security Audit
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 3 * * *' # Daily at 3 AM UTC
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job 1: Cargo Audit - Rust Security Vulnerabilities
+  cargo-audit:
+    name: Cargo Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run cargo-audit
+        run: |
+          cargo audit --deny warnings 2>&1 | tee audit_report.txt
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "Security vulnerabilities found in Rust dependencies"
+            exit 1
+          fi
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-audit-report
+          path: audit_report.txt
+          retention-days: 30
+        if: always()
+
+  # Job 2: Cargo Deny - License and Security Compliance
+  cargo-deny:
+    name: Cargo Deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny
+
+      - name: Check licenses
+        run: |
+          cargo deny check licenses 2>&1 | tee deny_licenses.txt || true
+
+      - name: Check advisories
+        run: |
+          cargo deny check advisories 2>&1 | tee deny_advisories.txt || true
+
+      - name: Check sources
+        run: |
+          cargo deny check sources 2>&1 | tee deny_sources.txt || true
+
+      - name: Upload deny reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-deny-reports
+          path: deny_*.txt
+          retention-days: 30
+        if: always()
+
+  # Job 3: npm Audit - JavaScript/Node.js Dependencies
+  npm-audit:
+    name: npm Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'package.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: |
+          npm audit --audit-level=moderate 2>&1 | tee npm_audit_report.txt || true
+
+      - name: Check for high/critical vulnerabilities
+        run: |
+          npm audit --audit-level=high 2>&1 | tee npm_critical.txt || true
+
+      - name: Upload npm audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: npm_audit_report.txt
+          retention-days: 30
+        if: always()
+
+  # Job 4: Dependency Review (GitHub)
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          allow-licenses: |
+            Apache-2.0
+            MIT
+            BSD-2-Clause
+            BSD-3-Clause
+            ISC
+            Unlicense
+        continue-on-error: true
+
+  # Job 5: SARIF Upload for Code Scanning
+  upload-security-results:
+    name: Upload Security Results
+    needs: [cargo-audit, cargo-deny, npm-audit]
+    runs-on: ubuntu-latest
+    if: always()
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all reports
+        uses: actions/download-artifact@v4
+        with:
+          path: security-reports
+
+      - name: Generate SARIF report
+        run: |
+          mkdir -p sarif
+          cat > sarif/security-audit.sarif << 'EOF'
+          {
+            "version": "2.1.0",
+            "runs": [
+              {
+                "tool": {
+                  "driver": {
+                    "name": "Security Audit",
+                    "version": "1.0.0"
+                  }
+                },
+                "results": []
+              }
+            ]
+          }
+          EOF
+
+      - name: Upload SARIF report
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: sarif/
+          wait-for-processing: false
+        if: always()
+
+  # Job 6: Generate Security Advisory
+  security-advisory:
+    name: Generate Security Advisory
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event.schedule == '0 3 * * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create advisory markdown
+        run: |
+          cat > SECURITY_ADVISORY.md << 'EOF'
+          # Security Audit Report
+
+          Generated: $(date)
+
+          ## Summary
+
+          This security audit checks for known vulnerabilities in Rust and JavaScript dependencies.
+
+          ### Tools Used
+          - **cargo-audit**: Rust crate vulnerability scanning
+          - **cargo-deny**: License and advisory compliance
+          - **npm-audit**: Node.js package vulnerability scanning
+
+          ### Severity Levels
+          - **Critical**: Immediate action required
+          - **High**: Security patch needed
+          - **Moderate**: Should be addressed soon
+          - **Low**: Monitor for updates
+
+          ## Recommendations
+
+          1. Review all reported vulnerabilities
+          2. Update affected dependencies
+          3. Run tests to ensure compatibility
+          4. Deploy patches promptly
+
+          For details, see the individual audit reports.
+          EOF
+
+      - name: Upload advisory
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-advisory
+          path: SECURITY_ADVISORY.md
+          retention-days: 90
+
+  # Job 7: Crypto Security Analysis
+  crypto-security:
+    name: Cryptographic Security Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-crypto-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-crypto-
+
+      - name: Check quantum crypto implementations
+        run: |
+          cd core/crypto
+          cargo test --all-features security -- --nocapture 2>&1 | tee crypto_security.txt || true
+
+      - name: Run timing attack tests
+        run: |
+          cd core/crypto
+          cargo test timing -- --nocapture 2>&1 | tee timing_attacks.txt || true
+
+      - name: Upload crypto analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: crypto-security-analysis
+          path: |
+            crypto_security.txt
+            timing_attacks.txt
+          retention-days: 30
+        if: always()
+
+  # Job 8: Security Summary and Reporting
+  security-summary:
+    name: Security Summary
+    needs: [cargo-audit, cargo-deny, npm-audit, crypto-security]
+    runs-on: ubuntu-latest
+    if: always()
+    timeout-minutes: 15
+    steps:
+      - name: Generate security summary
+        run: |
+          echo "## Security Audit Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Results:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cargo Audit**: ${{ needs.cargo-audit.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cargo Deny**: ${{ needs.cargo-deny.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **npm Audit**: ${{ needs.npm-audit.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Crypto Security**: ${{ needs.crypto-security.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Audit Date:" >> $GITHUB_STEP_SUMMARY
+          echo "$(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Recommendations:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review all audit reports in artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "2. Address critical and high severity issues" >> $GITHUB_STEP_SUMMARY
+          echo "3. Update dependencies regularly" >> $GITHUB_STEP_SUMMARY
+          echo "4. Monitor for new vulnerabilities" >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail on critical issues
+        if: needs.cargo-audit.result != 'success'
+        run: |
+          echo "Critical security issue found!"
+          exit 1

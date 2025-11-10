@@ -1,0 +1,218 @@
+apiVersion: claude-flow/v1
+kind: Task
+metadata:
+  name: workflow-optimization
+  title: "Design Optimized Agentic-Flow Workflows"
+  description: "Create YAML workflow definitions for quantum consensus and task distribution"
+  priority: high
+  assigned_agent: architect
+  estimated_duration_hours: 12
+
+spec:
+  objective: |
+    Design production-ready agentic-flow workflows for key QuDAG operations.
+    Incorporate findings from performance analysis and behavior optimization.
+    Create optimized YAML definitions improving latency, throughput, and reliability.
+
+  context:
+    existing_workflows:
+      - quantum_consensus_v1
+      - task_distribution_v1
+      - exchange_settlement_v1
+      - dark_domain_resolution_v1
+    optimization_targets:
+      - latency_reduction: 10_percent
+      - throughput_increase: 20_percent
+      - failure_recovery_improvement: 99_percent
+      - agent_utilization: 85_percent
+    input_from_analysis:
+      - agent_behavior_analysis
+      - performance_benchmarking
+      - security_audit
+
+  dependencies:
+    - agent_behavior_analysis_complete: required
+    - performance_benchmarking_complete: required
+    - security_audit_complete: required
+
+  execution_steps:
+    - step: 1
+      name: Current Workflow Review and Analysis
+      description: |
+        Review existing workflow definitions for bottlenecks, inefficiencies,
+        and improvement opportunities based on analysis reports.
+      sub_tasks:
+        - review_quantum_consensus_workflow_v1
+        - identify_consensus_bottlenecks
+        - review_task_distribution_workflow_v1
+        - identify_assignment_inefficiencies
+        - review_exchange_settlement_workflow
+        - identify_fee_calculation_bottlenecks
+        - document_current_limitations
+      deliverables:
+        - current_workflow_assessment_report
+        - bottleneck_identification_document
+        - improvement_opportunity_list
+      target_duration_minutes: 120
+
+    - step: 2
+      name: Optimized Workflow Design
+      description: |
+        Design improved workflows incorporating performance optimizations,
+        behavioral insights, and security recommendations.
+      sub_tasks:
+        - design_optimized_consensus_workflow
+        - incorporate_dynamic_timeouts
+        - optimize_quorum_voting_strategy
+        - design_optimized_task_distribution
+        - implement_adaptive_load_balancing
+        - improve_work_stealing_strategy
+        - design_optimized_exchange_workflow
+        - optimize_fee_calculation_algorithm
+        - incorporate_security_improvements
+      outputs:
+        - optimized_quantum_consensus_workflow.yaml
+        - optimized_task_distribution_workflow.yaml
+        - optimized_exchange_settlement_workflow.yaml
+        - optimized_dark_domain_resolution_workflow.yaml
+        - optimization_summary_document
+      deliverables:
+        - four_optimized_workflow_yaml_files
+        - workflow_improvement_documentation
+        - implementation_notes
+      target_duration_minutes: 180
+
+    - step: 3
+      name: Implementation Planning and Roadmap
+      description: |
+        Create comprehensive implementation plan with testing strategy,
+        rollout schedule, and success metrics.
+      sub_tasks:
+        - create_implementation_roadmap
+        - define_testing_strategy
+        - plan_agent_simulation_testing
+        - plan_testnet_deployment
+        - plan_production_rollout
+        - define_success_metrics
+        - identify_rollback_procedures
+      outputs:
+        - phase_1_design_validation: test_plan
+        - phase_2_agent_simulation: simulation_scenarios
+        - phase_3_testnet_deployment: deployment_guide
+        - phase_4_production_rollout: rollout_schedule
+        - success_metrics: measurable_kpis
+      deliverables:
+        - implementation_roadmap_document
+        - detailed_testing_plan
+        - rollout_procedures_document
+        - success_metrics_definition
+      target_duration_minutes: 120
+
+  memory_slots:
+    - workflow_optimization_insights:
+        ttl_hours: 360
+        description: "Insights from workflow optimization design process"
+    - optimization_recommendations:
+        ttl_hours: 360
+        description: "Recommended optimizations and implementation details"
+    - workflow_versions:
+        ttl_hours: 720
+        description: "Version history of workflow definitions"
+
+  outputs:
+    optimized_workflows:
+      type: yaml
+      files:
+        - optimized_quantum_consensus_workflow.yaml
+        - optimized_task_distribution_workflow.yaml
+        - optimized_exchange_settlement_workflow.yaml
+        - optimized_dark_domain_resolution_workflow.yaml
+      description: Production-ready optimized workflow definitions
+
+    workflow_implementation_guide:
+      type: markdown
+      path: docs/workflows/workflow-optimization-guide.md
+      sections:
+        - Executive Summary
+        - Optimization Objectives and Targets
+        - Current Workflow Analysis
+        - Identified Bottlenecks and Issues
+        - Optimized Workflow Designs
+        - Key Improvements Summary
+        - Implementation Roadmap
+        - Testing Strategy
+        - Rollout Plan
+        - Success Metrics and KPIs
+        - Rollback Procedures
+        - Migration Guide
+
+    comparison_analysis:
+      type: json
+      path: docs/workflows/workflow-comparison.json
+      sections:
+        - consensus_latency_comparison
+        - task_throughput_comparison
+        - agent_utilization_comparison
+        - projected_improvements
+
+    testing_specifications:
+      type: json
+      path: docs/workflows/testing-specifications.json
+      includes:
+        - unit_test_scenarios
+        - integration_test_scenarios
+        - performance_test_scenarios
+        - failure_scenario_tests
+
+  recording:
+    enabled: true
+    db_table: claude_flow_tasks
+    task_type: workflow_design
+    record_optimizations: true
+    link_memory_slots: true
+
+  integration_points:
+    inputs_from:
+      - performance_benchmarking (bottleneck_data)
+      - security_audit (security_requirements)
+      - agent_behavior_analysis (behavior_insights)
+    outputs_to:
+      - agentic_flow_execution_engine (workflow_definitions)
+      - performance_monitoring (target_metrics)
+
+  success_criteria:
+    - All four workflows optimized and documented
+    - Consensus latency improvement: 10%+
+    - Task throughput improvement: 20%+
+    - Agent utilization target: 85%+
+    - Implementation roadmap with clear phases
+    - Testing strategy covering all scenarios
+    - Success metrics clearly defined
+    - Rollback procedures documented
+
+  performance_projections:
+    consensus_latency:
+      current: 5_sec
+      target: 4_5_sec
+      improvement_percent: 10
+    task_throughput:
+      current: 100_per_sec
+      target: 120_per_sec
+      improvement_percent: 20
+    agent_utilization:
+      current: 72_percent
+      target: 85_percent
+      improvement_percent: 18
+
+  deliverables:
+    - optimized_workflow_yaml_files
+    - workflow_optimization_report_pdf
+    - implementation_roadmap_document
+    - testing_and_rollout_guide
+    - comparison_analysis_data
+
+  dependencies_for_deployment:
+    - agent_simulation_testing_passed: required
+    - testnet_deployment_successful: required
+    - performance_improvements_validated: required
+    - security_requirements_met: required

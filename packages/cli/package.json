@@ -1,0 +1,54 @@
+{
+  "name": "@qudag/cli",
+  "version": "0.1.0",
+  "description": "Command-line interface for QuDAG quantum-resistant DAG operations",
+  "author": "QuDAG Team",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "qudag": "./dist/cli.js"
+  },
+  "main": "./dist/cli.js",
+  "types": "./dist/cli.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc && chmod +x dist/cli.js",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "dependencies": {
+    "@qudag/napi-core": "workspace:*",
+    "commander": "^12.0.0",
+    "ora": "^8.0.1",
+    "chalk": "^5.3.0",
+    "js-yaml": "^4.1.0",
+    "protobufjs": "^7.2.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/js-yaml": "^4.0.9",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "qudag",
+    "dag",
+    "quantum",
+    "post-quantum",
+    "cli",
+    "command-line",
+    "consensus",
+    "cryptography"
+  ]
+}

@@ -1,0 +1,102 @@
+name: Reusable Platform Build
+
+on:
+  workflow_call:
+    inputs:
+      target:
+        required: true
+        type: string
+        description: 'Build target (e.g., x86_64-unknown-linux-gnu)'
+      host:
+        required: true
+        type: string
+        description: 'GitHub runner (e.g., ubuntu-latest)'
+      artifact_name:
+        required: true
+        type: string
+        description: 'Artifact name'
+      setup_commands:
+        required: false
+        type: string
+        description: 'Optional setup commands'
+      build_command:
+        required: false
+        type: string
+        default: 'cargo build --release'
+        description: 'Build command'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  build:
+    name: Build ${{ inputs.artifact_name }}
+    runs-on: ${{ inputs.host }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ inputs.target }}
+
+      - name: Setup platform dependencies
+        if: inputs.setup_commands
+        run: ${{ inputs.setup_commands }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ inputs.target }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ inputs.target }}-cargo-registry-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ inputs.target }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ inputs.target }}-cargo-build-
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install napi-rs/cli
+        run: npm install -g @napi-rs/cli
+
+      - name: Build release binary
+        run: |
+          npm ci
+          ${{ inputs.build_command }}
+
+      - name: Strip binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          strip target/${{ inputs.target }}/release/*.so 2>/dev/null || true
+          strip target/${{ inputs.target }}/release/*.dylib 2>/dev/null || true
+
+      - name: Create checksums
+        run: |
+          mkdir -p release-artifacts
+          ls target/${{ inputs.target }}/release/*.{node,so,dylib,dll} 2>/dev/null | while read f; do
+            if [ -f "$f" ]; then
+              cp "$f" release-artifacts/
+              cd release-artifacts && sha256sum "$(basename "$f")" >> checksums.txt && cd ..
+            fi
+          done
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ inputs.artifact_name }}
+          path: release-artifacts/
+          retention-days: 7

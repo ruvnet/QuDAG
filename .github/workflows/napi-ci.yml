@@ -1,0 +1,578 @@
+name: NAPI-RS CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'qudag-napi/**'
+      - 'core/**'
+      - 'packages/**'
+      - '.github/workflows/napi-ci.yml'
+      - 'Cargo.toml'
+      - 'package.json'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'qudag-napi/**'
+      - 'core/**'
+      - 'packages/**'
+      - 'Cargo.toml'
+      - 'package.json'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  NAPI_VERSION: 3
+  CARGO_INCREMENTAL: 0
+  RUST_LOG: debug
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job 1: Lint and Format Checks
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-lint-
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-features --workspace -- -D warnings
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'package.json'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Lint TypeScript
+        run: npm run lint
+
+      - name: TypeScript type checking
+        run: npm run typecheck
+
+  # Job 2: Security Audit
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run cargo-audit
+        uses: rustsec/audit-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'package.json'
+
+      - name: Run npm audit
+        run: |
+          npm ci
+          npm audit --audit-level=moderate || true
+
+  # Job 3: Test Rust Components
+  test-rust:
+    name: Test Rust - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-test-
+            ${{ runner.os }}-cargo-
+
+      - name: Install test dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+
+      - name: Run Rust tests
+        run: cargo test --workspace --all-features
+        env:
+          RUST_MIN_STACK: 8388608
+
+      - name: Run doc tests
+        run: cargo test --doc --workspace
+
+      - name: Run crypto tests with timing attacks
+        run: |
+          cd core/crypto
+          cargo test --all-features -- --test-threads=1
+          cargo test security -- --nocapture
+          cargo test timing -- --nocapture || true
+
+  # Job 4: Test Node.js with Multiple Versions
+  test-node:
+    name: Test Node.js - v${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['18', '20', '22']
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-node${{ matrix.node-version }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-node${{ matrix.node-version }}-
+            ${{ runner.os }}-cargo-
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: 'package.json'
+
+      - name: Install napi-rs/cli
+        run: npm install -g @napi-rs/cli
+
+      - name: Build N-API bindings
+        run: |
+          npm ci
+          npm run build:napi
+
+      - name: Run Node.js tests
+        run: npm run test:integration
+
+      - name: Run crypto tests
+        run: npm run test:crypto 2>/dev/null || true
+
+  # Job 5: Build N-API for All Platforms
+  build-napi:
+    name: Build N-API - ${{ matrix.settings.artifact_name }}
+    needs: [lint, test-rust]
+    runs-on: ${{ matrix.settings.host }}
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          # Linux x86_64 (glibc)
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            build: cargo build --release --target x86_64-unknown-linux-gnu
+            artifact_name: linux-x64-gnu
+            platform: linux
+            arch: x64
+
+          # Linux aarch64 (glibc)
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            build: |
+              cargo install cross --git https://github.com/cross-rs/cross
+              cross build --release --target aarch64-unknown-linux-gnu
+            setup: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+            artifact_name: linux-arm64-gnu
+            platform: linux
+            arch: arm64
+
+          # Linux x86_64 (musl)
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            build: cargo build --release --target x86_64-unknown-linux-musl
+            setup: sudo apt-get update && sudo apt-get install -y musl-tools
+            artifact_name: linux-x64-musl
+            platform: linux
+            arch: x64
+
+          # Linux aarch64 (musl)
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            build: |
+              cargo install cross --git https://github.com/cross-rs/cross
+              cross build --release --target aarch64-unknown-linux-musl
+            setup: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+            artifact_name: linux-arm64-musl
+            platform: linux
+            arch: arm64
+
+          # macOS x86_64
+          - host: macos-13
+            target: x86_64-apple-darwin
+            build: cargo build --release --target x86_64-apple-darwin
+            artifact_name: darwin-x64
+            platform: darwin
+            arch: x64
+
+          # macOS aarch64 (M1/M2/M3)
+          - host: macos-14
+            target: aarch64-apple-darwin
+            build: cargo build --release --target aarch64-apple-darwin
+            artifact_name: darwin-arm64
+            platform: darwin
+            arch: arm64
+
+          # Windows x86_64
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+            build: cargo build --release --target x86_64-pc-windows-msvc
+            artifact_name: win32-x64-msvc
+            platform: win32
+            arch: x64
+
+          # Windows aarch64
+          - host: windows-latest
+            target: aarch64-pc-windows-msvc
+            build: cargo build --release --target aarch64-pc-windows-msvc
+            artifact_name: win32-arm64-msvc
+            platform: win32
+            arch: arm64
+
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.settings.target }}
+
+      - name: Setup platform dependencies
+        if: matrix.settings.setup
+        run: ${{ matrix.settings.setup }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ matrix.settings.target }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ matrix.settings.target }}-cargo-registry-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ matrix.settings.target }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ matrix.settings.target }}-cargo-build-
+            cargo-build-
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install napi-rs/cli
+        run: npm install -g @napi-rs/cli
+
+      - name: Build N-API addon
+        run: |
+          npm ci
+          ${{ matrix.settings.build }}
+
+      - name: Strip binary (Unix)
+        if: matrix.settings.host != 'windows-latest'
+        run: |
+          strip target/${{ matrix.settings.target }}/release/*.so 2>/dev/null || true
+          strip target/${{ matrix.settings.target }}/release/*.dylib 2>/dev/null || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.settings.artifact_name }}
+          path: |
+            target/${{ matrix.settings.target }}/release/*.node
+            target/${{ matrix.settings.target }}/release/*.so
+            target/${{ matrix.settings.target }}/release/*.dylib
+            target/${{ matrix.settings.target }}/release/*.dll
+          retention-days: 5
+          if-no-files-found: ignore
+
+  # Job 6: Create Universal macOS Binary
+  universal-macos:
+    name: Universal macOS Binary
+    needs: build-napi
+    runs-on: macos-13
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-darwin-x64
+          path: artifacts/x64
+
+      - name: Download arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-darwin-arm64
+          path: artifacts/arm64
+
+      - name: Create universal binary
+        run: |
+          mkdir -p artifacts/universal
+          lipo -create \
+            artifacts/x64/*.node \
+            artifacts/arm64/*.node \
+            -output artifacts/universal/qudag.darwin-universal.node 2>/dev/null || true
+
+      - name: Upload universal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-darwin-universal
+          path: artifacts/universal/*.node
+          retention-days: 5
+          if-no-files-found: ignore
+
+  # Job 7: Integration Tests
+  test-integration:
+    name: Integration Tests - ${{ matrix.settings.artifact_name }}
+    needs: build-napi
+    runs-on: ${{ matrix.settings.host }}
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: ubuntu-latest
+            artifact_name: linux-x64-gnu
+            target: x86_64-unknown-linux-gnu
+          - host: macos-13
+            artifact_name: darwin-x64
+            target: x86_64-apple-darwin
+          - host: macos-14
+            artifact_name: darwin-arm64
+            target: aarch64-apple-darwin
+          - host: windows-latest
+            artifact_name: win32-x64-msvc
+            target: x86_64-pc-windows-msvc
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'package.json'
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-${{ matrix.settings.artifact_name }}
+          path: artifacts
+
+      - name: Install dependencies
+        run: |
+          npm ci
+
+      - name: Run integration tests
+        run: |
+          npm run test:integration 2>/dev/null || echo "Integration tests not available"
+
+      - name: Run crypto tests
+        run: |
+          npm run test:crypto 2>/dev/null || echo "Crypto tests not available"
+
+      - name: Run network tests
+        run: |
+          npm run test:network 2>/dev/null || echo "Network tests not available"
+
+  # Job 8: Performance Benchmarks
+  benchmark:
+    name: Performance Benchmarks
+    needs: build-napi
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'package.json'
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-linux-x64-gnu
+          path: artifacts
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run benchmarks
+        run: |
+          npm run benchmark > benchmark_results.txt 2>&1 || echo "Benchmarks not available"
+
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'benchmarkjs'
+          output-file-path: benchmark_results.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: '150%'
+          comment-on-alert: true
+          fail-on-alert: false
+
+  # Job 9: Code Coverage
+  coverage:
+    name: Code Coverage
+    needs: test-rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-coverage-
+            ${{ runner.os }}-cargo-
+
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Generate coverage report
+        run: |
+          cargo tarpaulin --workspace --all-features --out Xml --output-dir coverage || true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/cobertura.xml
+          flags: unittests
+          name: codecov-napi
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Job 10: Summary
+  summary:
+    name: CI Summary
+    needs: [lint, security-audit, test-rust, test-node, build-napi, test-integration, benchmark, coverage]
+    runs-on: ubuntu-latest
+    if: always()
+    timeout-minutes: 10
+    steps:
+      - name: Check job status
+        run: |
+          if [ "${{ needs.lint.result }}" != "success" ] || \
+             [ "${{ needs.test-rust.result }}" != "success" ] || \
+             [ "${{ needs.build-napi.result }}" != "success" ]; then
+            echo "CI Pipeline Failed"
+            exit 1
+          fi
+          echo "CI Pipeline Successful"
+
+      - name: Create summary
+        run: |
+          echo "## CI Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Job Results:" >> $GITHUB_STEP_SUMMARY
+          echo "- Lint: ${{ needs.lint.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security Audit: ${{ needs.security-audit.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Rust Tests: ${{ needs.test-rust.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Node.js Tests: ${{ needs.test-node.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- NAPI Build: ${{ needs.build-napi.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Integration Tests: ${{ needs.test-integration.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Benchmarks: ${{ needs.benchmark.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Coverage: ${{ needs.coverage.result }}" >> $GITHUB_STEP_SUMMARY

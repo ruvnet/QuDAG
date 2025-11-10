@@ -1,0 +1,289 @@
+{
+  "version": "1.0.0",
+  "name": "QuDAG Swarm Integration Configuration",
+  "description": "Comprehensive configuration for AgenticDB, agentic-flow, and claude-flow integration",
+
+  "agenticdb": {
+    "enabled": true,
+    "database": {
+      "type": "sqlite3",
+      "path": "/home/user/QuDAG/swarm/data/agenticdb.db",
+      "schemaPath": "/home/user/QuDAG/swarm/agenticdb/schema.sql",
+      "seedDataPath": "/home/user/QuDAG/swarm/agenticdb/seed.sql",
+      "maxConnections": 10,
+      "queryTimeout": 30000
+    },
+    "recording": {
+      "enabled": true,
+      "logAllOperations": true,
+      "auditTrailRetentionDays": 90,
+      "performanceMonitoring": {
+        "enabled": true,
+        "recordSlowQueries": true,
+        "slowQueryThresholdMs": 1000
+      }
+    },
+    "backup": {
+      "enabled": true,
+      "frequency": "daily",
+      "retentionDays": 30,
+      "backupPath": "/home/user/QuDAG/swarm/data/backups"
+    }
+  },
+
+  "agenticFlow": {
+    "enabled": true,
+    "workflowDefinitions": {
+      "basePath": "/home/user/QuDAG/swarm/agentic-flow",
+      "workflows": [
+        {
+          "name": "quantum-consensus-validation",
+          "file": "quantum-consensus-validation.yaml",
+          "enabled": true,
+          "maxConcurrent": 10
+        },
+        {
+          "name": "distributed-task-execution",
+          "file": "distributed-task-execution.yaml",
+          "enabled": true,
+          "maxConcurrent": 5
+        },
+        {
+          "name": "resource-exchange-settlement",
+          "file": "exchange-settlement.yaml",
+          "enabled": true,
+          "maxConcurrent": 20
+        },
+        {
+          "name": "dark-domain-resolution",
+          "file": "dark-domain-resolution.yaml",
+          "enabled": true,
+          "maxConcurrent": 15
+        }
+      ]
+    },
+    "execution": {
+      "defaultTimeout": 60000,
+      "maxRetries": 3,
+      "retryBackoffMs": 100,
+      "workStealingEnabled": true,
+      "workStealingThreshold": 80,
+      "monitoring": {
+        "enabled": true,
+        "metricsInterval": 5000
+      }
+    },
+    "performance": {
+      "targetConsensusLatencyMs": 5000,
+      "targetTaskThroughputPerSec": 100,
+      "targetAgentUtilizationPercent": 85,
+      "targetSuccessRate": 0.99
+    }
+  },
+
+  "claudeFlow": {
+    "enabled": true,
+    "taskDefinitions": {
+      "basePath": "/home/user/QuDAG/swarm/claude-flow",
+      "tasks": [
+        {
+          "name": "quantum-crypto-analysis",
+          "file": "quantum-crypto-research.yaml",
+          "enabled": true,
+          "priority": "high",
+          "assignedAgent": "researcher"
+        },
+        {
+          "name": "agent-behavior-analysis",
+          "file": "agent-behavior-analysis.yaml",
+          "enabled": true,
+          "priority": "medium",
+          "assignedAgent": "analyzer"
+        },
+        {
+          "name": "workflow-optimization",
+          "file": "workflow-optimization-design.yaml",
+          "enabled": true,
+          "priority": "high",
+          "assignedAgent": "architect"
+        },
+        {
+          "name": "security-audit-swarm",
+          "file": "security-audit.yaml",
+          "enabled": true,
+          "priority": "critical",
+          "assignedAgent": "security_specialist"
+        },
+        {
+          "name": "performance-benchmark-swarm",
+          "file": "performance-benchmarking.yaml",
+          "enabled": true,
+          "priority": "high",
+          "assignedAgent": "performance_engineer"
+        }
+      ]
+    },
+    "memory": {
+      "enabled": true,
+      "maxSlotsPerTask": 10,
+      "defaultTtlHours": 360,
+      "storage": {
+        "type": "memory",
+        "persistToDisk": true,
+        "persistencePath": "/home/user/QuDAG/swarm/data/memory"
+      },
+      "slots": [
+        {
+          "name": "quantum_crypto_research",
+          "ttlHours": 720,
+          "description": "Quantum cryptography research findings"
+        },
+        {
+          "name": "swarm_optimization_insights",
+          "ttlHours": 360,
+          "description": "Swarm behavior analysis and optimization insights"
+        },
+        {
+          "name": "security_findings",
+          "ttlHours": 1440,
+          "description": "Security audit findings and remediation tracking"
+        },
+        {
+          "name": "performance_baselines",
+          "ttlHours": 360,
+          "description": "Performance benchmark results"
+        }
+      ]
+    },
+    "execution": {
+      "defaultTimeout": 28800000,
+      "maxConcurrentTasks": 5,
+      "scheduling": {
+        "enabled": true,
+        "cronSchedules": {
+          "quantum_crypto_analysis": "0 2 * * MON",
+          "agent_behavior_analysis": "0 3 * * SUN",
+          "performance_benchmark": "0 4 * * SAT"
+        }
+      }
+    }
+  },
+
+  "integration": {
+    "enabled": true,
+    "codePath": "/home/user/QuDAG/swarm/integration",
+    "modules": [
+      {
+        "name": "agenticdb-client",
+        "file": "agenticdb-client.ts",
+        "enabled": true
+      },
+      {
+        "name": "agentic-flow-launcher",
+        "file": "agentic-flow-launcher.ts",
+        "enabled": true
+      },
+      {
+        "name": "claude-flow-tasks",
+        "file": "claude-flow-tasks.ts",
+        "enabled": true
+      }
+    ]
+  },
+
+  "monitoring": {
+    "enabled": true,
+    "metricsCollectionInterval": 60000,
+    "logLevel": "info",
+    "metrics": {
+      "agenticdb": {
+        "recordsPerMinute": true,
+        "queryPerformance": true,
+        "databaseSize": true,
+        "connectionPoolUsage": true
+      },
+      "agenticFlow": {
+        "workflowExecutionRate": true,
+        "stageDurations": true,
+        "errorRate": true,
+        "agentUtilization": true,
+        "workStealingEvents": true
+      },
+      "claudeFlow": {
+        "taskExecutionRate": true,
+        "stepDurations": true,
+        "successRate": true,
+        "memorySlotUsage": true
+      }
+    },
+    "alerting": {
+      "enabled": true,
+      "alertThresholds": {
+        "highErrorRate": 0.05,
+        "lowAgentUtilization": 0.5,
+        "slowWorkflow": 30000,
+        "databaseConnectionPoolExhausted": true
+      }
+    }
+  },
+
+  "dataDirectory": {
+    "path": "/home/user/QuDAG/swarm/data",
+    "subdirectories": {
+      "agenticdb": "agenticdb_data",
+      "backups": "backups",
+      "memory": "memory_slots",
+      "results": "results",
+      "logs": "logs"
+    }
+  },
+
+  "optimization": {
+    "consensus": {
+      "targetLatencyMs": 5000,
+      "dynamicTimeouts": true,
+      "adaptiveQuorum": true
+    },
+    "tasks": {
+      "targetThroughputPerSec": 100,
+      "dynamicLoadBalancing": true,
+      "workStealingStrategy": "aggressive",
+      "affinity": {
+        "enabled": true,
+        "preferRecentSuccess": true,
+        "considerNetworkProximity": true
+      }
+    },
+    "exchange": {
+      "targetLatencyMs": 3000,
+      "dynamicFeeCalculation": true,
+      "feeOptimization": true
+    }
+  },
+
+  "security": {
+    "enabled": true,
+    "encryption": {
+      "enabled": true,
+      "algorithm": "AES-256-GCM"
+    },
+    "audit": {
+      "enabled": true,
+      "logAllOperations": true,
+      "encryptAuditLog": true
+    },
+    "compliance": {
+      "enabled": true,
+      "standards": ["NIST-FIPS", "post-quantum-cryptography"]
+    }
+  },
+
+  "deployment": {
+    "environment": "development",
+    "docker": {
+      "enabled": false,
+      "imageName": "qudag-swarm",
+      "tag": "latest"
+    }
+  }
+}

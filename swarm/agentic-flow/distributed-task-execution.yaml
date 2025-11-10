@@ -1,0 +1,272 @@
+apiVersion: agentic-flow/v1
+kind: Workflow
+metadata:
+  name: distributed-task-execution
+  description: Hierarchical task distribution across swarm with dynamic load balancing
+  version: "1.0"
+  labels:
+    domain: task_distribution
+    criticality: high
+
+spec:
+  inputs:
+    tasks:
+      type: array
+      required: true
+      items:
+        type: object
+        properties:
+          task_id:
+            type: string
+          task_type:
+            type: string
+          resource_requirement_ruv:
+            type: integer
+          priority:
+            type: integer
+            enum: [0, 1, 2, 3]
+          timeout_ms:
+            type: integer
+          payload:
+            type: object
+
+  agents:
+    coordinator:
+      type: agent
+      agent_type: swarm_coordinator
+      capabilities:
+        - load_balance
+        - prioritize_tasks
+        - redistribute_work
+        - monitor_workers
+
+    workers:
+      type: agent-group
+      agent_type: worker
+      capabilities:
+        - execute_task
+        - report_status
+        - steal_work
+      min_count: 2
+      max_count: 50
+      scaling_policy: dynamic_based_on_queue_depth
+
+  workflow:
+    # Stage 1: Task Prioritization and Sorting
+    - stage: prioritize_tasks
+      description: Sort tasks by priority and resource requirements
+      action: agent_decision
+      agent: coordinator
+      decision_parameters:
+        input_tasks: "{{ input.tasks }}"
+        algorithm: ml_dsa_priority_sort
+        consider_deadline: true
+        consider_resource_constraints: true
+        consider_agent_affinity: true
+      outputs:
+        sorted_tasks:
+          type: array
+          description: Tasks sorted by priority and deadline
+        resource_allocation:
+          type: object
+          description: Estimated resource allocation per task
+        estimated_total_time_ms:
+          type: integer
+
+    # Stage 2: Worker Health Check
+    - stage: health_check
+      description: Verify worker availability and capacity
+      action: parallel_ping
+      to: workers
+      task:
+        operation: report_status
+        parameters:
+          timeout_ms: 1000
+      collect_responses: true
+      timeout_ms: 3000
+      failure_handling:
+        mark_unavailable: true
+        exclude_from_assignment: true
+
+    # Stage 3: Intelligent Task Assignment
+    - stage: assign_tasks
+      description: Assign tasks to available workers with load balancing
+      action: agent_decision
+      agent: coordinator
+      decision_parameters:
+        sorted_tasks: "{{ stage.prioritize_tasks.sorted_tasks }}"
+        worker_status: "{{ stage.health_check.responses }}"
+        algorithm: load_balanced_assignment
+        affinity_rules:
+          - prefer_worker_with_recent_success
+          - avoid_overloaded_workers
+          - consider_network_proximity
+          - consider_agent_specialization
+      outputs:
+        assignments:
+          type: object
+          description: "worker_id -> [task_id, ...]"
+        load_distribution:
+          type: object
+          description: Load balance metrics
+
+    # Stage 4: Parallel Task Execution
+    - stage: execute_tasks
+      description: Execute tasks in parallel on assigned workers
+      action: parallel_execute
+      to: workers
+      dynamic_assignment: true
+      work_stealing:
+        enabled: true
+        threshold: 80
+        max_steal_attempts: 3
+      task:
+        operation: execute_task
+        parameters:
+          task_id: "{{ assignment.task_id }}"
+          payload: "{{ assignment.payload }}"
+          timeout_ms: "{{ assignment.timeout_ms }}"
+          retry_allowed: true
+      timeout_ms: 300000
+      retry_policy:
+        max_attempts: 3
+        backoff_strategy: exponential
+        backoff_base_ms: 100
+        fallback_agent_group: workers
+      monitoring:
+        track_progress: true
+        report_interval_ms: 5000
+
+    # Stage 5: Result Collection
+    - stage: collect_results
+      description: Gather execution results from workers
+      action: gather_responses
+      from: workers
+      timeout_ms: 310000
+      partial_success:
+        min_required_completion: 0.8
+        handle_incomplete: retry
+        max_retry_attempts: 2
+      result_verification:
+        enabled: true
+        verify_with_quantum_signature: true
+
+    # Stage 6: Result Verification
+    - stage: verify_results
+      description: Verify task results using quantum signatures
+      action: parallel_verify
+      to: coordinator
+      task:
+        operation: verify_task_result
+        parameters:
+          task_result: "{{ item }}"
+          verification_type: ml_dsa_signature_check
+      timeout_ms: 30000
+      failure_handling:
+        mark_for_reexecution: true
+
+    # Stage 7: Completion and Reward Distribution
+    - stage: finalize
+      description: Record completion and distribute rewards
+      action: agent_action
+      agent: coordinator
+      action_details:
+        operation: finalize_task_batch
+        parameters:
+          results: "{{ stage.collect_results.results }}"
+          verification_status: "{{ stage.verify_results.status }}"
+          distribute_rewards: true
+          record_metrics: true
+          calculate_agent_ratings: true
+
+  outputs:
+    execution_summary:
+      type: object
+      properties:
+        total_tasks:
+          type: integer
+        completed_tasks:
+          type: integer
+        failed_tasks:
+          type: integer
+        retried_tasks:
+          type: integer
+        success_rate:
+          type: number
+        total_execution_time_ms:
+          type: integer
+        average_task_time_ms:
+          type: number
+        total_resources_consumed_ruv:
+          type: integer
+        participating_agents:
+          type: array
+        work_stealing_events:
+          type: integer
+        load_balance_efficiency:
+          type: number
+        agent_performance_ratings:
+          type: object
+
+  recording:
+    enabled: true
+    db_table: task_executions
+    record_on:
+      - stage: prioritize_tasks
+      - stage: health_check
+      - stage: assign_tasks
+      - stage: execute_tasks
+      - stage: finalize
+    record_fields:
+      - workflow_id
+      - task_ids
+      - worker_assignments
+      - execution_times_ms
+      - success_status
+      - resource_consumption_ruv
+      - work_stealing_events
+      - agent_ratings
+
+  error_handling:
+    - error: worker_failure
+      recovery: reassign_task
+      message: "Worker failed, reassigning task"
+      action: work_stealing_or_fallback_assignment
+
+    - error: timeout
+      recovery: retry_with_extended_timeout
+      message: "Task execution timed out"
+      action: increase_timeout_factor_by_1_5
+
+    - error: insufficient_resources
+      recovery: queue_task
+      message: "Insufficient resources, queueing task"
+      action: wait_for_available_capacity
+
+    - error: verification_failed
+      recovery: reexecute_task
+      message: "Result verification failed"
+
+  timeout_policy:
+    total_workflow_timeout_ms: 600000
+    stage_default_timeout_ms: 300000
+    health_check_timeout_ms: 3000
+
+  success_criteria:
+    - Minimum 80% task completion rate
+    - All results verified with quantum signatures
+    - Resource accounting complete
+    - Agent ratings updated
+
+  performance_targets:
+    task_throughput_per_sec: 100
+    average_task_latency_ms: 3000
+    success_rate: 0.95
+    worker_utilization_percent: 85
+    work_stealing_effectiveness: 0.18
+
+  monitoring:
+    track_queue_depth: true
+    track_worker_utilization: true
+    track_work_stealing_frequency: true
+    track_resource_consumption: true

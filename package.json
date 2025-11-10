@@ -1,0 +1,42 @@
+{
+  "name": "qudag-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "QuDAG N-API Integration - Quantum-resistant DAG with native performance",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:napi": "npm run build -w @qudag/napi-core",
+    "build:cli": "npm run build -w @qudag/cli",
+    "build:mcp-stdio": "npm run build -w @qudag/mcp-stdio",
+    "build:mcp-sse": "npm run build -w @qudag/mcp-sse",
+    "test": "npm run test --workspaces --if-present",
+    "test:unit": "cargo test --workspace",
+    "test:integration": "vitest run",
+    "bench": "cargo bench --workspace",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present && cargo clean",
+    "artifacts": "napi artifacts -d packages/napi-core",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0",
+    "@types/node": "^20.10.0",
+    "@vitest/ui": "^1.0.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.0",
+    "prettier": "^3.1.0",
+    "eslint": "^8.55.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/QuDAG.git"
+  },
+  "license": "MIT"
+}

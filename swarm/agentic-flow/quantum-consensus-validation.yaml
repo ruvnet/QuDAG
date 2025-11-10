@@ -1,0 +1,223 @@
+apiVersion: agentic-flow/v1
+kind: Workflow
+metadata:
+  name: quantum-consensus-validation
+  description: Distributed quantum cryptographic validation across agent swarm
+  version: "1.0"
+  labels:
+    domain: consensus
+    criticality: high
+
+spec:
+  inputs:
+    transaction:
+      type: object
+      required: true
+      schema:
+        type: object
+        properties:
+          id:
+            type: string
+          data:
+            type: object
+          signature:
+            type: string
+          timestamp_ms:
+            type: integer
+
+  agents:
+    quantum_validators:
+      type: agent-group
+      count: "5-10"
+      agent_type: quantum_validator
+      capabilities:
+        - ml_dsa_verify
+        - ml_kem_operations
+        - fingerprint_generation
+      selection_strategy: availability_based
+
+    consensus_coordinator:
+      type: agent
+      agent_type: consensus_lead
+      capabilities:
+        - coordinate_votes
+        - finalize_decisions
+        - record_dag_vertex
+
+  workflow:
+    # Stage 1: Distribute validation tasks to all validators
+    - stage: distribute
+      description: Distribute quantum verification tasks to validator agents
+      action: parallel_distribute
+      to: quantum_validators
+      task:
+        operation: verify_quantum_signature
+        parameters:
+          transaction_id: "{{ input.transaction.id }}"
+          signature: "{{ input.transaction.signature }}"
+          timeout_ms: 5000
+      retry_policy:
+        max_attempts: 3
+        backoff_ms: 100
+        exponential_backoff: true
+      timeout_ms: 6000
+
+    # Stage 2: Collect and aggregate validation results
+    - stage: collect_results
+      description: Collect verification results from all validators
+      action: gather_responses
+      from: quantum_validators
+      aggregation: consensus_quorum
+      quorum_threshold: 0.67
+      timeout_ms: 10000
+      partial_success:
+        min_required_completion: 0.6
+        handle_incomplete: retry_stage
+
+    # Stage 3: Make consensus decision based on validator votes
+    - stage: consensus_decision
+      description: Make consensus decision based on validator votes
+      action: agent_decision
+      agent: consensus_coordinator
+      decision_parameters:
+        validation_results: "{{ stage.collect_results.responses }}"
+        quorum_threshold: 0.67
+        algorithm: ml_dsa_quorum_vote
+      possible_outcomes:
+        - name: valid
+          condition: "quorum >= 0.67 AND all_signatures_valid"
+          next_stage: record_finality
+        - name: invalid
+          condition: "quorum < 0.67 OR signature_mismatch"
+          next_stage: escalate_to_secondary_validators
+        - name: ambiguous
+          condition: "50% split AND responses_insufficient"
+          next_stage: request_additional_validators
+
+    # Stage 4: Record consensus finality in DAG
+    - stage: record_finality
+      description: Record consensus finality in DAG and AgenticDB
+      action: agent_action
+      agent: consensus_coordinator
+      action_details:
+        operation: record_dag_vertex
+        parameters:
+          vertex_type: "consensus_finalized"
+          merkle_proof: "{{ stage.consensus_decision.merkle_proof }}"
+          participating_agents: "{{ agents.quantum_validators.*.id }}"
+          decision_outcome: "{{ stage.consensus_decision.outcome }}"
+      error_handling:
+        on_failure: escalate_to_backup_coordinator
+
+    # Stage 5: Escalation path for ambiguous cases
+    - stage: escalate_to_secondary_validators
+      description: Request additional validators when consensus is unclear
+      action: parallel_distribute
+      to: quantum_validators
+      condition: "{{ stage.consensus_decision.outcome != 'valid' }}"
+      task:
+        operation: deep_verify_quantum_signature
+        parameters:
+          transaction_id: "{{ input.transaction.id }}"
+          verification_level: "intensive"
+          timeout_ms: 15000
+      retry_policy:
+        max_attempts: 2
+        backoff_ms: 250
+
+    # Stage 6: Final decision after escalation
+    - stage: final_consensus
+      description: Make final consensus decision after escalation
+      action: agent_decision
+      agent: consensus_coordinator
+      condition: "{{ stage.consensus_decision.outcome != 'valid' }}"
+      decision_parameters:
+        escalation_results: "{{ stage.escalate_to_secondary_validators.responses }}"
+        quorum_threshold: 0.75
+      outputs:
+        final_outcome: string
+        final_confidence: number
+
+    # Stage 7: Record final result
+    - stage: record_final_result
+      description: Record final validation result
+      action: agent_action
+      agent: consensus_coordinator
+      action_details:
+        operation: record_consensus_result
+        parameters:
+          transaction_id: "{{ input.transaction.id }}"
+          final_outcome: "{{ stage.final_consensus.final_outcome }}"
+          confidence_score: "{{ stage.final_consensus.final_confidence }}"
+          validators_count: "{{ agents.quantum_validators.count }}"
+          total_verification_rounds: "{{ 1 + (stage.consensus_decision.outcome != 'valid' ? 1 : 0) }}"
+
+  outputs:
+    consensus_result:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+        is_valid:
+          type: boolean
+        validation_round:
+          type: integer
+        participating_agents:
+          type: array
+          items:
+            type: string
+        merkle_proof:
+          type: string
+        confidence_score:
+          type: number
+        timestamp_ms:
+          type: integer
+        escalation_required:
+          type: boolean
+
+  recording:
+    enabled: true
+    db_table: consensus_workflows
+    record_on:
+      - stage_completed
+      - decision_made
+      - escalation_triggered
+    record_fields:
+      - workflow_id
+      - transaction_id
+      - agent_decisions
+      - validation_results
+      - execution_time_ms
+      - outcome
+      - participating_agents
+      - merkle_proof
+      - confidence_score
+
+  error_handling:
+    - error: timeout
+      recovery: escalate_to_secondary_validators
+      message: "Initial validation timed out, escalating"
+
+    - error: quorum_not_reached
+      recovery: request_additional_validators
+      message: "Insufficient quorum, requesting additional validators"
+
+    - error: signature_mismatch
+      recovery: escalate_to_backup_coordinator
+      message: "Signature verification mismatch detected"
+
+  timeout_policy:
+    total_workflow_timeout_ms: 30000
+    stage_default_timeout_ms: 10000
+
+  success_criteria:
+    - All validators return results
+    - Quorum threshold reached
+    - Merkle proof generated
+    - Result recorded in AgenticDB
+
+  performance_targets:
+    consensus_time_ms: 5000
+    throughput_txns_per_sec: 1000
+    success_rate: 0.99
+    fault_tolerance: byzantine_resistant

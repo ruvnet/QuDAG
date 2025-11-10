@@ -1,0 +1,448 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  # Job 1: Generate Rust API Documentation
+  generate-rust-docs:
+    name: Generate Rust API Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-docs-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-docs-
+
+      - name: Generate Rust documentation
+        env:
+          RUSTDOCFLAGS: --cfg docsrs
+        run: |
+          cargo doc --workspace --all-features --no-deps --document-private-items 2>&1 | tee doc_build.log
+
+      - name: Create index.html for Rust docs
+        run: |
+          mkdir -p target/doc/index-files
+          cat > target/doc/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>QuDAG Rust API Documentation</title>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+              body { font-family: sans-serif; margin: 40px; background-color: #f5f5f5; }
+              .container { max-width: 900px; margin: 0 auto; background: white; padding: 20px; border-radius: 5px; }
+              h1 { color: #333; border-bottom: 3px solid #0066cc; padding-bottom: 10px; }
+              .crate { margin: 20px 0; padding: 15px; border-left: 4px solid #0066cc; }
+              a { color: #0066cc; text-decoration: none; }
+              a:hover { text-decoration: underline; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>QuDAG Rust API Documentation</h1>
+              <p>Complete API reference for QuDAG's Rust crates</p>
+
+              <h2>Core Crates</h2>
+
+              <div class="crate">
+                <h3><a href="qudag/index.html">qudag</a></h3>
+                <p>Main QuDAG node implementation</p>
+              </div>
+
+              <div class="crate">
+                <h3><a href="qudag_crypto/index.html">qudag-crypto</a></h3>
+                <p>Quantum-resistant cryptography (ML-DSA, ML-KEM, HQC)</p>
+              </div>
+
+              <div class="crate">
+                <h3><a href="qudag_dag/index.html">qudag-dag</a></h3>
+                <p>Directed Acyclic Graph and QR-Avalanche consensus</p>
+              </div>
+
+              <div class="crate">
+                <h3><a href="qudag_network/index.html">qudag-network</a></h3>
+                <p>P2P networking, onion routing, dark addressing</p>
+              </div>
+
+              <div class="crate">
+                <h3><a href="qudag_protocol/index.html">qudag-protocol</a></h3>
+                <p>Protocol definitions and message structures</p>
+              </div>
+
+              <div class="crate">
+                <h3><a href="qudag_vault/index.html">qudag-vault</a></h3>
+                <p>Key management and vault operations</p>
+              </div>
+
+              <div class="crate">
+                <h3><a href="qudag_exchange/index.html">qudag-exchange</a></h3>
+                <p>rUv token exchange and business plan implementation</p>
+              </div>
+
+              <div class="crate">
+                <h3><a href="qudag_mcp/index.html">qudag-mcp</a></h3>
+                <p>Model Context Protocol integration</p>
+              </div>
+
+              <h2>Additional Resources</h2>
+              <ul>
+                <li><a href="../../index.html">Main Documentation</a></li>
+                <li><a href="../../build/index.html">Build Documentation</a></li>
+                <li><a href="../../CHANGELOG.html">Changelog</a></li>
+              </ul>
+            </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Upload Rust docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-docs
+          path: target/doc/
+          retention-days: 30
+
+  # Job 2: Generate TypeScript/NAPI Documentation
+  generate-ts-docs:
+    name: Generate TypeScript Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'package.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate TypeScript documentation
+        run: |
+          npm run build:types 2>/dev/null || true
+          npx typedoc --out ts-docs packages/*/src 2>/dev/null || true
+          npx typedoc --out ts-docs --json ts-docs/typedoc.json packages/*/src 2>/dev/null || true
+
+      - name: Create TypeScript docs index
+        run: |
+          mkdir -p ts-docs
+          cat > ts-docs/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>QuDAG TypeScript/NAPI Documentation</title>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+              body { font-family: sans-serif; margin: 40px; background-color: #f5f5f5; }
+              .container { max-width: 900px; margin: 0 auto; background: white; padding: 20px; border-radius: 5px; }
+              h1 { color: #333; border-bottom: 3px solid #00cc00; padding-bottom: 10px; }
+              .package { margin: 20px 0; padding: 15px; border-left: 4px solid #00cc00; }
+              a { color: #00cc00; text-decoration: none; }
+              a:hover { text-decoration: underline; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>QuDAG TypeScript/NAPI API Documentation</h1>
+              <p>Complete API reference for QuDAG's TypeScript and N-API packages</p>
+
+              <h2>Core Packages</h2>
+
+              <div class="package">
+                <h3><a href="packages/napi-core/index.html">@qudag/napi</a></h3>
+                <p>Core N-API bindings for quantum cryptography and consensus</p>
+              </div>
+
+              <div class="package">
+                <h3><a href="packages/cli/index.html">@qudag/cli</a></h3>
+                <p>Command-line interface for QuDAG node operations</p>
+              </div>
+
+              <div class="package">
+                <h3><a href="packages/mcp-stdio/index.html">@qudag/mcp-stdio</a></h3>
+                <p>Model Context Protocol stdio transport</p>
+              </div>
+
+              <div class="package">
+                <h3><a href="packages/mcp-sse/index.html">@qudag/mcp-sse</a></h3>
+                <p>Model Context Protocol Server-Sent Events transport</p>
+              </div>
+
+              <h2>Features</h2>
+              <ul>
+                <li>Quantum-resistant cryptography</li>
+                <li>DAG consensus mechanism</li>
+                <li>P2P networking with onion routing</li>
+                <li>Dark domain addressing</li>
+                <li>rUv token exchange</li>
+              </ul>
+
+              <h2>Resources</h2>
+              <ul>
+                <li><a href="../../README.html">README</a></li>
+                <li><a href="../../index.html">Main Documentation</a></li>
+              </ul>
+            </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Upload TypeScript docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ts-docs
+          path: ts-docs/
+          retention-days: 30
+
+  # Job 3: Prepare Documentation Site
+  prepare-docs-site:
+    name: Prepare Documentation Site
+    needs: [generate-rust-docs, generate-ts-docs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Rust docs
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-docs
+          path: public/rust
+
+      - name: Download TypeScript docs
+        uses: actions/download-artifact@v4
+        with:
+          name: ts-docs
+          path: public/typescript
+
+      - name: Copy static docs
+        run: |
+          mkdir -p public/guides public/api
+          cp -r docs/* public/ 2>/dev/null || true
+
+      - name: Create main index
+        run: |
+          cat > public/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>QuDAG Documentation</title>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+              * { margin: 0; padding: 0; }
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                line-height: 1.6;
+                color: #333;
+              }
+              header {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 60px 20px;
+                text-align: center;
+              }
+              header h1 { font-size: 3em; margin-bottom: 10px; }
+              header p { font-size: 1.2em; opacity: 0.9; }
+              .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
+              .grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 20px;
+                margin: 40px 0;
+              }
+              .card {
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                padding: 20px;
+                text-decoration: none;
+                color: #333;
+                transition: all 0.3s ease;
+              }
+              .card:hover {
+                transform: translateY(-5px);
+                box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+              }
+              .card h3 { color: #667eea; margin-bottom: 10px; }
+              .card p { opacity: 0.7; }
+              a { color: #667eea; }
+              a:hover { text-decoration: underline; }
+              footer {
+                background: #f5f5f5;
+                padding: 20px;
+                text-align: center;
+                margin-top: 60px;
+                border-top: 1px solid #ddd;
+              }
+            </style>
+          </head>
+          <body>
+            <header>
+              <h1>QuDAG Documentation</h1>
+              <p>Quantum-resistant DAG with Native Performance</p>
+            </header>
+
+            <div class="container">
+              <h2>Getting Started</h2>
+              <div class="grid">
+                <a href="README.html" class="card">
+                  <h3>Read Me</h3>
+                  <p>Overview and quick start guide</p>
+                </a>
+                <a href="rust/index.html" class="card">
+                  <h3>Rust API</h3>
+                  <p>Complete Rust crate documentation</p>
+                </a>
+                <a href="typescript/index.html" class="card">
+                  <h3>TypeScript API</h3>
+                  <p>N-API and TypeScript packages</p>
+                </a>
+              </div>
+
+              <h2>Documentation</h2>
+              <div class="grid">
+                <a href="build/index.html" class="card">
+                  <h3>Build Guide</h3>
+                  <p>Building, testing, and CI/CD workflows</p>
+                </a>
+                <a href="build/platform-matrix.html" class="card">
+                  <h3>Platform Matrix</h3>
+                  <p>Supported platforms and architectures</p>
+                </a>
+                <a href="build/release-process.html" class="card">
+                  <h3>Release Process</h3>
+                  <p>Versioning and release automation</p>
+                </a>
+              </div>
+
+              <h2>Key Features</h2>
+              <ul style="margin-left: 20px; margin-top: 20px;">
+                <li><strong>Quantum-Resistant Cryptography:</strong> ML-DSA, ML-KEM, HQC</li>
+                <li><strong>DAG Consensus:</strong> QR-Avalanche with quantum-resistant finality</li>
+                <li><strong>P2P Networking:</strong> Onion routing, dark addressing, NAT traversal</li>
+                <li><strong>Multi-Platform:</strong> Linux, macOS, Windows, WebAssembly</li>
+                <li><strong>N-API Bindings:</strong> Native Node.js support across 15+ platforms</li>
+                <li><strong>Exchange System:</strong> rUv token with business plan distribution</li>
+              </ul>
+
+              <h2>Useful Links</h2>
+              <ul style="margin-left: 20px; margin-top: 20px;">
+                <li><a href="https://github.com/ruvnet/QuDAG">GitHub Repository</a></li>
+                <li><a href="https://www.npmjs.com/package/@qudag/napi">npm Package</a></li>
+                <li><a href="CHANGELOG.html">Changelog</a></li>
+              </ul>
+            </div>
+
+            <footer>
+              <p>&copy; 2025 QuDAG. All rights reserved.</p>
+              <p><a href="https://github.com/ruvnet/QuDAG">GitHub</a> | <a href="LICENSE.md">License</a></p>
+            </footer>
+          </body>
+          </html>
+          EOF
+
+      - name: Create .nojekyll
+        run: touch public/.nojekyll
+
+      - name: List public directory
+        run: find public -type f -name "*.html" | head -20
+
+      - name: Upload site
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-site
+          path: public/
+          retention-days: 30
+
+  # Job 4: Deploy to GitHub Pages
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    needs: prepare-docs-site
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download site
+        uses: actions/download-artifact@v4
+        with:
+          name: documentation-site
+          path: public
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # Job 5: Documentation Summary
+  docs-summary:
+    name: Documentation Summary
+    needs: [generate-rust-docs, generate-ts-docs, prepare-docs-site, deploy-pages]
+    runs-on: ubuntu-latest
+    if: always()
+    timeout-minutes: 10
+    steps:
+      - name: Generate documentation summary
+        run: |
+          echo "## Documentation Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Status:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Rust Docs**: ${{ needs.generate-rust-docs.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **TypeScript Docs**: ${{ needs.generate-ts-docs.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Site Preparation**: ${{ needs.prepare-docs-site.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Pages Deploy**: ${{ needs.deploy-pages.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Documentation Includes:" >> $GITHUB_STEP_SUMMARY
+          echo "- Rust API documentation with private items" >> $GITHUB_STEP_SUMMARY
+          echo "- TypeScript/N-API package references" >> $GITHUB_STEP_SUMMARY
+          echo "- Build and release process guides" >> $GITHUB_STEP_SUMMARY
+          echo "- Platform support matrix" >> $GITHUB_STEP_SUMMARY
+          echo "- Quick start and examples" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "Visit GitHub Pages URL to view deployed documentation" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,36 @@
+# Source files
+src/
+target/
+Cargo.toml
+Cargo.lock
+build.rs
+
+# Development files
+*.log
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts (keep only the final .node files)
+*.o
+*.so
+*.dylib
+*.dll
+*.a
+
+# Rust build directory
+target/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Tests
+__test__/
+*.test.js
+*.test.mjs
+
+# CI
+.github/

@@ -1,0 +1,230 @@
+apiVersion: claude-flow/v1
+kind: Task
+metadata:
+  name: quantum-crypto-analysis
+  title: "Analyze Post-Quantum Cryptography Implementation"
+  description: "Research quantum resistance of ML-DSA, ML-KEM, and HQC implementations"
+  priority: high
+  assigned_agent: researcher
+  estimated_duration_hours: 8
+
+spec:
+  objective: |
+    Conduct comprehensive analysis of QuDAG's quantum-resistant cryptographic implementations
+    to identify potential vulnerabilities, optimization opportunities, and ensure NIST compliance.
+
+  context:
+    domain: quantum_cryptography
+    scope:
+      - ml_dsa_implementation
+      - ml_kem_implementation
+      - hqc_implementation
+      - blake3_hashing
+      - timing_attack_resistance
+    tools_required:
+      - code_search
+      - security_analyzer
+      - benchmark_runner
+      - vulnerability_scanner
+    data_sources:
+      - code_repository
+      - test_suite
+      - performance_benchmarks
+      - security_standards
+
+  success_criteria:
+    - Documented ML-DSA/ML-KEM/HQC implementation review
+    - Security vulnerability assessment with severity ratings
+    - Performance analysis with bottleneck identification
+    - Recommendations for optimization with estimated impact (10-25% improvement)
+    - Timing attack resistance verification
+    - NIST compliance assessment
+
+  execution_steps:
+    - step: 1
+      name: Research Phase
+      description: |
+        Gather current NIST post-quantum standards (FIPS 203/204/205) and compare to QuDAG implementation.
+        Search for known vulnerabilities in similar implementations.
+      sub_tasks:
+        - research_nist_fips_standards_2024
+        - search_ml_dsa_published_vulnerabilities
+        - search_ml_kem_published_vulnerabilities
+        - search_hqc_published_vulnerabilities
+        - review_cryptanalysis_papers
+      expected_output: |
+        Comprehensive document covering:
+        - Current NIST standards vs QuDAG implementation
+        - Known vulnerability classes and mitigation strategies
+      output_type: research_report
+      target_duration_minutes: 60
+
+    - step: 2
+      name: Code Analysis
+      description: |
+        Analyze QuDAG crypto implementations for adherence to standards,
+        constant-time operations, and side-channel resistance.
+      sub_tasks:
+        - analyze_ml_dsa_implementation_security
+        - check_constant_time_properties
+        - verify_memory_safety
+        - review_test_coverage_adequacy
+        - audit_random_number_generation
+        - check_key_material_zeroization
+      expected_output: |
+        Detailed code review including:
+        - Implementation correctness vs NIST spec
+        - Constant-time property verification
+        - Memory safety analysis
+        - RNG quality assessment
+      output_type: code_analysis_report
+      target_duration_minutes: 120
+
+    - step: 3
+      name: Security Audit
+      description: |
+        Conduct security-focused review for timing attacks, padding oracle vulnerabilities,
+        and other attack vectors specific to post-quantum cryptography.
+      sub_tasks:
+        - timing_attack_analysis_ml_dsa
+        - timing_attack_analysis_ml_kem
+        - padding_oracle_vulnerability_assessment
+        - memory_access_pattern_analysis
+        - cryptographic_property_verification
+        - fault_injection_resistance_check
+      expected_output: |
+        Security audit report with:
+        - Identified vulnerabilities with CVSS scores
+        - Attack surface analysis
+        - Risk assessment and prioritization
+      output_type: security_audit_report
+      target_duration_minutes: 90
+
+    - step: 4
+      name: Performance Profiling
+      description: |
+        Profile quantum crypto operations across different data sizes and platforms.
+        Identify hot paths and optimization opportunities.
+      sub_tasks:
+        - benchmark_ml_kem_keygen_operations
+        - benchmark_ml_dsa_sign_verify_operations
+        - benchmark_hqc_encryption_decryption
+        - profile_cpu_utilization
+        - profile_memory_usage
+        - analyze_performance_bottlenecks
+        - compare_against_reference_implementations
+      expected_output: |
+        Performance analysis including:
+        - Baseline metrics for all crypto operations
+        - Identified bottlenecks with hot path analysis
+        - Optimization opportunities with impact estimates
+      output_type: performance_report
+      target_duration_minutes: 100
+
+    - step: 5
+      name: Optimization Recommendations
+      description: |
+        Provide prioritized recommendations for security and performance improvements
+        with implementation complexity and estimated impact metrics.
+      sub_tasks:
+        - prioritize_security_recommendations
+        - prioritize_performance_optimizations
+        - estimate_implementation_complexity
+        - estimate_performance_impact
+        - draft_implementation_roadmap
+      outputs:
+        - high_priority_security_fixes:
+            type: list
+            description: Critical security issues requiring immediate fixes
+        - medium_priority_optimizations:
+            type: list
+            description: Important performance and security improvements
+        - low_priority_improvements:
+            type: list
+            description: Optional enhancements with lower priority
+        - estimated_impact_metrics:
+            type: object
+            description: Expected performance improvements after optimizations
+      output_type: recommendations_report
+      target_duration_minutes: 90
+
+  timeline_hours: 8
+  estimated_output_size: 50_pages
+
+  memory_slots:
+    - quantum_crypto_research:
+        ttl_hours: 720
+        description: "Quantum cryptography research findings and recommendations"
+    - ml_dsa_analysis:
+        ttl_hours: 720
+        description: "ML-DSA implementation analysis and security assessment"
+    - ml_kem_analysis:
+        ttl_hours: 720
+        description: "ML-KEM implementation analysis and performance data"
+    - hqc_analysis:
+        ttl_hours: 720
+        description: "HQC implementation analysis and security findings"
+    - security_findings:
+        ttl_hours: 1440
+        description: "Security vulnerabilities and remediation tracking"
+    - performance_benchmarks:
+        ttl_hours: 360
+        description: "Crypto operation performance baselines"
+
+  outputs:
+    main_report:
+      type: markdown
+      path: docs/security/quantum-crypto-analysis.md
+      sections:
+        - Executive Summary
+        - NIST Standards Compliance Assessment
+        - Implementation Security Review
+        - Identified Vulnerabilities
+        - Performance Benchmarking Results
+        - Bottleneck Analysis
+        - Optimization Recommendations
+        - Implementation Roadmap
+        - Risk Assessment
+        - References and Standards
+
+    security_findings_db:
+      type: sqlite
+      path: docs/security/crypto-findings.db
+      tables:
+        - security_findings
+        - vulnerability_details
+        - remediation_tracking
+
+    performance_data:
+      type: json
+      path: docs/benchmarks/crypto-performance.json
+      schema:
+        - operation_type
+        - baseline_metrics
+        - performance_distribution
+        - optimization_targets
+
+  dependencies:
+    - code_repository_access_required: true
+    - test_suite_executable: true
+
+  recording:
+    enabled: true
+    db_table: claude_flow_tasks
+    task_type: quantum_research
+    record_findings: true
+    link_memory_slots: true
+
+  deliverables:
+    - quantum_crypto_security_report_pdf
+    - performance_benchmarking_data_json
+    - vulnerability_database_sqlite
+    - optimization_roadmap_document
+    - code_recommendations_with_examples
+
+  success_metrics:
+    - All NIST standards documented and assessed
+    - All known vulnerabilities analyzed
+    - Performance baseline established
+    - Optimization recommendations prioritized
+    - Implementation roadmap created

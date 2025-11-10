@@ -1,0 +1,59 @@
+{
+  "name": "@qudag/napi-core",
+  "version": "0.1.0",
+  "description": "N-API bindings for QuDAG quantum-resistant DAG and cryptography",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "napi": {
+    "name": "qudag-napi-core",
+    "triples": {
+      "defaults": true,
+      "additional": [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "aarch64-unknown-linux-musl",
+        "aarch64-pc-windows-msvc"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "prepublishOnly": "napi prepublish -t npm",
+    "test": "node --test __test__/**/*.test.mjs",
+    "artifacts": "napi artifacts",
+    "version": "napi version"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0"
+  },
+  "engines": {
+    "node": ">= 18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/QuDAG"
+  },
+  "keywords": [
+    "quantum-resistant",
+    "post-quantum",
+    "cryptography",
+    "dag",
+    "consensus",
+    "ml-dsa",
+    "ml-kem",
+    "napi",
+    "rust"
+  ],
+  "license": "MIT OR Apache-2.0",
+  "optionalDependencies": {
+    "@qudag/napi-core-darwin-x64": "0.1.0",
+    "@qudag/napi-core-darwin-arm64": "0.1.0",
+    "@qudag/napi-core-linux-x64-gnu": "0.1.0",
+    "@qudag/napi-core-linux-x64-musl": "0.1.0",
+    "@qudag/napi-core-linux-arm64-gnu": "0.1.0",
+    "@qudag/napi-core-linux-arm64-musl": "0.1.0",
+    "@qudag/napi-core-win32-x64-msvc": "0.1.0",
+    "@qudag/napi-core-win32-arm64-msvc": "0.1.0"
+  }
+}

@@ -1,7 +1,7 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use qudag_crypto::{
-    kem::{Ciphertext as CoreCiphertext, PublicKey as CorePublicKey, SecretKey as CoreSecretKey, SharedSecret as CoreSharedSecret},
+    kem::{Ciphertext as CoreCiphertext, PublicKey as CorePublicKey, SecretKey as CoreSecretKey},
     MlKem768,
 };
 
@@ -26,7 +26,7 @@ impl MlKem {
     /// ```js
     /// const { publicKey, secretKey } = MlKem.keygen();
     /// ```
-    #[napi(factory)]
+    #[napi]
     pub fn keygen() -> Result<MlKemKeyPair> {
         let (pk, sk) = MlKem768::keygen()
             .map_err(|e| Error::from_reason(format!("Key generation failed: {}", e)))?;

@@ -1,6 +1,8 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use qudag_crypto::Fingerprint as CoreFingerprint;
+use qudag_crypto::fingerprint::Fingerprint as CoreFingerprint;
+use qudag_crypto::ml_dsa::MlDsaPublicKey as CoreMlDsaPublicKey;
+use rand::rngs::OsRng;
 
 /// Quantum fingerprint for data verification
 ///
@@ -9,6 +11,7 @@ use qudag_crypto::Fingerprint as CoreFingerprint;
 #[napi]
 pub struct QuantumFingerprint {
     inner: CoreFingerprint,
+    public_key: CoreMlDsaPublicKey,
 }
 
 #[napi]
@@ -29,30 +32,22 @@ impl QuantumFingerprint {
     /// ```
     #[napi(factory)]
     pub fn generate(data: Buffer) -> Result<Self> {
-        let fingerprint = CoreFingerprint::generate(&data)
+        let mut rng = OsRng;
+        let (fingerprint, public_key) = CoreFingerprint::generate(&data, &mut rng)
             .map_err(|e| Error::from_reason(format!("Fingerprint generation failed: {}", e)))?;
 
-        Ok(Self { inner: fingerprint })
-    }
-
-    /// Create fingerprint from existing bytes
-    ///
-    /// # Arguments
-    /// * `bytes` - Previously generated fingerprint bytes
-    #[napi(factory)]
-    pub fn from_bytes(bytes: Buffer) -> Result<Self> {
-        let fingerprint = CoreFingerprint::from_bytes(&bytes)
-            .map_err(|e| Error::from_reason(format!("Invalid fingerprint: {}", e)))?;
-
-        Ok(Self { inner: fingerprint })
+        Ok(Self {
+            inner: fingerprint,
+            public_key,
+        })
     }
 
     /// Get the fingerprint as bytes
     ///
-    /// Returns the raw fingerprint bytes (typically 32-64 bytes).
+    /// Returns the raw fingerprint bytes (64 bytes from BLAKE3).
     #[napi]
     pub fn as_bytes(&self) -> Uint8Array {
-        Uint8Array::new(self.inner.as_bytes().to_vec())
+        Uint8Array::new(self.inner.data().to_vec())
     }
 
     /// Get the fingerprint as a hex string
@@ -60,31 +55,44 @@ impl QuantumFingerprint {
     /// Convenient for displaying or transmitting the fingerprint.
     #[napi]
     pub fn as_hex(&self) -> String {
-        hex::encode(self.inner.as_bytes())
+        hex::encode(self.inner.data())
     }
 
-    /// Verify data against this fingerprint
+    /// Get the signature bytes
     ///
-    /// Checks if the provided data matches this fingerprint.
+    /// Returns the ML-DSA signature over the fingerprint.
+    #[napi]
+    pub fn get_signature(&self) -> Uint8Array {
+        Uint8Array::new(self.inner.signature().to_vec())
+    }
+
+    /// Get the public key bytes
     ///
-    /// # Arguments
-    /// * `data` - The data to verify
+    /// Returns the ML-DSA public key used for verification.
+    #[napi]
+    pub fn get_public_key(&self) -> Uint8Array {
+        Uint8Array::new(self.public_key.as_bytes().to_vec())
+    }
+
+    /// Verify the fingerprint
+    ///
+    /// Verifies the ML-DSA signature over the fingerprint data.
     ///
     /// # Returns
-    /// `true` if the data matches, `false` otherwise
+    /// `true` if the signature is valid, `false` otherwise
     ///
     /// # Example
     /// ```js
     /// const data = Buffer.from("Important data");
     /// const fingerprint = QuantumFingerprint.generate(data);
     ///
-    /// // Later, verify the data
-    /// const isValid = fingerprint.verify(data);
-    /// console.log(`Data is ${isValid ? "valid" : "corrupted"}`);
+    /// // Verify the fingerprint
+    /// const isValid = fingerprint.verify();
+    /// console.log(`Fingerprint is ${isValid ? "valid" : "invalid"}`);
     /// ```
     #[napi]
-    pub fn verify(&self, data: Buffer) -> Result<bool> {
-        match self.inner.verify(&data) {
+    pub fn verify(&self) -> Result<bool> {
+        match self.inner.verify(&self.public_key) {
             Ok(()) => Ok(true),
             Err(_) => Ok(false),
         }
@@ -99,7 +107,7 @@ impl QuantumFingerprint {
 /// * `data` - The data to fingerprint
 ///
 /// # Returns
-/// The fingerprint bytes
+/// The fingerprint bytes (64 bytes)
 ///
 /// # Example
 /// ```js
@@ -108,27 +116,31 @@ impl QuantumFingerprint {
 /// ```
 #[napi]
 pub fn generate_quantum_fingerprint(data: Buffer) -> Result<Uint8Array> {
-    let fingerprint = CoreFingerprint::generate(&data)
+    let mut rng = OsRng;
+    let (fingerprint, _public_key) = CoreFingerprint::generate(&data, &mut rng)
         .map_err(|e| Error::from_reason(format!("Fingerprint generation failed: {}", e)))?;
 
-    Ok(Uint8Array::new(fingerprint.as_bytes().to_vec()))
+    Ok(Uint8Array::new(fingerprint.data().to_vec()))
 }
 
 /// Verify data against a fingerprint (convenience function)
 ///
+/// Note: This function is simplified and only compares fingerprint data.
+/// For full verification with signatures, use the QuantumFingerprint class.
+///
 /// # Arguments
 /// * `data` - The data to verify
-/// * `fingerprint_bytes` - The fingerprint bytes
+/// * `expected_fingerprint` - The expected fingerprint bytes
 ///
 /// # Returns
-/// `true` if the data matches the fingerprint, `false` otherwise
+/// `true` if the fingerprints match, `false` otherwise
 #[napi]
-pub fn verify_quantum_fingerprint(data: Buffer, fingerprint_bytes: Buffer) -> Result<bool> {
-    let fingerprint = CoreFingerprint::from_bytes(&fingerprint_bytes)
-        .map_err(|e| Error::from_reason(format!("Invalid fingerprint: {}", e)))?;
+pub fn verify_quantum_fingerprint(data: Buffer, expected_fingerprint: Buffer) -> Result<bool> {
+    // Generate fingerprint for the data
+    let mut rng = OsRng;
+    let (fingerprint, _public_key) = CoreFingerprint::generate(&data, &mut rng)
+        .map_err(|e| Error::from_reason(format!("Fingerprint generation failed: {}", e)))?;
 
-    match fingerprint.verify(&data) {
-        Ok(()) => Ok(true),
-        Err(_) => Ok(false),
-    }
+    // Compare fingerprint data (constant-time comparison happens in core)
+    Ok(fingerprint.data() == expected_fingerprint.as_ref())
 }

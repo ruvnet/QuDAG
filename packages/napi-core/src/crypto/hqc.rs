@@ -1,6 +1,6 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use qudag_crypto::{Hqc128, Hqc192, Hqc256, SecurityParameter};
+use qudag_crypto::hqc::{Hqc128, Hqc192, Hqc256};
 
 /// HQC-128 quantum-resistant encryption (security level 1)
 ///
@@ -11,40 +11,19 @@ pub struct Hqc128Wrapper;
 
 #[napi]
 impl Hqc128Wrapper {
-    /// Encrypt a message with HQC-128
-    ///
-    /// # Arguments
-    /// * `message` - The plaintext to encrypt
-    /// * `public_key` - The recipient's public key
+    /// Generate a keypair for HQC-128
     ///
     /// # Returns
-    /// The ciphertext
+    /// A tuple of (public_key, secret_key)
     #[napi]
-    pub fn encrypt(message: Buffer, public_key: Buffer) -> Result<Uint8Array> {
-        let hqc = Hqc128::new(SecurityParameter::Hqc128);
-        let ciphertext = hqc
-            .encrypt(&message, &public_key)
-            .map_err(|e| Error::from_reason(format!("Encryption failed: {}", e)))?;
+    pub fn keygen() -> Result<HqcKeyPair> {
+        let (public_key, secret_key) = Hqc128::keygen()
+            .map_err(|e| Error::from_reason(format!("Key generation failed: {}", e)))?;
 
-        Ok(Uint8Array::new(ciphertext))
-    }
-
-    /// Decrypt a ciphertext with HQC-128
-    ///
-    /// # Arguments
-    /// * `ciphertext` - The ciphertext to decrypt
-    /// * `secret_key` - Your secret key
-    ///
-    /// # Returns
-    /// The decrypted plaintext
-    #[napi]
-    pub fn decrypt(ciphertext: Buffer, secret_key: Buffer) -> Result<Uint8Array> {
-        let hqc = Hqc128::new(SecurityParameter::Hqc128);
-        let plaintext = hqc
-            .decrypt(&ciphertext, &secret_key)
-            .map_err(|e| Error::from_reason(format!("Decryption failed: {}", e)))?;
-
-        Ok(Uint8Array::new(plaintext))
+        Ok(HqcKeyPair {
+            public_key: Uint8Array::new(public_key.as_bytes().to_vec()),
+            secret_key: Uint8Array::new(secret_key.as_bytes().to_vec()),
+        })
     }
 
     /// Get algorithm information
@@ -53,6 +32,9 @@ impl Hqc128Wrapper {
         HqcInfo {
             security_level: 1,
             algorithm: "HQC-128".to_string(),
+            public_key_size: Hqc128::PUBLIC_KEY_SIZE as u32,
+            secret_key_size: Hqc128::SECRET_KEY_SIZE as u32,
+            ciphertext_size: Hqc128::CIPHERTEXT_SIZE as u32,
         }
     }
 }
@@ -66,26 +48,19 @@ pub struct Hqc192Wrapper;
 
 #[napi]
 impl Hqc192Wrapper {
-    /// Encrypt a message with HQC-192
+    /// Generate a keypair for HQC-192
+    ///
+    /// # Returns
+    /// A tuple of (public_key, secret_key)
     #[napi]
-    pub fn encrypt(message: Buffer, public_key: Buffer) -> Result<Uint8Array> {
-        let hqc = Hqc192::new(SecurityParameter::Hqc192);
-        let ciphertext = hqc
-            .encrypt(&message, &public_key)
-            .map_err(|e| Error::from_reason(format!("Encryption failed: {}", e)))?;
+    pub fn keygen() -> Result<HqcKeyPair> {
+        let (public_key, secret_key) = Hqc192::keygen()
+            .map_err(|e| Error::from_reason(format!("Key generation failed: {}", e)))?;
 
-        Ok(Uint8Array::new(ciphertext))
-    }
-
-    /// Decrypt a ciphertext with HQC-192
-    #[napi]
-    pub fn decrypt(ciphertext: Buffer, secret_key: Buffer) -> Result<Uint8Array> {
-        let hqc = Hqc192::new(SecurityParameter::Hqc192);
-        let plaintext = hqc
-            .decrypt(&ciphertext, &secret_key)
-            .map_err(|e| Error::from_reason(format!("Decryption failed: {}", e)))?;
-
-        Ok(Uint8Array::new(plaintext))
+        Ok(HqcKeyPair {
+            public_key: Uint8Array::new(public_key.as_bytes().to_vec()),
+            secret_key: Uint8Array::new(secret_key.as_bytes().to_vec()),
+        })
     }
 
     /// Get algorithm information
@@ -94,6 +69,9 @@ impl Hqc192Wrapper {
         HqcInfo {
             security_level: 3,
             algorithm: "HQC-192".to_string(),
+            public_key_size: Hqc192::PUBLIC_KEY_SIZE as u32,
+            secret_key_size: Hqc192::SECRET_KEY_SIZE as u32,
+            ciphertext_size: Hqc192::CIPHERTEXT_SIZE as u32,
         }
     }
 }
@@ -107,26 +85,19 @@ pub struct Hqc256Wrapper;
 
 #[napi]
 impl Hqc256Wrapper {
-    /// Encrypt a message with HQC-256
+    /// Generate a keypair for HQC-256
+    ///
+    /// # Returns
+    /// A tuple of (public_key, secret_key)
     #[napi]
-    pub fn encrypt(message: Buffer, public_key: Buffer) -> Result<Uint8Array> {
-        let hqc = Hqc256::new(SecurityParameter::Hqc256);
-        let ciphertext = hqc
-            .encrypt(&message, &public_key)
-            .map_err(|e| Error::from_reason(format!("Encryption failed: {}", e)))?;
+    pub fn keygen() -> Result<HqcKeyPair> {
+        let (public_key, secret_key) = Hqc256::keygen()
+            .map_err(|e| Error::from_reason(format!("Key generation failed: {}", e)))?;
 
-        Ok(Uint8Array::new(ciphertext))
-    }
-
-    /// Decrypt a ciphertext with HQC-256
-    #[napi]
-    pub fn decrypt(ciphertext: Buffer, secret_key: Buffer) -> Result<Uint8Array> {
-        let hqc = Hqc256::new(SecurityParameter::Hqc256);
-        let plaintext = hqc
-            .decrypt(&ciphertext, &secret_key)
-            .map_err(|e| Error::from_reason(format!("Decryption failed: {}", e)))?;
-
-        Ok(Uint8Array::new(plaintext))
+        Ok(HqcKeyPair {
+            public_key: Uint8Array::new(public_key.as_bytes().to_vec()),
+            secret_key: Uint8Array::new(secret_key.as_bytes().to_vec()),
+        })
     }
 
     /// Get algorithm information
@@ -135,8 +106,20 @@ impl Hqc256Wrapper {
         HqcInfo {
             security_level: 5,
             algorithm: "HQC-256".to_string(),
+            public_key_size: Hqc256::PUBLIC_KEY_SIZE as u32,
+            secret_key_size: Hqc256::SECRET_KEY_SIZE as u32,
+            ciphertext_size: Hqc256::CIPHERTEXT_SIZE as u32,
         }
     }
+}
+
+/// HQC keypair
+#[napi(object)]
+pub struct HqcKeyPair {
+    /// Public key bytes
+    pub public_key: Uint8Array,
+    /// Secret key bytes
+    pub secret_key: Uint8Array,
 }
 
 /// HQC algorithm information
@@ -146,4 +129,10 @@ pub struct HqcInfo {
     pub security_level: u8,
     /// Algorithm identifier
     pub algorithm: String,
+    /// Public key size in bytes
+    pub public_key_size: u32,
+    /// Secret key size in bytes
+    pub secret_key_size: u32,
+    /// Ciphertext size in bytes
+    pub ciphertext_size: u32,
 }

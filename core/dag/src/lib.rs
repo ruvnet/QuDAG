@@ -150,7 +150,7 @@ impl DAGConsensus {
     /// Creates a new DAG consensus instance with custom configuration
     pub fn with_config(config: ConsensusConfig) -> Self {
         Self {
-            dag: Dag::new(100), // Default max concurrent
+            dag: Dag::new_sync(100), // Use sync version for test compatibility
             config,
             consensus: QRAvalanche::new(),
         }
@@ -158,8 +158,17 @@ impl DAGConsensus {
 
     /// Adds a vertex to the DAG
     pub fn add_vertex(&mut self, vertex: Vertex) -> Result<()> {
-        // Check for existing vertex with same ID (fork detection)
         let vertex_id_str = String::from_utf8_lossy(vertex.id.as_bytes()).to_string();
+
+        // Check for self-references (cycles) - must be checked first
+        if vertex.parents.contains(&vertex.id) {
+            return Err(DagError::ConsensusError(format!(
+                "Validation error: vertex {} references itself",
+                vertex_id_str
+            )));
+        }
+
+        // Check for existing vertex with same ID (fork detection)
         if self.consensus.vertices.contains_key(&vertex.id) {
             return Err(DagError::ConsensusError(format!(
                 "Fork detected: vertex {} already exists",
@@ -179,21 +188,19 @@ impl DAGConsensus {
             }
         }
 
-        // Check for self-references (cycles)
-        if vertex.parents.contains(&vertex.id) {
-            return Err(DagError::ConsensusError(format!(
-                "Validation error: vertex {} references itself",
-                vertex_id_str
-            )));
-        }
-
         // Add to consensus tracking
         self.consensus
             .vertices
             .insert(vertex.id.clone(), ConsensusStatus::Final);
-        self.consensus.tips.insert(vertex.id.clone());
 
-        // Convert Vertex to DagMessage and submit
+        // Update tips: add new vertex as tip, remove parents from tips
+        // (parents are no longer tips if they have children)
+        self.consensus.tips.insert(vertex.id.clone());
+        for parent in &vertex.parents {
+            self.consensus.tips.remove(parent);
+        }
+
+        // Convert Vertex to DagMessage and process synchronously
         let msg = DagMessage {
             id: vertex.id.clone(),
             payload: vertex.payload.clone(),
@@ -201,10 +208,9 @@ impl DAGConsensus {
             timestamp: vertex.timestamp,
         };
 
-        // Since this is sync interface for tests, we'll use blocking call
-        // In real implementation this would be async
+        // Process message synchronously using blocking call
         let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async { self.dag.submit_message(msg).await })
+        rt.block_on(async { self.dag.process_message_sync(msg).await })
             .map_err(|e| match e {
                 dag::DagError::VertexError(_) => {
                     DagError::ConsensusError(format!("Invalid vertex: {}", e))
@@ -224,18 +230,68 @@ impl DAGConsensus {
         self.consensus.vertices.get(&id).cloned()
     }
 
-    /// Gets the total order of vertices (simplified implementation)
+    /// Gets the total order of vertices using topological sort
+    ///
+    /// Returns vertices in an order where every parent comes before its children.
     pub fn get_total_order(&self) -> Result<Vec<String>> {
-        // Simple topological sort based on timestamps
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let vertices = self.dag.vertices.read().await;
-            let mut ordered: Vec<_> = vertices.values().collect();
-            ordered.sort_by_key(|v| v.timestamp);
-            Ok(ordered
+
+            // Build adjacency information and in-degree counts for Kahn's algorithm
+            let mut in_degree: std::collections::HashMap<VertexId, usize> =
+                std::collections::HashMap::new();
+            let mut children: std::collections::HashMap<VertexId, Vec<VertexId>> =
+                std::collections::HashMap::new();
+
+            // Initialize all vertices
+            for (id, vertex) in vertices.iter() {
+                in_degree.entry(id.clone()).or_insert(0);
+                for parent in &vertex.parents {
+                    children
+                        .entry(parent.clone())
+                        .or_insert_with(Vec::new)
+                        .push(id.clone());
+                    *in_degree.entry(id.clone()).or_insert(0) += 1;
+                }
+            }
+
+            // Kahn's algorithm for topological sort
+            let mut queue: std::collections::VecDeque<VertexId> = in_degree
                 .iter()
-                .map(|v| String::from_utf8_lossy(v.id.as_bytes()).to_string())
-                .collect())
+                .filter(|(_, &deg)| deg == 0)
+                .map(|(id, _)| id.clone())
+                .collect();
+
+            // Sort the initial queue by timestamp for deterministic ordering among roots
+            let mut queue_vec: Vec<_> = queue.drain(..).collect();
+            queue_vec.sort_by_key(|id| vertices.get(id).map(|v| v.timestamp).unwrap_or(0));
+            queue = queue_vec.into_iter().collect();
+
+            let mut result = Vec::new();
+
+            while let Some(id) = queue.pop_front() {
+                result.push(String::from_utf8_lossy(id.as_bytes()).to_string());
+
+                if let Some(child_list) = children.get(&id) {
+                    // Sort children by timestamp for deterministic ordering
+                    let mut sorted_children = child_list.clone();
+                    sorted_children.sort_by_key(|id| {
+                        vertices.get(id).map(|v| v.timestamp).unwrap_or(0)
+                    });
+
+                    for child_id in sorted_children {
+                        if let Some(deg) = in_degree.get_mut(&child_id) {
+                            *deg -= 1;
+                            if *deg == 0 {
+                                queue.push_back(child_id);
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(result)
         })
     }
 

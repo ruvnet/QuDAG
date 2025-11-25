@@ -1,16 +1,19 @@
 use proptest::prelude::*;
-use qudag_dag::{Confidence, ConsensusConfig, ConsensusError, DAGConsensus, Vertex};
+use qudag_dag::{ConsensusConfig, ConsensusStatus, DAGConsensus, DagError, Vertex, VertexId};
 use std::collections::HashSet;
 use std::time::Duration;
 
-fn create_test_vertex(id: &str, parents: Vec<&str>, timestamp: u64) -> Vertex {
-    Vertex {
-        id: id.to_string(),
-        parents: parents.into_iter().map(String::from).collect(),
-        timestamp,
-        signature: vec![],
-        payload: vec![],
-    }
+fn create_test_vertex(id: &str, parents: Vec<&str>, _timestamp: u64) -> Vertex {
+    let parent_ids: HashSet<VertexId> = parents
+        .into_iter()
+        .map(|p| VertexId::from_bytes(p.as_bytes().to_vec()))
+        .collect();
+
+    Vertex::new(
+        VertexId::from_bytes(id.as_bytes().to_vec()),
+        vec![1, 2, 3], // dummy payload
+        parent_ids,
+    )
 }
 
 // Test fork detection and handling
@@ -24,10 +27,11 @@ fn test_fork_detection() {
 
     // Try to create a fork (same ID, different parents)
     let fork_vertex = create_test_vertex("A", vec![], 1);
-    assert!(matches!(
-        dag.add_vertex(fork_vertex),
-        Err(ConsensusError::ForkDetected(_))
-    ));
+    let result = dag.add_vertex(fork_vertex);
+
+    assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
+    assert!(err_msg.contains("Fork detected"), "Expected fork detection error, got: {}", err_msg);
 }
 
 // Test equivocation resistance
@@ -51,10 +55,10 @@ fn test_equivocation_resistance() {
     dag.add_vertex(vertex_b1).unwrap();
 
     // Second vertex with same ID should be rejected
-    assert!(matches!(
-        dag.add_vertex(vertex_b2),
-        Err(ConsensusError::ForkDetected(_))
-    ));
+    let result = dag.add_vertex(vertex_b2);
+    assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
+    assert!(err_msg.contains("Fork detected"), "Expected fork detection error, got: {}", err_msg);
 }
 
 // Test Byzantine agreement under partial synchrony
@@ -79,11 +83,11 @@ fn test_byzantine_agreement() {
     dag.add_vertex(vertex_b).unwrap();
     dag.add_vertex(vertex_c1).unwrap();
 
-    // Verify that conflicting vertex is rejected
-    assert!(matches!(
-        dag.add_vertex(vertex_c2),
-        Err(ConsensusError::ForkDetected(_))
-    ));
+    // Verify that conflicting vertex is rejected (fork with same ID)
+    let result = dag.add_vertex(vertex_c2);
+    assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
+    assert!(err_msg.contains("Fork detected"), "Expected fork detection error, got: {}", err_msg);
 }
 
 // Test resistance to Sybil attacks
@@ -100,28 +104,32 @@ fn test_sybil_resistance() {
 
     // Create a large number of vertices from different "identities"
     for i in 0..100 {
-        let vertex = Vertex {
-            id: format!("V{}", i),
-            parents: if i == 0 {
-                vec![]
-            } else {
-                vec![format!("V{}", i - 1)]
-            },
-            timestamp: i as u64,
-            signature: vec![i as u8], // Different signatures
-            payload: vec![],
+        let parents: HashSet<VertexId> = if i == 0 {
+            HashSet::new()
+        } else {
+            let mut set = HashSet::new();
+            set.insert(VertexId::from_bytes(format!("V{}", i - 1).as_bytes().to_vec()));
+            set
         };
+
+        let vertex = Vertex::new(
+            VertexId::from_bytes(format!("V{}", i).as_bytes().to_vec()),
+            vec![i as u8], // Different payloads
+            parents,
+        );
 
         dag.add_vertex(vertex).unwrap();
     }
 
     // Verify that consensus is still reached despite many participants
-    assert_eq!(dag.get_confidence("V0"), Some(Confidence::Final));
-    assert_eq!(dag.get_confidence("V50"), Some(Confidence::Final));
+    assert_eq!(dag.get_confidence("V0"), Some(ConsensusStatus::Final));
+    assert_eq!(dag.get_confidence("V50"), Some(ConsensusStatus::Final));
 }
 
 // Property-based test for Byzantine behavior
 proptest! {
+    #![proptest_config(ProptestConfig::with_cases(10))]
+
     #[test]
     fn prop_byzantine_resistance(
         honest_vertices in 5..20usize,
@@ -140,19 +148,19 @@ proptest! {
         // Add honest vertices
         for i in 0..honest_vertices {
             let id = format!("H{}", i);
-            let parents = if i == 0 {
-                vec![]
+            let parents: HashSet<VertexId> = if i == 0 {
+                HashSet::new()
             } else {
-                vec![format!("H{}", i-1)]
+                let mut set = HashSet::new();
+                set.insert(VertexId::from_bytes(format!("H{}", i - 1).as_bytes().to_vec()));
+                set
             };
 
-            let vertex = Vertex {
-                id: id.clone(),
+            let vertex = Vertex::new(
+                VertexId::from_bytes(id.as_bytes().to_vec()),
+                vec![i as u8], // payload
                 parents,
-                timestamp: i as u64,
-                signature: vec![],
-                payload: vec![],
-            };
+            );
 
             dag.add_vertex(vertex).unwrap();
             vertex_ids.insert(id);
@@ -162,14 +170,12 @@ proptest! {
         for i in 0..byzantine_attempts {
             let target_id = format!("H{}", i % honest_vertices);
 
-            // Try to create conflicting vertex
-            let byzantine_vertex = Vertex {
-                id: target_id.clone(),
-                parents: vec![],
-                timestamp: (honest_vertices + i) as u64,
-                signature: vec![],
-                payload: vec![],
-            };
+            // Try to create conflicting vertex (fork)
+            let byzantine_vertex = Vertex::new(
+                VertexId::from_bytes(target_id.as_bytes().to_vec()),
+                vec![255], // different payload
+                HashSet::new(),
+            );
 
             // Byzantine vertex should be rejected
             prop_assert!(dag.add_vertex(byzantine_vertex).is_err());

@@ -28,9 +28,9 @@ mod tests {
         assert!(consensus.vertices.is_empty());
         assert!(consensus.tips.is_empty());
 
-        // Test processing a vertex
+        // Test processing a vertex - initial status is Pending until voting completes
         let status = consensus.process_vertex(vertex_id.clone()).unwrap();
-        assert_eq!(status, ConsensusStatus::Accepted);
+        assert_eq!(status, ConsensusStatus::Pending);
         assert!(consensus.vertices.contains_key(&vertex_id));
         assert!(consensus.tips.contains(&vertex_id));
     }
@@ -175,14 +175,14 @@ mod tests {
         // Initially no status
         assert!(!consensus.vertices.contains_key(&vertex_id));
 
-        // Process vertex - should be accepted
+        // Process vertex - starts as Pending until voting completes
         let status = consensus.process_vertex(vertex_id.clone()).unwrap();
-        assert_eq!(status, ConsensusStatus::Accepted);
+        assert_eq!(status, ConsensusStatus::Pending);
 
-        // Should be in consensus tracking
+        // Should be in consensus tracking with Pending status
         assert_eq!(
             consensus.vertices.get(&vertex_id),
-            Some(&ConsensusStatus::Accepted)
+            Some(&ConsensusStatus::Pending)
         );
         assert!(consensus.tips.contains(&vertex_id));
     }

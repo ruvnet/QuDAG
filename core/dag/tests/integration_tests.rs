@@ -29,14 +29,15 @@ fn test_module_can_be_imported() {
 fn test_dag_basic_workflow() {
     let mut dag = QrDag::new();
 
-    // Create some test vertices
-    let vertex1_id = VertexId::new();
-    let vertex1 = Vertex::new(vertex1_id.clone(), b"vertex1".to_vec(), HashSet::new());
+    // Create some test vertices using string-based IDs for reliable round-tripping
+    // (VertexId::new() creates timestamp bytes that aren't valid UTF-8)
+    let vertex1_id = VertexId::from_bytes(b"vertex1".to_vec());
+    let vertex1 = Vertex::new(vertex1_id.clone(), b"payload1".to_vec(), HashSet::new());
 
-    let vertex2_id = VertexId::new();
+    let vertex2_id = VertexId::from_bytes(b"vertex2".to_vec());
     let mut parents = HashSet::new();
     parents.insert(vertex1_id.clone());
-    let vertex2 = Vertex::new(vertex2_id.clone(), b"vertex2".to_vec(), parents);
+    let vertex2 = Vertex::new(vertex2_id.clone(), b"payload2".to_vec(), parents);
 
     // Add vertices to DAG
     assert!(dag.add_vertex(vertex1).is_ok());
@@ -46,9 +47,8 @@ fn test_dag_basic_workflow() {
     let tips = dag.get_tips();
     assert!(!tips.is_empty());
 
-    // Test getting confidence
-    let vertex1_str = String::from_utf8_lossy(vertex1_id.as_bytes()).to_string();
-    let confidence = dag.get_confidence(&vertex1_str);
+    // Test getting confidence using the string ID
+    let confidence = dag.get_confidence("vertex1");
     assert!(confidence.is_some());
 
     println!("DAG basic workflow test passed");

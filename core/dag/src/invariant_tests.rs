@@ -331,6 +331,8 @@ mod tests {
         ) {
             let mut dag = DAGConsensus::new();
             let mut vertex_ids: Vec<String> = Vec::new();
+            // Track which vertices have children (are parents of other vertices)
+            let mut has_children: HashSet<String> = HashSet::new();
 
             for (i, parents) in vertex_structure.iter().enumerate() {
                 let vertex_id = format!("V{}", i);
@@ -340,11 +342,16 @@ mod tests {
                     .map(|&p| vertex_ids[p].as_str())
                     .collect();
 
+                // Mark parents as having children
+                for parent in &parent_names {
+                    has_children.insert(parent.to_string());
+                }
+
                 let vertex = create_test_vertex(&vertex_id, parent_names);
                 if dag.add_vertex(vertex).is_ok() {
                     vertex_ids.push(vertex_id);
 
-                    // Property: Tips are always vertices with no children
+                    // Property: Tips are always vertices with no children (in the current DAG)
                     let tips = dag.get_tips();
 
                     // Every tip should be a valid vertex
@@ -353,14 +360,17 @@ mod tests {
                             "Tip {} is not a valid vertex", tip);
                     }
 
-                    // No vertex with children should be a tip
-                    for (j, child_parents) in vertex_structure.iter().enumerate().skip(i + 1) {
-                        for &parent_idx in child_parents {
-                            if parent_idx < vertex_ids.len() {
-                                let parent_name = &vertex_ids[parent_idx];
-                                prop_assert!(!tips.contains(parent_name) || j > vertex_ids.len(),
-                                    "Vertex {} is a tip but has child {}", parent_name, j);
-                            }
+                    // No vertex that currently has children should be a tip
+                    for tip in &tips {
+                        prop_assert!(!has_children.contains(tip),
+                            "Vertex {} is a tip but has children in the DAG", tip);
+                    }
+
+                    // Every vertex without children should be a tip
+                    for vertex_id in &vertex_ids {
+                        if !has_children.contains(vertex_id) {
+                            prop_assert!(tips.contains(vertex_id),
+                                "Vertex {} has no children but is not a tip", vertex_id);
                         }
                     }
                 }

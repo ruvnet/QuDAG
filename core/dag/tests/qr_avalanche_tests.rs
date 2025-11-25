@@ -63,8 +63,8 @@ async fn test_qr_avalanche_initialization() {
     let genesis_id = genesis.id.clone();
     let status = consensus.process_vertex(genesis_id.clone()).unwrap();
 
-    // Genesis should be accepted
-    assert_eq!(status, ConsensusStatus::Accepted);
+    // Genesis should start as Pending until voting rounds complete
+    assert_eq!(status, ConsensusStatus::Pending);
     assert!(consensus.vertices.contains_key(&genesis_id));
     assert!(consensus.tips.contains(&genesis_id));
 }

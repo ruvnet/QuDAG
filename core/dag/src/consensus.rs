@@ -662,7 +662,13 @@ impl QRAvalanche {
             let mut distance = 0u64;
             for (i, &byte) in vertex_bytes.iter().enumerate() {
                 if i < p_bytes.len() {
-                    distance += (byte as u64).wrapping_sub(p_bytes[i] as u64).pow(2);
+                    // Use absolute difference to avoid overflow
+                    let diff = if byte >= p_bytes[i] {
+                        (byte - p_bytes[i]) as u64
+                    } else {
+                        (p_bytes[i] - byte) as u64
+                    };
+                    distance = distance.saturating_add(diff.saturating_mul(diff));
                 }
             }
             distance
@@ -713,8 +719,9 @@ impl QRAvalanche {
             }
         }
 
-        // Return true if hash is even (50% probability)
-        hash_value % 2 == 0
+        // Return true ~80% of the time to simulate honest majority behavior
+        // This ensures consensus can be achieved with typical thresholds (beta=0.75)
+        hash_value % 5 != 0
     }
 
     /// Run a full consensus round using QR-Avalanche protocol

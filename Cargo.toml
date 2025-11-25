@@ -9,6 +9,7 @@ members = [
     "tools/cli",
     "qudag-mcp",
     "qudag-wasm",
+    "qudag-napi",
     "qudag-exchange",
 ]
 resolver = "2"

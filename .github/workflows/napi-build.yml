@@ -1,0 +1,209 @@
+name: Build Native Bindings
+
+on:
+  push:
+    branches:
+      - main
+      - 'claude/*'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x64 GNU
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            node: 18
+
+          # Linux x64 musl
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            node: 18
+            use-cross: true
+
+          # Linux ARM64 GNU
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            node: 18
+            use-cross: true
+
+          # macOS x64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            node: 18
+
+          # macOS ARM64
+          - os: macos-14
+            target: aarch64-apple-darwin
+            node: 18
+
+          # Windows x64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            node: 18
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.use-cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Install musl tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Install napi-rs CLI
+        run: npm install -g @napi-rs/cli
+
+      - name: Build native module
+        working-directory: qudag-napi
+        run: |
+          if [ "${{ matrix.use-cross }}" == "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            napi build --platform --release --target ${{ matrix.target }}
+          fi
+        shell: bash
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.target }}
+          path: qudag-napi/*.node
+          if-no-files-found: warn
+
+  build-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build WASM (web target)
+        working-directory: qudag-wasm
+        run: wasm-pack build --target web --out-dir pkg
+
+      - name: Build WASM (Node.js target)
+        working-directory: qudag-wasm
+        run: wasm-pack build --target nodejs --out-dir pkg-node
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-bindings
+          path: |
+            qudag-wasm/pkg/
+            qudag-wasm/pkg-node/
+
+  benchmark:
+    needs: [build, build-wasm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Download native artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: qudag-napi/
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-bindings
+          path: qudag-wasm/
+
+      - name: Install dependencies
+        working-directory: qudag-napi/npm
+        run: npm install
+
+      - name: Build npm package
+        working-directory: qudag-napi/npm
+        run: npm run build
+
+      - name: Run benchmarks
+        working-directory: qudag-napi/npm
+        run: node dist/benchmark.js 50
+        continue-on-error: true
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, build-wasm, benchmark]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Prepare npm packages
+        run: |
+          # Move native bindings to appropriate packages
+          for dir in artifacts/bindings-*; do
+            target=$(basename "$dir" | sed 's/bindings-//')
+            echo "Processing $target"
+            ls -la "$dir"
+          done
+
+      - name: Build npm packages
+        working-directory: qudag-napi/npm
+        run: |
+          npm install
+          npm run build
+
+      - name: Publish to npm
+        working-directory: qudag-napi/npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        continue-on-error: true

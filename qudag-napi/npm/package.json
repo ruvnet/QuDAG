@@ -1,0 +1,82 @@
+{
+  "name": "@qudag/crypto",
+  "version": "1.0.0",
+  "description": "QuDAG Quantum-Resistant Cryptography - Native bindings with WASM fallback",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./native": {
+      "types": "./dist/native.d.ts",
+      "import": "./dist/native.mjs",
+      "require": "./dist/native.js"
+    },
+    "./wasm": {
+      "types": "./dist/wasm.d.ts",
+      "import": "./dist/wasm.mjs",
+      "require": "./dist/wasm.js"
+    }
+  },
+  "files": [
+    "dist",
+    "native",
+    "wasm",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc && tsc -p tsconfig.esm.json",
+    "build:native": "cd .. && npm run build",
+    "build:wasm": "cd ../../qudag-wasm && npm run build",
+    "test": "node dist/test.js",
+    "benchmark": "node dist/benchmark.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "qudag",
+    "quantum",
+    "cryptography",
+    "post-quantum",
+    "ml-kem",
+    "ml-dsa",
+    "blake3",
+    "native",
+    "wasm",
+    "napi"
+  ],
+  "author": "rUv <ruv@ruv.net>",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/QuDAG.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ruvnet/QuDAG/issues"
+  },
+  "homepage": "https://github.com/ruvnet/QuDAG#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "optionalDependencies": {
+    "@qudag/crypto-linux-x64-gnu": "1.0.0",
+    "@qudag/crypto-linux-x64-musl": "1.0.0",
+    "@qudag/crypto-linux-arm64-gnu": "1.0.0",
+    "@qudag/crypto-linux-arm64-musl": "1.0.0",
+    "@qudag/crypto-darwin-x64": "1.0.0",
+    "@qudag/crypto-darwin-arm64": "1.0.0",
+    "@qudag/crypto-win32-x64-msvc": "1.0.0",
+    "@qudag/crypto-win32-arm64-msvc": "1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

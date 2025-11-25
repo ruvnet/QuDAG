@@ -94,13 +94,20 @@ impl MlKem768 {
         let mut sk_bytes = vec![0u8; Self::SECRET_KEY_SIZE];
 
         rng.fill_bytes(&mut pk_bytes);
-        rng.fill_bytes(&mut sk_bytes);
 
-        // Create some deterministic relationship between pk and sk for testing
-        for i in 0..32 {
-            if i < pk_bytes.len() && i < sk_bytes.len() {
+        // Store pk in sk with first 32 bytes XOR'd with 0xFF (to simulate encryption)
+        // This allows decapsulate to recover pk from sk
+        for i in 0..Self::PUBLIC_KEY_SIZE {
+            if i < 32 {
                 sk_bytes[i] = pk_bytes[i] ^ 0xFF;
+            } else if i < Self::SECRET_KEY_SIZE {
+                sk_bytes[i] = pk_bytes[i];
             }
+        }
+
+        // Fill remaining sk bytes with random data
+        if Self::SECRET_KEY_SIZE > Self::PUBLIC_KEY_SIZE {
+            rng.fill_bytes(&mut sk_bytes[Self::PUBLIC_KEY_SIZE..]);
         }
 
         let public_key =
@@ -129,17 +136,26 @@ impl MlKem768 {
         // In a real implementation, this would use the ML-KEM encapsulation algorithm
         let mut rng = rand::thread_rng();
         let mut ct_bytes = vec![0u8; Self::CIPHERTEXT_SIZE];
-        let mut ss_bytes = vec![0u8; Self::SHARED_SECRET_SIZE];
 
         rng.fill_bytes(&mut ct_bytes);
-        rng.fill_bytes(&mut ss_bytes);
 
-        // Create some deterministic relationship for testing
+        // Create deterministic relationship: ciphertext contains info to derive shared secret
+        // Store a seed derived from pk in the ciphertext
         for i in 0..32 {
             if i < pk_bytes.len() {
                 ct_bytes[i] = pk_bytes[i] ^ 0xAA;
-                ss_bytes[i % Self::SHARED_SECRET_SIZE] ^= pk_bytes[i];
             }
+        }
+
+        // Generate shared secret deterministically from pk (using a hash-like derivation)
+        let mut ss_bytes = vec![0u8; Self::SHARED_SECRET_SIZE];
+        for i in 0..Self::SHARED_SECRET_SIZE {
+            // Derive shared secret from public key bytes deterministically
+            let pk_idx = i * 37 % pk_bytes.len(); // Pseudo-random selection
+            ss_bytes[i] = pk_bytes[pk_idx]
+                .wrapping_add(pk_bytes[(pk_idx + 1) % pk_bytes.len()])
+                .wrapping_mul(0x9E)
+                .wrapping_add(i as u8);
         }
 
         let ciphertext =
@@ -189,13 +205,30 @@ impl MlKem768 {
 
         // For now, use a placeholder implementation
         // In a real implementation, this would use the ML-KEM decapsulation algorithm
-        let mut ss_bytes = vec![0u8; Self::SHARED_SECRET_SIZE];
 
-        // Reconstruct the shared secret deterministically from sk and ct
-        for i in 0..32 {
-            if i < sk_bytes.len() && i < ct_bytes.len() {
-                ss_bytes[i % Self::SHARED_SECRET_SIZE] ^= sk_bytes[i] ^ ct_bytes[i];
+        // Recover the public key from the ciphertext (since ct_bytes[i] = pk_bytes[i] ^ 0xAA)
+        // and from secret key (since sk_bytes[i] = pk_bytes[i] ^ 0xFF for first 32 bytes)
+        // We can recover pk from ct: pk_bytes[i] = ct_bytes[i] ^ 0xAA
+        let mut pk_bytes = vec![0u8; Self::PUBLIC_KEY_SIZE];
+
+        // Recover full pk from sk (sk stores pk XOR 0xFF in first 32 bytes)
+        for i in 0..Self::PUBLIC_KEY_SIZE {
+            if i < 32 {
+                pk_bytes[i] = sk_bytes[i] ^ 0xFF;
+            } else {
+                pk_bytes[i] = sk_bytes[i];
             }
+        }
+
+        // Generate shared secret using same derivation as encapsulate
+        let mut ss_bytes = vec![0u8; Self::SHARED_SECRET_SIZE];
+        for i in 0..Self::SHARED_SECRET_SIZE {
+            // Derive shared secret from public key bytes deterministically
+            let pk_idx = i * 37 % pk_bytes.len(); // Pseudo-random selection
+            ss_bytes[i] = pk_bytes[pk_idx]
+                .wrapping_add(pk_bytes[(pk_idx + 1) % pk_bytes.len()])
+                .wrapping_mul(0x9E)
+                .wrapping_add(i as u8);
         }
 
         let shared_secret =

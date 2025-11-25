@@ -25,7 +25,7 @@ pub struct Ledger {
     accounts: BTreeMap<AccountId, Account>,
 
     #[cfg(feature = "std")]
-    #[serde(skip)]
+    #[serde(skip, default)]
     accounts: dashmap::DashMap<AccountId, Account>,
 
     /// Agent status tracking for fee calculation
@@ -33,7 +33,7 @@ pub struct Ledger {
     agent_statuses: BTreeMap<AccountId, AgentStatus>,
 
     #[cfg(feature = "std")]
-    #[serde(skip)]
+    #[serde(skip, default)]
     agent_statuses: dashmap::DashMap<AccountId, AgentStatus>,
 
     /// Total supply of rUv in circulation
@@ -43,7 +43,7 @@ pub struct Ledger {
     config: LedgerConfig,
 
     /// Fee model for calculating transaction fees
-    #[serde(skip)]
+    #[serde(skip, default)]
     fee_model: Option<FeeModel>,
 }
 

@@ -6,16 +6,13 @@
 
 use qudag_crypto::{
     fingerprint::Fingerprint,
-    hash::HashFunction,
-    kem::{Ciphertext, KeyEncapsulation, PublicKey, SecretKey, SharedSecret},
-    ml_dsa::{MlDsa, MlDsaKeyPair, MlDsaPublicKey},
+    kem::{PublicKey, SecretKey},
+    ml_dsa::{MlDsaKeyPair, MlDsaPublicKey},
     ml_kem::MlKem768,
-    CryptoError,
 };
-use rand::{thread_rng, RngCore};
+use rand::thread_rng;
 use rayon::prelude::*;
 use std::sync::Arc;
-use std::thread;
 use std::time::{Duration, Instant};
 use tokio::sync::{Barrier, Semaphore};
 
@@ -228,8 +225,8 @@ async fn test_fingerprint_concurrent() {
 
             // Verify all generated fingerprints
             let mut successful_verifications = 0;
-            for (fingerprint, public_key, original_data) in &fingerprints {
-                match fingerprint.verify(original_data, public_key) {
+            for (fingerprint, public_key, _original_data) in &fingerprints {
+                match fingerprint.verify(public_key) {
                     Ok(()) => successful_verifications += 1,
                     Err(e) => {
                         eprintln!(
@@ -432,7 +429,7 @@ async fn test_crypto_stress_high_contention() {
                         let mut rng = thread_rng();
                         match Fingerprint::generate(&data, &mut rng) {
                             Ok((fingerprint, public_key)) => {
-                                if fingerprint.verify(&data, &public_key).is_ok() {
+                                if fingerprint.verify(&public_key).is_ok() {
                                     operations_count += 1;
                                 } else {
                                     errors_count += 1;
@@ -539,7 +536,7 @@ async fn test_crypto_memory_safety_concurrent() {
                             Fingerprint::generate(&data, &mut rng)
                         {
                             allocated_objects.push(format!("fingerprint_{}", i));
-                            let _ = fingerprint.verify(&data, &public_key);
+                            let _ = fingerprint.verify(&public_key);
                         }
                     }
                     _ => unreachable!(),
@@ -614,7 +611,7 @@ fn test_crypto_parallel_rayon() {
         .map(|data| {
             let mut rng = thread_rng();
             let (fingerprint, public_key) = Fingerprint::generate(data, &mut rng).unwrap();
-            fingerprint.verify(data, &public_key).is_ok()
+            fingerprint.verify(&public_key).is_ok()
         })
         .collect();
 

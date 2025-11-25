@@ -137,13 +137,13 @@ mod tests {
 
         // Create linear chain
         let vertices = vec!["A", "B", "C", "D"];
-        let mut parents = vec![];
+        let mut parents: Vec<&str> = vec![];
 
         for vertex_id in &vertices {
             let vertex = if parents.is_empty() {
                 create_test_vertex(vertex_id, vec![])
             } else {
-                create_test_vertex(vertex_id, vec![parents.last().unwrap()])
+                create_test_vertex(vertex_id, vec![*parents.last().unwrap()])
             };
 
             assert!(dag.add_vertex(vertex).is_ok());

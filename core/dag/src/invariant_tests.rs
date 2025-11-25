@@ -184,12 +184,12 @@ mod tests {
             max_parents in 1..3usize
         ) {
             let mut dag = DAGConsensus::new();
-            let mut vertex_ids = Vec::new();
+            let mut vertex_ids: Vec<String> = Vec::new();
 
             // Add vertices with valid parent relationships
             for i in 0..vertex_count {
                 let id = format!("V{}", i);
-                let mut parents = Vec::new();
+                let mut parents: Vec<&str> = Vec::new();
 
                 // Select parents from previously added vertices
                 let parent_count = std::cmp::min(max_parents, i);
@@ -281,15 +281,16 @@ mod tests {
             )
         ) {
             let mut dag = DAGConsensus::new();
-            let mut vertex_counter = 0;
+            let mut vertex_counter: usize = 0;
             let mut consensus_levels = Vec::new();
 
-            for (op, payload) in operations {
+            for (op, _payload) in operations {
                 match op {
                     "add" => {
                         let vertex_id = format!("V{}", vertex_counter);
-                        let parents = if vertex_counter > 0 {
-                            vec![format!("V{}", vertex_counter - 1).as_str()]
+                        let parent_id = format!("V{}", vertex_counter.saturating_sub(1));
+                        let parents: Vec<&str> = if vertex_counter > 0 {
+                            vec![parent_id.as_str()]
                         } else {
                             vec![]
                         };
@@ -329,7 +330,7 @@ mod tests {
             )
         ) {
             let mut dag = DAGConsensus::new();
-            let mut vertex_ids = Vec::new();
+            let mut vertex_ids: Vec<String> = Vec::new();
 
             for (i, parents) in vertex_structure.iter().enumerate() {
                 let vertex_id = format!("V{}", i);
@@ -429,10 +430,11 @@ mod tests {
             let mut dag = DAGConsensus::new();
             let mut processed_count = 0;
 
-            for (i, message) in message_sequence.iter().enumerate() {
+            for (i, _message) in message_sequence.iter().enumerate() {
                 let vertex_id = format!("msg_{}", i);
-                let parents = if i > 0 {
-                    vec![format!("msg_{}", i - 1).as_str()]
+                let parent_id = format!("msg_{}", i.saturating_sub(1));
+                let parents: Vec<&str> = if i > 0 {
+                    vec![parent_id.as_str()]
                 } else {
                     vec![]
                 };
@@ -477,10 +479,11 @@ mod tests {
             let mut honest_vertices = Vec::new();
 
             // Add honest messages first
-            for (i, message) in honest_messages.iter().enumerate() {
+            for (i, _message) in honest_messages.iter().enumerate() {
                 let vertex_id = format!("honest_{}", i);
-                let parents = if i > 0 {
-                    vec![format!("honest_{}", i - 1).as_str()]
+                let parent_id = format!("honest_{}", i.saturating_sub(1));
+                let parents: Vec<&str> = if i > 0 {
+                    vec![parent_id.as_str()]
                 } else {
                     vec![]
                 };
@@ -495,7 +498,7 @@ mod tests {
 
             // Attempt Byzantine attacks
             for (i, attack) in byzantine_attacks.iter().enumerate() {
-                let attack_result = match attack {
+                let attack_result = match *attack {
                     "duplicate_vertex" => {
                         // Try to add duplicate vertex
                         if !honest_vertices.is_empty() {

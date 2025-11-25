@@ -1,0 +1,13 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 164e49972e95b76f0e96f4664a7325cf56f13568dc41c86dc5a64be8ed0d2fe9 # shrinks to vertex_count = 1, max_parents = 1
+cc 209a554844cb5bc79adddfa41b610adcf8096481ab71da7261264b68c504b063 # shrinks to vertex_structure = [[]]
+cc b4b5ab87c54fed6d9decfb795f36aeaf887506bcefd4fd8539b4c11f1b906da3 # shrinks to edges = [(0, 0)]
+cc c555e8049f98c8ee356d75e00a931ad750eed6966a36452211fa81869da2cb6d # shrinks to honest_messages = [[0]], byzantine_attacks = []
+cc e7deada9280c090c3c1255774beb0c676071c11be73055a53e99e89f7d771c62 # shrinks to message_sequence = [[0]]
+cc b18a2762294214fee58746519f71af469bc93b40b98a1260d80d71f35d224f3c # shrinks to concurrent_vertices = [([0], []), ([0], [])]
+cc 02eaf3e5ed44610a907fd48f9f71bea84af12dad5ca238a44df9f3a625084baf # shrinks to operations = [("add", [0])]

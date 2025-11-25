@@ -151,7 +151,7 @@ mod tests {
 
         assert_eq!(node.state(), NodeState::Pending);
         assert_eq!(node.payload(), &payload);
-        assert_eq!(node.parents(), &parents);
+        assert_eq!(node.parents(), parents);
     }
 
     #[test]

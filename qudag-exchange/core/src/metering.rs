@@ -400,8 +400,8 @@ mod tests {
     fn test_cost_limits() {
         let meter = ResourceMeter::new();
 
-        // Exceed storage limit
-        let result = meter.calculate_cost(OperationType::StoreData, 2000);
+        // Exceed storage limit (max is 1MB = 1024 * 1024)
+        let result = meter.calculate_cost(OperationType::StoreData, 2 * 1024 * 1024);
         assert!(result.is_err());
 
         // Within limits

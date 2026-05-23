@@ -1404,7 +1404,7 @@ impl ConnectionManager {
             // Record successful circuit breaker operation
             self.circuit_breakers
                 .entry(peer_id)
-                .or_insert_with(CircuitBreaker::default)
+                .or_default()
                 .record_result(true);
 
             debug!(
@@ -1420,7 +1420,7 @@ impl ConnectionManager {
             // Record failed circuit breaker operation
             self.circuit_breakers
                 .entry(peer_id)
-                .or_insert_with(CircuitBreaker::default)
+                .or_default()
                 .record_result(false);
 
             return Err(NetworkError::ConnectionError(
@@ -2093,9 +2093,15 @@ impl ConnectionMultiplexer {
 
     /// Get stream information
     pub fn get_stream_info(&self, stream_id: StreamId) -> Option<StreamInfo> {
-        let peer_id = self.stream_routes.get(&stream_id)?.value().clone();
+        let peer_id = *self.stream_routes.get(&stream_id)?.value();
         let connection = self.connections.get(&peer_id)?;
         connection.streams.get(&stream_id).cloned()
+    }
+}
+
+impl Default for RetryManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

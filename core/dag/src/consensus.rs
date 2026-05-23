@@ -714,7 +714,7 @@ impl QRAvalanche {
         }
 
         // Return true if hash is even (50% probability)
-        hash_value % 2 == 0
+        hash_value.is_multiple_of(2)
     }
 
     /// Run a full consensus round using QR-Avalanche protocol

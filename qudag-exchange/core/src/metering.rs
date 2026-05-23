@@ -336,7 +336,7 @@ impl ResourceMeter {
         let total_bytes = base_size + memo_size;
 
         // Convert to KB (round up)
-        ((total_bytes + 1023) / 1024) as u64
+        total_bytes.div_ceil(1024) as u64
     }
 }
 

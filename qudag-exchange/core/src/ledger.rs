@@ -6,9 +6,6 @@
 #[cfg(not(feature = "std"))]
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
-#[cfg(feature = "std")]
-use std::collections::BTreeMap;
-
 use crate::{
     account::{Account, AccountId, Balance},
     fee_model::{AgentStatus, FeeModel},
@@ -473,14 +470,11 @@ impl Ledger {
 
         // Total balance should equal total supply
         if total_balance != self.total_supply {
-            return Err(Error::StateCorruption(
-                format!(
-                    "Total balance {} != total supply {}",
-                    total_balance.amount(),
-                    self.total_supply.amount()
-                )
-                .into(),
-            ));
+            return Err(Error::StateCorruption(format!(
+                "Total balance {} != total supply {}",
+                total_balance.amount(),
+                self.total_supply.amount()
+            )));
         }
 
         Ok(())

@@ -273,6 +273,7 @@ impl DefaultShadowAddressHandler {
     }
 
     /// Generate stealth keys for one-time addresses.
+    #[allow(clippy::type_complexity)]
     fn generate_stealth_keys(
         &self,
         recipient_view_key: &[u8],
@@ -403,7 +404,7 @@ impl ShadowAddressGenerator for DefaultShadowAddressHandler {
 
         // Generate stealth prefix for efficient scanning
         let mut hasher = Sha256::new();
-        hasher.update(&ephemeral_pubkey);
+        hasher.update(ephemeral_pubkey);
         let hash = hasher.finalize();
         let stealth_prefix = [hash[0], hash[1], hash[2], hash[3]];
 
@@ -465,7 +466,7 @@ impl ShadowAddressGenerator for DefaultShadowAddressHandler {
         let mut hasher = Sha256::new();
         hasher.update(b"SHADOW_HD_DERIVE");
         hasher.update(master_key);
-        hasher.update(&index.to_le_bytes());
+        hasher.update(index.to_le_bytes());
         let derived_seed = hasher.finalize();
 
         let seed_array: [u8; 32] = derived_seed.into();

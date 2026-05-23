@@ -140,7 +140,7 @@ impl VaultDag {
         for parent_id in &parent_ids {
             self.child_map
                 .entry(parent_id.clone())
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(vertex_id.clone());
             self.updated_at_map.insert(parent_id.clone(), now);
         }
@@ -185,7 +185,7 @@ impl VaultDag {
 
         self.child_map
             .entry(self.root_id.clone())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(vertex_id.clone());
 
         // Update root timestamp
@@ -273,7 +273,7 @@ impl VaultDag {
         self.secrets.insert(vertex_id.clone(), encrypted_secret);
 
         // Update label index if label changed
-        if label != &new_secret.label {
+        if label != new_secret.label {
             self.label_index.remove(label);
             self.label_index.insert(new_secret.label, vertex_id);
         }
@@ -315,7 +315,7 @@ impl VaultDag {
                         parents.insert(self.root_id.clone());
                         self.child_map
                             .entry(self.root_id.clone())
-                            .or_insert_with(HashSet::new)
+                            .or_default()
                             .insert(child_id);
                     }
                 }
@@ -524,7 +524,7 @@ impl VaultDag {
             for parent_id in &parent_ids {
                 dag.child_map
                     .entry(parent_id.clone())
-                    .or_insert_with(HashSet::new)
+                    .or_default()
                     .insert(vertex_id.clone());
             }
         }

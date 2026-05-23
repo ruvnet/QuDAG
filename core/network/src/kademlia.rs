@@ -471,9 +471,10 @@ impl KademliaDHT {
             attempted_nodes: 0,
         };
 
-        let mut metrics = self.metrics.lock().unwrap();
-        metrics.bootstrap_attempts += 1;
-        drop(metrics);
+        {
+            let mut metrics = self.metrics.lock().unwrap();
+            metrics.bootstrap_attempts += 1;
+        }
 
         // Add bootstrap nodes
         let mut connected = 0;
@@ -517,9 +518,10 @@ impl KademliaDHT {
                     duration,
                 };
 
-                let mut metrics = self.metrics.lock().unwrap();
-                metrics.successful_bootstraps += 1;
-                drop(metrics);
+                {
+                    let mut metrics = self.metrics.lock().unwrap();
+                    metrics.successful_bootstraps += 1;
+                }
 
                 if let Some(tx) = &self.event_tx {
                     let _ = tx
@@ -585,12 +587,13 @@ impl KademliaDHT {
         drop(reputations);
 
         // Update metrics (TODO: re-enable when libp2p kad API is updated)
-        let mut metrics = self.metrics.lock().unwrap();
-        // metrics.routing_table_size = self.kademlia.kbuckets()
-        //     .map(|bucket| bucket.num_entries())
-        //     .sum();
-        metrics.routing_table_size = 0; // Placeholder
-        drop(metrics);
+        {
+            let mut metrics = self.metrics.lock().unwrap();
+            // metrics.routing_table_size = self.kademlia.kbuckets()
+            //     .map(|bucket| bucket.num_entries())
+            //     .sum();
+            metrics.routing_table_size = 0; // Placeholder
+        }
 
         // Send discovery event
         if let Some(tx) = &self.event_tx {
@@ -690,12 +693,13 @@ impl KademliaDHT {
     ) {
         debug!("Found {} providers in {:?}", providers.len(), duration);
 
-        let mut metrics = self.metrics.lock().unwrap();
-        metrics.successful_queries += 1;
-        metrics.avg_query_time = Duration::from_secs_f64(
-            (metrics.avg_query_time.as_secs_f64() + duration.as_secs_f64()) / 2.0,
-        );
-        drop(metrics);
+        {
+            let mut metrics = self.metrics.lock().unwrap();
+            metrics.successful_queries += 1;
+            metrics.avg_query_time = Duration::from_secs_f64(
+                (metrics.avg_query_time.as_secs_f64() + duration.as_secs_f64()) / 2.0,
+            );
+        }
 
         // Update peer reputations
         let mut reputations = self.peer_reputations.write().await;

@@ -179,7 +179,7 @@ pub trait PeerDiscoveryService: Send + Sync {
 }
 
 /// Reputation management for peers
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ReputationManager {
     /// Peer reputation scores
     scores: HashMap<LibP2PPeerId, f64>,
@@ -187,16 +187,6 @@ pub struct ReputationManager {
     blacklist: HashMap<LibP2PPeerId, std::time::Instant>,
     /// Trusted peers
     trusted: HashMap<LibP2PPeerId, std::time::Instant>,
-}
-
-impl Default for ReputationManager {
-    fn default() -> Self {
-        Self {
-            scores: HashMap::new(),
-            blacklist: HashMap::new(),
-            trusted: HashMap::new(),
-        }
-    }
 }
 
 impl ReputationManager {

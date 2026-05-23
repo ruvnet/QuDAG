@@ -5,9 +5,6 @@
 #[cfg(not(feature = "std"))]
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
-#[cfg(feature = "std")]
-use std::collections::BTreeMap;
-
 use crate::{
     transaction::{Transaction, TransactionId, TransactionStatus},
     types::{Hash, Timestamp},
@@ -346,7 +343,7 @@ impl ConsensusAdapter {
         }
 
         // Check if not expired
-        if let Some(expires_at) = transaction.expires_at {
+        if let Some(_expires_at) = transaction.expires_at {
             if transaction.is_expired(Timestamp::now()) {
                 return false;
             }

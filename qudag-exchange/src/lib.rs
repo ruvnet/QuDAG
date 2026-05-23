@@ -46,7 +46,6 @@
 #![warn(missing_docs)]
 #![warn(rustdoc::missing_crate_level_docs)]
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 pub mod error;
@@ -153,7 +152,7 @@ impl Exchange {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn with_config(config: ExchangeConfig) -> Result<Self> {
+    pub async fn with_config(_config: ExchangeConfig) -> Result<Self> {
         // Implementation details...
         todo!()
     }
@@ -188,7 +187,7 @@ impl Exchange {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn create_account(&self, name: &str, password: &str) -> Result<Account> {
+    pub async fn create_account(&self, _name: &str, _password: &str) -> Result<Account> {
         // Implementation details...
         todo!()
     }
@@ -216,7 +215,7 @@ impl Exchange {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn get_balance<A: Into<AccountId>>(&self, account: A) -> Result<Balance> {
+    pub async fn get_balance<A: Into<AccountId>>(&self, _account: A) -> Result<Balance> {
         // Implementation details...
         todo!()
     }
@@ -259,7 +258,7 @@ impl Exchange {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn submit_transaction(&self, transaction: Transaction) -> Result<TransactionResult> {
+    pub async fn submit_transaction(&self, _transaction: Transaction) -> Result<TransactionResult> {
         // Implementation details...
         todo!()
     }
@@ -295,8 +294,8 @@ impl Exchange {
     /// ```
     pub async fn wait_for_confirmation(
         &self,
-        tx_id: &TransactionId,
-        confirmations: Option<u32>,
+        _tx_id: &TransactionId,
+        _confirmations: Option<u32>,
     ) -> Result<TransactionStatus> {
         // Implementation details...
         todo!()
@@ -545,7 +544,7 @@ impl Provider {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn stop(&self, force: bool) -> Result<()> {
+    pub async fn stop(&self, _force: bool) -> Result<()> {
         // Implementation details...
         todo!()
     }

@@ -25,7 +25,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio::time::timeout;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Errors that can occur during transport operations.
 #[derive(Debug, Error)]
@@ -268,6 +268,7 @@ pub struct SecureTransport {
     /// QUIC endpoint for QUIC connections
     quic_endpoint: Option<Arc<Mutex<Endpoint>>>,
     /// Active connections
+    #[allow(clippy::type_complexity)]
     connections: Arc<DashMap<String, Arc<Mutex<Box<dyn AsyncTransport + Send + Sync>>>>>,
     /// Connection metadata
     connection_metadata: Arc<DashMap<String, ConnectionMetadata>>,
@@ -291,6 +292,12 @@ pub struct SecureTransport {
 // Ensure SecureTransport is Send + Sync
 unsafe impl Send for SecureTransport {}
 unsafe impl Sync for SecureTransport {}
+
+impl Default for SecureTransport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl SecureTransport {
     /// Create a new secure transport instance

@@ -1453,7 +1453,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         // 4. Lock the system parameters
 
                         println!("✅ Immutable deployment initiated");
-                        println!("📝 Configuration hash: 0x{}", hex::encode(&[0u8; 32]));
+                        println!("📝 Configuration hash: 0x{}", hex::encode([0u8; 32]));
                         println!("🔐 Quantum signature: ML-DSA-87");
                         println!("⏰ Grace period ends in {} hours", grace_period);
                         println!(
@@ -1557,7 +1557,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("└── Algorithm: Exponential phase-in functions");
 
                         if examples {
-                            println!("");
+                            println!();
                             println!("💡 Fee Examples:");
                             println!("├── New unverified user (t=0, u=0): 0.1%");
                             println!("├── Unverified, 3 months, 5K rUv/month: ~0.32%");
@@ -1565,7 +1565,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("├── Verified, new user (t=0): 0.25%");
                             println!("├── Verified, 3 months, low usage: ~0.40%");
                             println!("└── Verified, 6 months, 20K rUv/month: ~0.28%");
-                            println!("");
+                            println!();
                             println!("📈 Trends:");
                             println!("├── Unverified fees increase with time and usage");
                             println!("├── Verified fees reward high throughput users");
@@ -1595,7 +1595,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("├── Grace Period: Not active");
                         println!("├── Configuration: Mutable");
                         println!("└── Quantum Signature: Not required");
-                        println!("");
+                        println!();
                         println!("ℹ️  To enable immutable mode:");
                         println!("   qudag exchange deploy-immutable --key-path <path>");
                     }

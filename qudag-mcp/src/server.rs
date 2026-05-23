@@ -577,7 +577,7 @@ impl QuDAGMCPServer {
                     .arguments
                     .as_ref()
                     .and_then(|args| args.get("stake_amount"))
-                    .map(|s| s.clone())
+                    .cloned()
                     .unwrap_or_else(|| "100000".to_string());
 
                 vec![

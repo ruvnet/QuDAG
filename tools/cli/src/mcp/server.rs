@@ -191,12 +191,10 @@ pub async fn stop_mcp_server(force: bool) -> Result<(), CliError> {
             eprintln!("Stopping MCP server (PID: {})...", pid);
 
             // Try graceful shutdown first
-            if !force {
-                if terminate_process(pid, false).await? {
-                    eprintln!("✓ MCP server stopped gracefully");
-                    clear_mcp_server_pid().await?;
-                    return Ok(());
-                }
+            if !force && terminate_process(pid, false).await? {
+                eprintln!("✓ MCP server stopped gracefully");
+                clear_mcp_server_pid().await?;
+                return Ok(());
             }
 
             // Force kill if graceful shutdown failed or force flag is set

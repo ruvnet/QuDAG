@@ -1308,15 +1308,12 @@ impl CommandRouter {
                         if parts.len() >= 2 {
                             let category = parts[0].to_string();
                             let entry = parts[1..].join("/");
-                            categories
-                                .entry(category)
-                                .or_insert_with(Vec::new)
-                                .push(entry);
+                            categories.entry(category).or_default().push(entry);
                         }
                     } else {
                         categories
                             .entry("(root)".to_string())
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push(label.clone());
                     }
                 }
@@ -1632,7 +1629,7 @@ impl CommandRouter {
         info!("Executing vault config set command: {}={}", key, value);
 
         // Validate key
-        let valid_keys = vec![
+        let valid_keys = [
             "vault.path",
             "vault.auto_lock",
             "vault.clipboard_timeout",

@@ -53,7 +53,7 @@ impl ResourceRegistry {
     /// Get all available resources
     pub async fn list_resources(&self) -> Result<Vec<Resource>> {
         let mut resources = Vec::new();
-        for (name, resource) in &self.resources {
+        for (_name, resource) in &self.resources {
             let definition = resource.definition();
             resources.push(Resource {
                 uri: definition.uri,

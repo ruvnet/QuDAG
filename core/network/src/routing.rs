@@ -477,10 +477,7 @@ impl Router {
     /// Adds a peer connection to the routing table
     pub fn add_peer_connection(&mut self, from: LibP2PPeerId, to: LibP2PPeerId) {
         let mut connections = self.peer_connections.blocking_write();
-        connections
-            .entry(from)
-            .or_insert_with(HashSet::new)
-            .insert(to);
+        connections.entry(from).or_default().insert(to);
     }
 
     /// Removes a peer connection from the routing table
@@ -549,14 +546,16 @@ impl Router {
             return Err(RoutingError::NoRoute);
         }
 
-        // Use peer selector to find suitable peers
-        let mut peer_selector = self.peer_selector.lock().unwrap();
+        // Use peer selector to find suitable peers (drop guard before await)
         let candidates: Vec<DiscoveredPeer> = available_peers.into_iter().cloned().collect();
-        let selected_peer_ids = peer_selector.select_peers(
-            &candidates,
-            criteria.redundancy_level.path_count(),
-            &self.scoring_config,
-        );
+        let selected_peer_ids = {
+            let mut peer_selector = self.peer_selector.lock().unwrap();
+            peer_selector.select_peers(
+                &candidates,
+                criteria.redundancy_level.path_count(),
+                &self.scoring_config,
+            )
+        };
 
         // Build paths based on redundancy level
         let mut paths = Vec::new();
@@ -837,33 +836,39 @@ impl Router {
             return Err(RoutingError::NoRoute);
         }
 
-        // Update performance metrics
-        let mut metrics = self.performance_metrics.lock().unwrap();
-        metrics.total_messages += 1;
+        // Update performance metrics (drop guard before await)
+        {
+            let mut metrics = self.performance_metrics.lock().unwrap();
+            metrics.total_messages += 1;
+        }
 
-        // Use load balancer to select best path
-        let mut load_balancer = self.load_balancer.lock().unwrap();
-        let selected_path = if paths.len() == 1 {
-            &paths[0]
-        } else {
-            // Get peer IDs from paths
-            let peer_ids: Vec<_> = paths
-                .iter()
-                .filter_map(|p| p.hops.first())
-                .copied()
-                .collect();
-
-            if let Some(selected_peer) = load_balancer.select_peer(&peer_ids) {
-                paths
-                    .iter()
-                    .find(|p| p.hops.first() == Some(&selected_peer))
-                    .unwrap_or(&paths[0])
+        // Use load balancer to select best path (drop guard before await)
+        let selected_index = {
+            let mut load_balancer = self.load_balancer.lock().unwrap();
+            if paths.len() == 1 {
+                0
             } else {
-                &paths[0]
+                // Get peer IDs from paths
+                let peer_ids: Vec<_> = paths
+                    .iter()
+                    .filter_map(|p| p.hops.first())
+                    .copied()
+                    .collect();
+
+                if let Some(selected_peer) = load_balancer.select_peer(&peer_ids) {
+                    paths
+                        .iter()
+                        .position(|p| p.hops.first() == Some(&selected_peer))
+                        .unwrap_or(0)
+                } else {
+                    0
+                }
             }
         };
 
-        // Update route statistics
+        let selected_path = &paths[selected_index];
+
+        // Update route statistics (drop guard before await)
         if let Some(first_hop) = selected_path.hops.first() {
             let mut route_stats = self.route_stats.lock().unwrap();
             let stats = route_stats.entry(*first_hop).or_default();
@@ -887,13 +892,16 @@ impl Router {
 
         routed_message.extend_from_slice(&message);
 
-        // Send through channel
+        // Send through channel (no mutex held across this await)
         self.message_tx
             .send(routed_message)
             .await
             .map_err(|_| RoutingError::ChannelError)?;
 
-        metrics.successful_routings += 1;
+        {
+            let mut metrics = self.performance_metrics.lock().unwrap();
+            metrics.successful_routings += 1;
+        }
         Ok(())
     }
 }

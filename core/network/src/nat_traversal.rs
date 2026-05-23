@@ -411,6 +411,7 @@ struct StunTransaction {
     /// Request timestamp
     sent_at: Instant,
     /// Response callback
+    #[allow(clippy::type_complexity)]
     callback: Arc<Mutex<Option<mpsc::Sender<Result<Message, NatTraversalError>>>>>,
 }
 
@@ -772,6 +773,12 @@ pub struct NatPmpMapping {
     pub lifetime: Duration,
     /// Created timestamp
     pub created_at: Instant,
+}
+
+impl Default for NatPmpClient {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NatPmpClient {

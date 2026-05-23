@@ -19,9 +19,6 @@ extern crate alloc;
 #[cfg(not(feature = "std"))]
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
-#[cfg(feature = "std")]
-use std::{collections::BTreeMap, string::String, vec::Vec};
-
 // Public modules
 pub mod account;
 pub mod config;

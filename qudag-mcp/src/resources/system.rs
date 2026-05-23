@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use super::McpResource;
 use crate::{
-    error::{Error, Result},
+    error::Result,
     types::{Resource, ResourceContent, ResourceURI},
 };
 

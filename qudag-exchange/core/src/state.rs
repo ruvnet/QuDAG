@@ -5,9 +5,6 @@
 #[cfg(not(feature = "std"))]
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 
-#[cfg(feature = "std")]
-use std::collections::BTreeMap;
-
 use crate::{
     account::AccountId,
     consensus::ConsensusAdapter,
@@ -441,7 +438,12 @@ impl StateManager {
         self.consensus.clear_finalized();
 
         // Check if we should create a checkpoint
-        if self.state.metadata.height % self.config.checkpoint_interval == 0 {
+        if self
+            .state
+            .metadata
+            .height
+            .is_multiple_of(self.config.checkpoint_interval)
+        {
             self.state.create_checkpoint()?;
         }
 

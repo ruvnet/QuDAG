@@ -622,13 +622,11 @@ impl DiscoveredPeer {
 
             // Update circuit breaker on failure
             match &self.circuit_breaker_state {
-                CircuitBreakerState::Closed => {
-                    if self.connection_attempts >= 5 {
-                        self.circuit_breaker_state = CircuitBreakerState::Open {
-                            opened_at: Instant::now(),
-                            failure_count: self.connection_attempts as usize,
-                        };
-                    }
+                CircuitBreakerState::Closed if self.connection_attempts >= 5 => {
+                    self.circuit_breaker_state = CircuitBreakerState::Open {
+                        opened_at: Instant::now(),
+                        failure_count: self.connection_attempts as usize,
+                    };
                 }
                 CircuitBreakerState::HalfOpen { .. } => {
                     self.circuit_breaker_state = CircuitBreakerState::Open {
@@ -905,6 +903,7 @@ pub enum RetryStrategy {
 
 /// Enhanced discovery events with detailed information.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum DiscoveryEvent {
     /// New peer discovered
     PeerDiscovered(DiscoveredPeer),
@@ -1269,6 +1268,12 @@ pub struct TopologyOptimizer {
     pub metrics_history: VecDeque<TopologyMetrics>,
 }
 
+impl Default for TopologyOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TopologyOptimizer {
     /// Create new topology optimizer
     pub fn new() -> Self {
@@ -1390,6 +1395,12 @@ pub struct PerformanceMonitor {
     pub peer_metrics: HashMap<LibP2PPeerId, PeerPerformanceMetrics>,
     /// Performance alerts
     pub alerts: VecDeque<PerformanceAlert>,
+}
+
+impl Default for PerformanceMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PerformanceMonitor {

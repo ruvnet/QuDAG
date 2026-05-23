@@ -7,7 +7,7 @@ use std::time::Duration;
 use crate::error::{Error, Result};
 
 /// Main configuration for MCP server
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct McpConfig {
     /// Server binding configuration
     pub server: ServerConfig,
@@ -222,19 +222,6 @@ pub struct BackupConfig {
     pub compress: bool,
 }
 
-impl Default for McpConfig {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            auth: AuthConfig::default(),
-            security: SecurityConfig::default(),
-            rate_limit: RateLimitConfig::default(),
-            audit: AuditConfig::default(),
-            storage: StorageConfig::default(),
-        }
-    }
-}
-
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
@@ -367,7 +354,7 @@ impl McpConfig {
         }
 
         // Validate vault path
-        if !self.auth.vault_path.parent().map_or(true, |p| p.is_dir()) {
+        if !self.auth.vault_path.parent().is_none_or(|p| p.is_dir()) {
             return Err(Error::config("Vault directory does not exist"));
         }
 

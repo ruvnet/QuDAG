@@ -90,6 +90,12 @@ struct ClientConfig {
     features: Vec<String>,
 }
 
+impl Default for QuDAGClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[wasm_bindgen]
 impl QuDAGClient {
     /// Create a new QuDAG client

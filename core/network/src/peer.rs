@@ -28,6 +28,12 @@ pub enum PeerError {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PeerId(Vec<u8>);
 
+impl Default for PeerId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PeerId {
     /// Create a new random peer ID
     pub fn new() -> Self {

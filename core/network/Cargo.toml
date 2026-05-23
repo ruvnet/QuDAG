@@ -37,7 +37,7 @@ base64 = "0.21"
 void = "1"
 either = "1.9"
 bs58 = "0.5"
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 dashmap = "5.5"
 async-trait = "0.1"
 ring = "0.17"

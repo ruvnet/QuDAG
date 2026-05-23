@@ -105,8 +105,10 @@ impl SecretEntry {
         notes: Option<String>,
         tags: Vec<String>,
     ) -> Self {
-        let mut metadata = SecretMetadata::default();
-        metadata.tags = tags;
+        let metadata = SecretMetadata {
+            tags,
+            ..Default::default()
+        };
 
         Self {
             label,
@@ -138,7 +140,7 @@ impl SecretEntry {
             || self
                 .url
                 .as_ref()
-                .map_or(false, |u| u.to_lowercase().contains(&query_lower))
+                .is_some_and(|u| u.to_lowercase().contains(&query_lower))
             || self.tags().any(|t| t.to_lowercase().contains(&query_lower))
     }
 

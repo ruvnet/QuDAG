@@ -70,7 +70,7 @@ impl rUv {
 
     /// Multiply by a percentage (0.0 to 1.0)
     pub fn multiply(self, percentage: f64) -> Result<Self, &'static str> {
-        if percentage < 0.0 || percentage > 1.0 {
+        if !(0.0..=1.0).contains(&percentage) {
             return Err("Percentage must be between 0.0 and 1.0");
         }
 

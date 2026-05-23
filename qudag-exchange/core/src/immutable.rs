@@ -286,7 +286,7 @@ impl ImmutableDeployment {
 
     /// Verify the lock signature
     #[cfg(feature = "std")]
-    pub fn verify_lock_signature(&self, current_time: Timestamp) -> Result<bool> {
+    pub fn verify_lock_signature(&self, _current_time: Timestamp) -> Result<bool> {
         let sig_data = self
             .config
             .lock_signature
@@ -375,7 +375,7 @@ impl ImmutableDeployment {
     pub fn governance_override(
         &mut self,
         governance_keypair: &qudag_crypto::MlDsaKeyPair,
-        current_time: Timestamp,
+        _current_time: Timestamp,
     ) -> Result<()> {
         let governance_key = self
             .config

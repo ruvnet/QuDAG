@@ -729,18 +729,16 @@ impl P2PNode {
             kad::Event::InboundRequest { request } => {
                 debug!("Kademlia inbound request: {:?}", request);
             }
-            kad::Event::OutboundQueryProgressed { result, .. } => match result {
-                QueryResult::GetClosestPeers(result) => match result {
-                    Ok(ok) => {
-                        for peer in ok.peers {
-                            debug!("Found closest peer: {}", peer);
-                            self.event_tx.send(P2PEvent::PeerDiscovered(peer))?;
-                        }
-                    }
-                    Err(e) => warn!("Get closest peers error: {:?}", e),
-                },
-                _ => {}
-            },
+            kad::Event::OutboundQueryProgressed {
+                result: QueryResult::GetClosestPeers(Ok(ok)),
+                ..
+            } => {
+                for peer in ok.peers {
+                    debug!("Found closest peer: {}", peer);
+                    self.event_tx.send(P2PEvent::PeerDiscovered(peer))?;
+                }
+            }
+            kad::Event::OutboundQueryProgressed { .. } => {}
             _ => {}
         }
         Ok(())
@@ -911,24 +909,23 @@ impl P2PNode {
 
     /// Handle DCUTR events
     async fn handle_dcutr_event(&mut self, event: dcutr::Event) -> Result<(), Box<dyn Error>> {
-        match event {
-            dcutr::Event {
-                remote_peer_id,
-                result,
-            } => match result {
-                Ok(connection_id) => {
-                    info!(
-                        "Direct connection upgrade succeeded with peer {} (connection: {:?})",
-                        remote_peer_id, connection_id
-                    );
-                }
-                Err(error) => {
-                    warn!(
-                        "Direct connection upgrade failed with {}: {:?}",
-                        remote_peer_id, error
-                    );
-                }
-            },
+        let dcutr::Event {
+            remote_peer_id,
+            result,
+        } = event;
+        match result {
+            Ok(connection_id) => {
+                info!(
+                    "Direct connection upgrade succeeded with peer {} (connection: {:?})",
+                    remote_peer_id, connection_id
+                );
+            }
+            Err(error) => {
+                warn!(
+                    "Direct connection upgrade failed with {}: {:?}",
+                    remote_peer_id, error
+                );
+            }
         }
         Ok(())
     }

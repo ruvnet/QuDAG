@@ -223,11 +223,7 @@ impl MlKem768 {
         let total_time = TOTAL_DECAP_TIME.load(Ordering::Relaxed);
         let decap_count = DECAP_COUNT.load(Ordering::Relaxed);
 
-        let avg_decap_time_ns = if decap_count > 0 {
-            total_time / decap_count
-        } else {
-            0
-        };
+        let avg_decap_time_ns = total_time.checked_div(decap_count).unwrap_or(0);
 
         Metrics {
             key_cache_misses: cache_misses,

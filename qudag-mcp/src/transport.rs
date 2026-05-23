@@ -31,6 +31,12 @@ pub struct StdioTransport {
     connected: bool,
 }
 
+impl Default for StdioTransport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StdioTransport {
     pub fn new() -> Self {
         let stdin = tokio::io::stdin();
@@ -412,6 +418,12 @@ pub struct HttpServerTransport {
     message_queue: std::collections::VecDeque<MCPMessage>,
 }
 
+impl Default for HttpServerTransport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HttpServerTransport {
     pub fn new() -> Self {
         Self {
@@ -448,6 +460,12 @@ impl Transport for HttpServerTransport {
 /// Mock WebSocket server transport for server mode
 pub struct WebSocketServerTransport {
     connected: bool,
+}
+
+impl Default for WebSocketServerTransport {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl WebSocketServerTransport {

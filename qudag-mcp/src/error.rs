@@ -3,7 +3,6 @@
 //! This module provides comprehensive error handling for all MCP operations,
 //! including proper error propagation from QuDAG components and MCP-specific errors.
 
-use std::fmt;
 use thiserror::Error;
 
 /// Result type alias for QuDAG MCP operations

@@ -356,7 +356,7 @@ impl ExchangeConfig {
 
     /// Check if business plan features are enabled
     pub fn has_business_plan(&self) -> bool {
-        self.business_plan.as_ref().map_or(false, |bp| bp.enabled)
+        self.business_plan.as_ref().is_some_and(|bp| bp.enabled)
     }
 
     /// Get fee router if available
@@ -431,7 +431,7 @@ impl Default for ExchangeConfig {
 }
 
 /// Business plan features configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BusinessPlanConfig {
     /// Enable business plan features
     pub enabled: bool,
@@ -453,20 +453,6 @@ pub struct BusinessPlanConfig {
 
     /// Governance settings
     pub governance: GovernanceConfig,
-}
-
-impl Default for BusinessPlanConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false, // Opt-in by default
-            payout_config: PayoutConfig::default(),
-            enable_vault_management: false,
-            enable_auto_distribution: false,
-            enable_role_earnings: false,
-            enable_bounty_rewards: false,
-            governance: GovernanceConfig::default(),
-        }
-    }
 }
 
 /// Governance configuration for business plan features

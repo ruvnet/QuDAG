@@ -3,7 +3,7 @@
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
 /// Authentication manager
 #[derive(Debug, Clone)]

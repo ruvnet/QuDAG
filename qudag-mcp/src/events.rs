@@ -1,6 +1,6 @@
 //! Event streaming and notifications for QuDAG MCP.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::types::{EventType, McpEvent};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

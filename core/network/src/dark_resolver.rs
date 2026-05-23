@@ -125,18 +125,18 @@ impl DarkDomainRecord {
         let message = self.to_signable_bytes()?;
         self.signature = keypair
             .sign(&message, &mut rng)
-            .map_err(|e| DarkResolverError::MlDsaError(e))?;
+            .map_err(DarkResolverError::MlDsaError)?;
         Ok(())
     }
 
     /// Verify the record's signature
     pub fn verify_signature(&self) -> Result<(), DarkResolverError> {
         let public_key = MlDsaPublicKey::from_bytes(&self.signing_public_key)
-            .map_err(|e| DarkResolverError::MlDsaError(e))?;
+            .map_err(DarkResolverError::MlDsaError)?;
         let message = self.to_signable_bytes()?;
         public_key
             .verify(&message, &self.signature)
-            .map_err(|e| DarkResolverError::MlDsaError(e))?;
+            .map_err(DarkResolverError::MlDsaError)?;
         Ok(())
     }
 
@@ -273,8 +273,7 @@ impl DarkResolver {
         rng: &mut R,
     ) -> Result<DarkAddress, DarkResolverError> {
         // Generate ML-DSA keypair for signing
-        let signing_keypair =
-            MlDsaKeyPair::generate(rng).map_err(|e| DarkResolverError::MlDsaError(e))?;
+        let signing_keypair = MlDsaKeyPair::generate(rng).map_err(DarkResolverError::MlDsaError)?;
 
         // Generate ML-KEM keypair for encryption
         let (kem_public, _kem_secret) =

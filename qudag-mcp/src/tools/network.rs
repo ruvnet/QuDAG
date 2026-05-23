@@ -2,12 +2,8 @@
 
 use async_trait::async_trait;
 use serde_json::{json, Value};
-use std::collections::HashMap;
 
-use super::{
-    get_optional_bool_arg, get_optional_string_arg, get_optional_u64_arg, get_required_string_arg,
-    McpTool,
-};
+use super::{get_required_string_arg, McpTool};
 use crate::error::{Error, Result};
 
 /// Network tool for peer and networking operations

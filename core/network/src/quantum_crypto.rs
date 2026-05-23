@@ -12,20 +12,15 @@ use tracing::{debug, info};
 use zeroize::ZeroizeOnDrop;
 
 /// ML-KEM (Kyber) security levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MlKemSecurityLevel {
     /// ML-KEM-512 (Category 1)
     Level512,
     /// ML-KEM-768 (Category 3)
+    #[default]
     Level768,
     /// ML-KEM-1024 (Category 5)
     Level1024,
-}
-
-impl Default for MlKemSecurityLevel {
-    fn default() -> Self {
-        Self::Level768 // Category 3 provides good balance of security and performance
-    }
 }
 
 /// ML-KEM public key

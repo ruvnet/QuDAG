@@ -3,7 +3,6 @@
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use super::{
     get_optional_bool_arg, get_optional_string_arg, get_optional_u64_arg, get_required_string_arg,
@@ -51,7 +50,7 @@ impl VaultTool {
         let symbols = get_optional_bool_arg(args, "symbols").unwrap_or(true);
 
         // Mock implementation
-        let final_password = if generate {
+        let _final_password = if generate {
             self.generate_password(length, symbols, true)
         } else {
             password.unwrap_or_else(|| "[password would be prompted]".to_string())
@@ -107,7 +106,7 @@ impl VaultTool {
         let filtered_entries = if let Some(ref cat) = category {
             entries
                 .into_iter()
-                .filter(|entry| entry["category"].as_str() == Some(&cat))
+                .filter(|entry| entry["category"].as_str() == Some(cat))
                 .collect::<Vec<_>>()
         } else {
             entries

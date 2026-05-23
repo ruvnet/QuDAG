@@ -6,7 +6,7 @@
 use alloc::{format, string::String, vec::Vec};
 
 use crate::{
-    types::{rUv, Hash, Nonce},
+    types::{rUv, Nonce},
     Error, Result,
 };
 use serde::{Deserialize, Serialize};
@@ -92,7 +92,7 @@ pub struct AccountMetadata {
 }
 
 /// Account flags for special statuses
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct AccountFlags {
     /// Account is frozen (cannot send transactions)
     pub frozen: bool,
@@ -102,16 +102,6 @@ pub struct AccountFlags {
 
     /// Account requires additional verification
     pub requires_verification: bool,
-}
-
-impl Default for AccountFlags {
-    fn default() -> Self {
-        Self {
-            frozen: false,
-            privileged: false,
-            requires_verification: false,
-        }
-    }
 }
 
 impl Account {

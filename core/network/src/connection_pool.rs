@@ -176,7 +176,7 @@ impl ConnectionPool {
                     let conn_id = self.connection_counter.fetch_add(1, Ordering::Relaxed) as u64;
                     self.active
                         .entry(peer_id)
-                        .or_insert_with(HashMap::new)
+                        .or_default()
                         .insert(conn_id, conn.clone());
 
                     // Update statistics
@@ -198,7 +198,7 @@ impl ConnectionPool {
             let conn_id = self.connection_counter.fetch_add(1, Ordering::Relaxed) as u64;
             self.active
                 .entry(peer_id)
-                .or_insert_with(HashMap::new)
+                .or_default()
                 .insert(conn_id, conn.clone());
 
             // Update statistics
@@ -250,7 +250,7 @@ impl ConnectionPool {
         // Return to available pool
         self.available
             .entry(peer_id)
-            .or_insert_with(VecDeque::new)
+            .or_default()
             .push_back(connection);
 
         // Notify waiters
@@ -424,10 +424,7 @@ impl ConnectionPool {
                 for _ in 0..needed {
                     match self.create_connection(peer_id).await {
                         Ok(conn) => {
-                            self.available
-                                .entry(peer_id)
-                                .or_insert_with(VecDeque::new)
-                                .push_back(conn);
+                            self.available.entry(peer_id).or_default().push_back(conn);
                             self.increment_created();
                         }
                         Err(e) => {

@@ -274,13 +274,10 @@ impl FeeRouter {
         // Validate custom percentage if provided
         if let Some(pct) = info.custom_percentage {
             if pct < 0.0 || pct > self.config.max_contributor_percentage {
-                return Err(Error::Other(
-                    format!(
-                        "Custom percentage {} exceeds maximum allowed {}",
-                        pct, self.config.max_contributor_percentage
-                    )
-                    .into(),
-                ));
+                return Err(Error::Other(format!(
+                    "Custom percentage {} exceeds maximum allowed {}",
+                    pct, self.config.max_contributor_percentage
+                )));
             }
         }
 
@@ -364,13 +361,13 @@ impl FeeRouter {
         &mut self,
         current_time: Timestamp,
     ) -> Result<Vec<PayoutTransaction>> {
-        let mut processed = Vec::new();
+        let processed = Vec::new();
         let mut to_remove = Vec::new();
 
         for (account_id, amount) in &self.pending_payouts {
             if amount.amount() >= self.config.min_payout_threshold.amount() {
                 // Create payout transaction for accumulated amount
-                let tx_id = format!("pending-{}-{}", account_id, current_time.value());
+                let _tx_id = format!("pending-{}-{}", account_id, current_time.value());
 
                 // TODO: Create proper payout transaction
                 to_remove.push(account_id.clone());
@@ -472,9 +469,10 @@ impl FeeRouter {
             "node_operation" => &self.config.default_splits.node_operation,
             "bounty_completion" => &self.config.default_splits.bounty_completion,
             _ => {
-                return Err(Error::Other(
-                    format!("Unknown split template: {}", split_template).into(),
-                ))
+                return Err(Error::Other(format!(
+                    "Unknown split template: {}",
+                    split_template
+                )))
             }
         };
 
@@ -491,13 +489,10 @@ impl FeeRouter {
             .find(|(ct, _)| ct == &contributor_type)
             .map(|(_, pct)| *pct)
             .ok_or_else(|| {
-                Error::Other(
-                    format!(
-                        "No percentage found for contributor type: {:?}",
-                        contributor_type
-                    )
-                    .into(),
-                )
+                Error::Other(format!(
+                    "No percentage found for contributor type: {:?}",
+                    contributor_type
+                ))
             })
     }
 
@@ -573,13 +568,10 @@ impl PayoutConfig {
         ] {
             let total: f64 = split.percentages.iter().map(|(_, pct)| pct).sum();
             if total > 1.0 {
-                return Err(Error::Other(
-                    format!(
-                        "Split template '{}' percentages sum to {}, must be <= 1.0",
-                        name, total
-                    )
-                    .into(),
-                ));
+                return Err(Error::Other(format!(
+                    "Split template '{}' percentages sum to {}, must be <= 1.0",
+                    name, total
+                )));
             }
         }
 

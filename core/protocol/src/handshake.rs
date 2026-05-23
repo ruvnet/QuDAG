@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use qudag_crypto::{

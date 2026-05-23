@@ -1041,6 +1041,12 @@ pub enum CircuitState {
     Failed(String),
 }
 
+impl Default for CircuitManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CircuitManager {
     /// Create new circuit manager
     pub fn new() -> Self {
@@ -1263,6 +1269,12 @@ pub struct NodeFlags {
     pub fast: bool,
     /// Node is stable
     pub stable: bool,
+}
+
+impl Default for DirectoryClient {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DirectoryClient {

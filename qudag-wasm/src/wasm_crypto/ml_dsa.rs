@@ -176,10 +176,11 @@ pub mod primitives {
 }
 
 /// Alternative implementation using available pure-Rust crates
+// Use pqcrypto-mldsa (replaces deprecated pqcrypto-dilithium; RUSTSEC-2024-0380)
 #[cfg(feature = "pqcrypto-dilithium")]
 pub mod pqcrypto_impl {
     use anyhow::Result;
-    use pqcrypto_dilithium::dilithium3;
+    use pqcrypto_mldsa::mldsa65 as dilithium3;
 
     pub fn generate_keypair() -> Result<(Vec<u8>, Vec<u8>)> {
         let (pk, sk) = dilithium3::keypair();

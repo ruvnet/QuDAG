@@ -1,0 +1,44 @@
+# cargo-deny configuration for security advisories
+# See https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+# Treat all vulnerabilities as errors
+vulnerability = "deny"
+# Unmaintained crates are warnings
+unmaintained = "warn"
+# Yanked crates are warnings
+yanked = "warn"
+
+# Known-unfixable advisories — document here and revisit when upstream fixes land
+ignore = [
+    # hickory-proto NSEC3 loop (RUSTSEC-2026-0118): no fix available upstream.
+    # Transitive via libp2p-mdns. Mitigated by network-level DoS protections.
+    # Revisit when hickory-proto >=0.26.2 is released and pulled into libp2p.
+    "RUSTSEC-2026-0118",
+
+    # hickory-proto O(n²) name compression (RUSTSEC-2026-0119): fix requires
+    # hickory-proto >=0.26.1, which is not yet pulled by libp2p 0.56.
+    # Revisit when libp2p 0.57+ updates hickory-proto to 0.26.x.
+    "RUSTSEC-2026-0119",
+
+    # rsa Marvin timing attack (RUSTSEC-2023-0071): no fixed version published.
+    # The rsa crate is a transitive dep of sqlx-mysql. QuDAG uses sqlx with the
+    # sqlite feature only; the mysql feature (and thus rsa) is not enabled by default.
+    # Revisit if a fixed version of rsa is published.
+    "RUSTSEC-2023-0071",
+]
+
+[licenses]
+# Allow common open-source licenses
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "OpenSSL",
+    "Zlib",
+    "CC0-1.0",
+]

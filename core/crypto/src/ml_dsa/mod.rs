@@ -54,7 +54,8 @@
 #![allow(clippy::needless_range_loop)]
 #![allow(clippy::type_complexity)]
 
-use pqcrypto_dilithium::dilithium3::*;
+// Use pqcrypto-mldsa (replaces deprecated pqcrypto-dilithium; RUSTSEC-2024-0380)
+use pqcrypto_mldsa::mldsa65::*;
 use pqcrypto_traits::sign::{
     PublicKey as PqPublicKeyTrait, SecretKey as PqSecretKeyTrait,
     SignedMessage as PqSignedMessageTrait,

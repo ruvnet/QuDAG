@@ -266,11 +266,12 @@ impl PeerTable {
 
         while !unvisited.is_empty() {
             // Find unvisited node with minimum distance
+            // Use total_cmp to avoid panics on NaN distances
             let current_idx = unvisited
                 .iter()
                 .enumerate()
                 .min_by(|(_, a), (_, b)| {
-                    distances[a].partial_cmp(&distances[b]).unwrap()
+                    distances[a].total_cmp(&distances[b])
                 })
                 .map(|(i, _)| i)?;
             

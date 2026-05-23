@@ -31,7 +31,7 @@ async-trait = "0.1"
 toml = "0.8"
 hex = "0.4"
 dashmap = "6.1"
-libp2p = "0.53"
+libp2p = "0.56"
 
 # Database dependencies
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }

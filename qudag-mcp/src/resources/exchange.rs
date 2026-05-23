@@ -80,11 +80,13 @@ impl McpResource for ExchangeResource {
             "supply" | "supply/" => self.get_supply_info().await?,
             "status" | "status/" => self.get_network_status().await?,
             path if path.starts_with("accounts/") => {
-                let account_id = path.strip_prefix("accounts/").unwrap();
+                // strip_prefix is guaranteed to succeed by the starts_with guard above
+                let account_id = path.strip_prefix("accounts/").unwrap_or_default();
                 self.get_account_info(account_id).await?
             }
             path if path.starts_with("balances/") => {
-                let account_id = path.strip_prefix("balances/").unwrap();
+                // strip_prefix is guaranteed to succeed by the starts_with guard above
+                let account_id = path.strip_prefix("balances/").unwrap_or_default();
                 self.get_account_balance(account_id).await?
             }
             "" => self.get_exchange_overview().await?,

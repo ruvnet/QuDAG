@@ -733,9 +733,11 @@ impl P2PNode {
                 result: QueryResult::GetClosestPeers(Ok(ok)),
                 ..
             } => {
-                for peer in ok.peers {
-                    debug!("Found closest peer: {}", peer);
-                    self.event_tx.send(P2PEvent::PeerDiscovered(peer))?;
+                // In libp2p 0.55+ GetClosestPeers returns PeerInfo; extract peer_id
+                for peer_info in ok.peers {
+                    let peer_id = peer_info.peer_id;
+                    debug!("Found closest peer: {}", peer_id);
+                    self.event_tx.send(P2PEvent::PeerDiscovered(peer_id))?;
                 }
             }
             kad::Event::OutboundQueryProgressed { .. } => {}
@@ -822,7 +824,8 @@ impl P2PNode {
         event: identify::Event,
     ) -> Result<(), Box<dyn Error>> {
         match event {
-            identify::Event::Received { peer_id, info } => {
+            // connection_id field added in libp2p 0.54+; use .. to ignore it
+            identify::Event::Received { peer_id, info, .. } => {
                 debug!(
                     "Identified peer {}: protocols={:?}, agent={}",
                     peer_id, info.protocols, info.agent_version
@@ -838,7 +841,7 @@ impl P2PNode {
             }
             identify::Event::Sent { .. } => {}
             identify::Event::Pushed { .. } => {}
-            identify::Event::Error { peer_id, error } => {
+            identify::Event::Error { peer_id, error, .. } => {
                 warn!("Identify error with {}: {}", peer_id, error);
             }
         }
@@ -936,7 +939,8 @@ impl P2PNode {
         event: request_response::Event<QuDagRequest, QuDagResponse>,
     ) -> Result<(), Box<dyn Error>> {
         match event {
-            request_response::Event::Message { peer, message } => match message {
+            // connection_id field added in libp2p 0.54+; use .. to ignore it
+            request_response::Event::Message { peer, message, .. } => match message {
                 request_response::Message::Request {
                     request, channel, ..
                 } => {
@@ -974,6 +978,7 @@ impl P2PNode {
                 peer,
                 request_id,
                 error,
+                .. // connection_id added in libp2p 0.54+
             } => {
                 warn!(
                     "Request to {} failed (id: {}): {:?}",
@@ -985,6 +990,7 @@ impl P2PNode {
                 peer,
                 request_id,
                 error,
+                .. // connection_id added in libp2p 0.54+
             } => {
                 warn!(
                     "Inbound request from {} failed (id: {}): {:?}",
@@ -1062,11 +1068,11 @@ impl P2PNode {
         topic: &str,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let topic = IdentTopic::new(topic);
-        self.swarm
+        // In libp2p 0.55+ unsubscribe returns bool, not Result
+        let _was_subscribed = self.swarm
             .behaviour_mut()
             .gossipsub
-            .unsubscribe(&topic)
-            .map_err(|e| format!("Unsubscribe error: {}", e))?;
+            .unsubscribe(&topic);
         info!("Unsubscribed from topic: {}", topic);
         Ok(())
     }

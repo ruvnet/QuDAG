@@ -1141,11 +1141,12 @@ impl CircuitManager {
     /// Get an active circuit for use
     pub fn get_active_circuit(&mut self) -> Option<&mut Circuit> {
         // Find best active circuit based on quality score and age
+        // Use total_cmp to avoid panics when quality_score is NaN
         self.circuits
             .values_mut()
             .filter(|c| c.state == CircuitState::Active)
             .filter(|c| c.created_at.elapsed() < self.circuit_lifetime)
-            .max_by(|a, b| a.quality_score.partial_cmp(&b.quality_score).unwrap())
+            .max_by(|a, b| a.quality_score.total_cmp(&b.quality_score))
     }
 
     /// Update circuit metrics

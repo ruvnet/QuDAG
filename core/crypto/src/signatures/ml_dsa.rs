@@ -1,5 +1,6 @@
 use super::*;
-use pqcrypto::sign::dilithium3;
+// Use pqcrypto-mldsa (replaces deprecated pqcrypto-dilithium; RUSTSEC-2024-0380)
+use pqcrypto_mldsa::mldsa65 as dilithium3;
 use rand::RngCore;
 use zeroize::Zeroize;
 

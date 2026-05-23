@@ -9,7 +9,7 @@ use crate::types::NetworkError;
 use libp2p::{
     kad::{
         BootstrapOk, Event as KademliaEvent, GetClosestPeersOk, GetProvidersOk, GetRecordOk,
-        PutRecordOk, QueryId, QueryResult, Record, RecordKey,
+        PeerInfo as KadPeerInfo, PutRecordOk, QueryId, QueryResult, Record, RecordKey,
     },
     PeerId as LibP2PPeerId,
 };
@@ -757,17 +757,18 @@ impl KademliaDHT {
 
     /// Handle closest peers result
     async fn handle_closest_peers(&mut self, result: GetClosestPeersOk, duration: Duration) {
-        let peers = result.peers;
-        debug!("Found {} closest peers in {:?}", peers.len(), duration);
+        // In libp2p 0.55+ peers is Vec<PeerInfo>; extract peer IDs for existing logic
+        let peer_ids: Vec<LibP2PPeerId> = result.peers.into_iter().map(|p: KadPeerInfo| p.peer_id).collect();
+        debug!("Found {} closest peers in {:?}", peer_ids.len(), duration);
 
         // Update network size estimate
         {
             let mut metrics = self.metrics.lock().unwrap();
-            metrics.network_size_estimate = self.estimate_network_size(&peers);
+            metrics.network_size_estimate = self.estimate_network_size(&peer_ids);
         }
 
         // Check for network partitions
-        self.check_network_partition(&peers).await;
+        self.check_network_partition(&peer_ids).await;
     }
 
     /// Estimate network size based on closest peers

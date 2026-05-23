@@ -291,11 +291,12 @@ impl<T> AdaptiveBatcher<T> {
         }
 
         // Find batch size with best performance score
+        // Use total_cmp to avoid panics on NaN values (RUSTSEC-style: partial_cmp.unwrap panics on NaN)
         let (best_batch_size, _score) = self
             .performance_history
             .batch_performance_map
             .iter()
-            .max_by(|(_, score_a), (_, score_b)| score_a.partial_cmp(score_b).unwrap())
+            .max_by(|(_, score_a), (_, score_b)| score_a.total_cmp(score_b))
             .unwrap();
 
         *best_batch_size

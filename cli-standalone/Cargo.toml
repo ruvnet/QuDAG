@@ -35,7 +35,7 @@ libc = "0.2"
 whoami = "1.5"
 tracing-subscriber = "0.3"
 pin-project = "1.1"
-libp2p = { version = "0.53", features = ["identify", "kad", "gossipsub", "ping", "relay", "dcutr", "autonat", "request-response", "dns", "tcp", "noise", "yamux", "websocket", "quic", "tls", "metrics"] }
+libp2p = { version = "0.56", features = ["identify", "kad", "gossipsub", "ping", "relay", "dcutr", "autonat", "request-response", "dns", "tcp", "noise", "yamux", "websocket", "quic", "tls", "metrics"] }
 # Use published versions from crates.io
 qudag-crypto = "0.1.1"
 qudag-dag = "0.1.1" 

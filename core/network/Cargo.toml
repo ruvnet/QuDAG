@@ -29,7 +29,7 @@ rand.workspace = true
 rand_core.workspace = true
 
 # Networking
-libp2p = { version = "0.53", features = ["tcp", "noise", "yamux", "gossipsub", "kad", "identify", "ping", "mdns", "request-response", "relay", "dcutr", "dns", "websocket", "quic", "tls", "metrics", "macros", "tokio", "cbor", "autonat"] }
+libp2p = { version = "0.56", features = ["tcp", "noise", "yamux", "gossipsub", "kad", "identify", "ping", "mdns", "request-response", "relay", "dcutr", "dns", "websocket", "quic", "tls", "metrics", "macros", "tokio", "cbor", "autonat"] }
 quinn = "0.11"
 rustls = "0.23"
 webpki-roots = "0.26"

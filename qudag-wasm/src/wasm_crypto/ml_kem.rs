@@ -159,10 +159,11 @@ pub mod primitives {
 }
 
 /// Alternative implementation using available pure-Rust crates
+// Use pqcrypto-mlkem (replaces deprecated pqcrypto-kyber; RUSTSEC-2024-0381)
 #[cfg(feature = "pqcrypto-kyber")]
 pub mod pqcrypto_impl {
     use anyhow::Result;
-    use pqcrypto_kyber::kyber768;
+    use pqcrypto_mlkem::mlkem768 as kyber768;
 
     pub fn generate_keypair() -> Result<(Vec<u8>, Vec<u8>)> {
         let (pk, sk) = kyber768::keypair();

@@ -433,13 +433,15 @@ impl TipSelection for AdvancedTipSelection {
             }
         }
 
-        // Check age constraint
+        // Check age constraint. Use saturating_sub to avoid integer underflow
+        // when a peer-supplied timestamp is in the future (clock skew or
+        // forged message); such a vertex is treated as age-zero (valid).
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
-        if current_time - vertex.timestamp > self.config.max_age {
+        if current_time.saturating_sub(vertex.timestamp) > self.config.max_age {
             return false;
         }
 

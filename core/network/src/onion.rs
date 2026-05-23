@@ -1333,17 +1333,25 @@ impl DirectoryClient {
                 }
             }
 
-            // Select node weighted by bandwidth
+            // Select node weighted by bandwidth. If all nodes report zero
+            // bandwidth, fall back to uniform random selection to avoid a
+            // panic in gen_range(0..0).
             let total_bandwidth: u64 = available.iter().map(|n| n.bandwidth).sum();
-            let mut target = thread_rng().gen_range(0..total_bandwidth);
-
-            for (idx, node) in available.iter().enumerate() {
-                if target < node.bandwidth {
-                    selected.push(node.public_key.as_bytes().to_vec());
-                    available.remove(idx);
-                    break;
+            if total_bandwidth == 0 {
+                // Uniform fallback: pick a random index
+                let idx = thread_rng().gen_range(0..available.len());
+                selected.push(available[idx].public_key.as_bytes().to_vec());
+                available.remove(idx);
+            } else {
+                let mut target = thread_rng().gen_range(0..total_bandwidth);
+                for (idx, node) in available.iter().enumerate() {
+                    if target < node.bandwidth {
+                        selected.push(node.public_key.as_bytes().to_vec());
+                        available.remove(idx);
+                        break;
+                    }
+                    target -= node.bandwidth;
                 }
-                target -= node.bandwidth;
             }
         }
 

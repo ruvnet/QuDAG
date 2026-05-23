@@ -50,11 +50,15 @@ impl MessageEnvelope {
     pub fn new(message: NetworkMessage) -> Self {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         let mut hasher = blake3::Hasher::new();
-        hasher.update(&bincode::serialize(&message).unwrap());
+        // Serialization of a well-typed value only fails on allocation errors;
+        // fall back to hashing empty bytes rather than panicking.
+        if let Ok(encoded) = bincode::serialize(&message) {
+            hasher.update(&encoded);
+        }
         hasher.update(&timestamp.to_le_bytes());
 
         Self {
@@ -67,7 +71,12 @@ impl MessageEnvelope {
 
     pub fn verify(&self) -> bool {
         let mut hasher = blake3::Hasher::new();
-        hasher.update(&bincode::serialize(&self.message).unwrap());
+        // Return false (verification failure) rather than panicking if
+        // serialization of the stored message unexpectedly fails.
+        match bincode::serialize(&self.message) {
+            Ok(encoded) => hasher.update(&encoded),
+            Err(_) => return false,
+        };
         hasher.update(&self.timestamp.to_le_bytes());
 
         self.hash == hasher.finalize().into()

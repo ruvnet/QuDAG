@@ -38,15 +38,26 @@ impl Default for VertexId {
 }
 
 impl VertexId {
-    /// Creates a new vertex ID with random bytes
+    /// Creates a new, collision-resistant vertex ID.
+    ///
+    /// Combines a nanosecond timestamp with 8 bytes of randomness so that IDs
+    /// generated in the same nanosecond (common under parallelism) remain
+    /// distinct. The timestamp prefix also keeps IDs roughly sortable.
     pub fn new() -> Self {
+        use rand::RngCore;
         use std::time::{SystemTime, UNIX_EPOCH};
+
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_nanos() as u64;
 
-        Self(timestamp.to_be_bytes().to_vec())
+        let mut random_suffix = [0u8; 8];
+        rand::thread_rng().fill_bytes(&mut random_suffix);
+
+        let mut id = timestamp.to_be_bytes().to_vec();
+        id.extend_from_slice(&random_suffix);
+        Self(id)
     }
 
     /// Creates a vertex ID from bytes

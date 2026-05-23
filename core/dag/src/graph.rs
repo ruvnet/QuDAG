@@ -66,7 +66,11 @@ struct VertexStorage {
 
 impl VertexStorage {
     fn new(config: StorageConfig) -> Self {
-        let cache_size = NonZeroUsize::new(config.cache_depth).unwrap();
+        // Fall back to a cache depth of 1 if the caller supplies zero, rather
+        // than panicking. A zero-sized LRU cache is nonsensical; a depth of 1
+        // is the smallest valid value and degrades gracefully.
+        let cache_size = NonZeroUsize::new(config.cache_depth)
+            .unwrap_or(NonZeroUsize::new(1).expect("1 is non-zero"));
         Self {
             vertices: DashMap::with_capacity(config.max_vertices),
             cache: RwLock::new(LruCache::new(cache_size)),

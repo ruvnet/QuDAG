@@ -1,18 +1,12 @@
-use hex_literal::hex;
 use proptest::prelude::*;
-use qudag_crypto::kem::{
-    Ciphertext, KEMError, KeyEncapsulation, PublicKey, SecretKey, SharedSecret,
-};
+use qudag_crypto::kem::{Ciphertext, PublicKey, SecretKey};
 use qudag_crypto::ml_kem::MlKem768;
 use rand::RngCore;
 
-// Official ML-KEM-768 test vectors
-const TEST_SEED: [u8; 32] =
-    hex!("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
-const TEST_PK: [u8; MlKem768::PUBLIC_KEY_SIZE] = include!(".test_vectors/mlkem768_pk.txt");
-const TEST_SK: [u8; MlKem768::SECRET_KEY_SIZE] = include!(".test_vectors/mlkem768_sk.txt");
-const TEST_CT: [u8; MlKem768::CIPHERTEXT_SIZE] = include!(".test_vectors/mlkem768_ct.txt");
-const TEST_SS: [u8; MlKem768::SHARED_SECRET_SIZE] = include!(".test_vectors/mlkem768_ss.txt");
+// Historical files contain all-zero placeholders, not official NIST vectors.
+// Independent implementation interoperability is covered in ml_kem_v2.rs.
+const INVALID_SK: [u8; MlKem768::SECRET_KEY_SIZE] = include!(".test_vectors/mlkem768_sk.txt");
+const INVALID_CT: [u8; MlKem768::CIPHERTEXT_SIZE] = include!(".test_vectors/mlkem768_ct.txt");
 
 #[test]
 fn test_mlkem_key_generation() {
@@ -58,14 +52,10 @@ fn test_mlkem_encapsulation_decapsulation() {
 }
 
 #[test]
-fn test_mlkem_with_test_vectors() {
-    // Test decapsulation with known test vectors
-    let sk = SecretKey::from_bytes(&TEST_SK).expect("Valid secret key");
-    let ct = Ciphertext::from_bytes(&TEST_CT).expect("Valid ciphertext");
-    let ss =
-        MlKem768::decapsulate(&sk, &ct).expect("Decapsulation with test vectors should succeed");
-
-    assert_eq!(ss.as_bytes(), &TEST_SS);
+fn test_mlkem_rejects_historical_placeholder_vectors() {
+    let sk = SecretKey::from_bytes(&INVALID_SK).unwrap();
+    let ct = Ciphertext::from_bytes(&INVALID_CT).unwrap();
+    assert!(MlKem768::decapsulate(&sk, &ct).is_err());
 }
 
 #[test]
@@ -83,39 +73,27 @@ fn test_mlkem_invalid_inputs() {
     rand::thread_rng().fill_bytes(&mut invalid_ct);
     let ct = Ciphertext::from_bytes(&invalid_ct).expect("Valid ciphertext creation");
     let result = MlKem768::decapsulate(&sk, &ct);
-    assert!(result.is_err());
+    // Same-length invalid ciphertext uses implicit rejection, not an error oracle.
+    assert!(result.is_ok());
 }
 
 proptest! {
     #[test]
-    fn test_mlkem_random_keys(
-        pk_bytes in prop::collection::vec(0u8..255, MlKem768::PUBLIC_KEY_SIZE),
-        ct_bytes in prop::collection::vec(0u8..255, MlKem768::CIPHERTEXT_SIZE)
+    fn test_mlkem_random_keys_do_not_panic(
+        pk_bytes in prop::collection::vec(any::<u8>(), MlKem768::PUBLIC_KEY_SIZE)
     ) {
-        // Test constant-time behavior with random inputs
-        let pk = PublicKey::from_bytes(&pk_bytes).unwrap_or_else(|_| panic!("Failed to create public key"));
-        let ct = Ciphertext::from_bytes(&ct_bytes).unwrap_or_else(|_| panic!("Failed to create ciphertext"));
-
-        let start = std::time::Instant::now();
-        let _ = MlKem768::encapsulate(&pk);
-        let duration1 = start.elapsed();
-
-        let start = std::time::Instant::now();
-        let _ = MlKem768::encapsulate(&pk);
-        let duration2 = start.elapsed();
-
-        // Operations should complete in roughly the same time (within 20% variance)
-        let variance = if duration2.as_nanos() > 0 {
-            (duration1.as_nanos() as f64 / duration2.as_nanos() as f64 - 1.0).abs() < 0.2
-        } else {
-            true
-        };
-        prop_assert!(variance);
+        let pk = PublicKey::from_bytes(&pk_bytes).unwrap();
+        // Public input validation may reject noncanonical coefficients.
+        // Wall-clock sampling cannot establish constant-time behavior.
+        if let Ok((ct, ss)) = MlKem768::encapsulate(&pk) {
+            prop_assert_eq!(ct.as_bytes().len(), MlKem768::CIPHERTEXT_SIZE);
+            prop_assert_eq!(ss.as_bytes().len(), MlKem768::SHARED_SECRET_SIZE);
+        }
     }
 }
 
 #[test]
-fn test_constant_time_operations() {
+fn test_key_and_shared_secret_equality() {
     let (pk1, sk1) = MlKem768::keygen().expect("Key generation should succeed");
     let (pk2, sk2) = MlKem768::keygen().expect("Key generation should succeed");
 
@@ -131,50 +109,13 @@ fn test_constant_time_operations() {
 }
 
 #[test]
-fn test_key_cache_functionality() {
-    let (pk, sk) = MlKem768::keygen().expect("Key generation should succeed");
-    let (ct, _) = MlKem768::encapsulate(&pk).expect("Encapsulation should succeed");
-
-    // First decapsulation - should miss cache
-    let before = MlKem768::get_metrics();
-    let _ = MlKem768::decapsulate(&sk, &ct).expect("Decapsulation should succeed");
-    let after = MlKem768::get_metrics();
-
-    assert_eq!(after.key_cache_misses, before.key_cache_misses + 1);
-
-    // Second decapsulation - should hit cache
-    let _ = MlKem768::decapsulate(&sk, &ct).expect("Decapsulation should succeed");
-    let final_metrics = MlKem768::get_metrics();
-
-    assert_eq!(final_metrics.key_cache_hits, after.key_cache_hits + 1);
-}
-
-#[test]
-fn test_timing_consistency() {
-    let (pk, sk) = MlKem768::keygen().expect("Key generation should succeed");
-    let (ct, _) = MlKem768::encapsulate(&pk).expect("Encapsulation should succeed");
-
-    let mut timings = Vec::new();
-
-    // Multiple decapsulations to get timing data
-    for _ in 0..10 {
-        let start = std::time::Instant::now();
-        let _ = MlKem768::decapsulate(&sk, &ct).expect("Decapsulation should succeed");
-        timings.push(start.elapsed().as_nanos());
+fn test_repeated_decapsulation_without_secret_cache() {
+    let (pk, sk) = MlKem768::keygen().unwrap();
+    let (ct, ss) = MlKem768::encapsulate(&pk).unwrap();
+    for _ in 0..100 {
+        assert_eq!(ss, MlKem768::decapsulate(&sk, &ct).unwrap());
     }
-
-    // Calculate timing variance
-    let avg = timings.iter().sum::<u128>() as f64 / timings.len() as f64;
-    let variance = timings
-        .iter()
-        .map(|&t| (t as f64 - avg).powi(2))
-        .sum::<f64>()
-        / timings.len() as f64;
-    let std_dev = variance.sqrt();
-
-    // Standard deviation should be less than 10% of mean
-    assert!(
-        std_dev / avg < 0.1,
-        "Timing variation too high: {std_dev} / {avg}"
-    );
+    let metrics = MlKem768::get_metrics();
+    assert_eq!(metrics.key_cache_hits, 0);
+    assert_eq!(metrics.key_cache_misses, 0);
 }

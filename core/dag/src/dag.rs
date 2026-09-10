@@ -1,8 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::{mpsc, Mutex, RwLock};
-use tracing::error;
+use tokio::sync::{Mutex, RwLock, Semaphore};
 
 use crate::consensus::{ConsensusError, QRAvalanche};
 use crate::vertex::{Vertex, VertexError, VertexId};
@@ -47,181 +46,93 @@ pub struct DagMessage {
     pub timestamp: u64,
 }
 
-/// Represents the current state of message processing
-#[derive(Debug)]
-struct ProcessingState {
-    /// Messages currently being processed
-    processing: HashSet<VertexId>,
-    /// Known conflicts between messages
-    conflicts: HashMap<VertexId, HashSet<VertexId>>,
-}
-
-/// Main DAG structure for parallel message processing
+/// Local asynchronous DAG admission. No network votes or finality are implied.
 #[derive(Clone)]
 pub struct Dag {
-    /// Vertices in the DAG
+    /// Vertices in the local DAG. Callers must not mutate this map directly.
     pub vertices: Arc<RwLock<HashMap<VertexId, Vertex>>>,
-    /// Current processing state
-    #[allow(dead_code)]
-    state: Arc<RwLock<ProcessingState>>,
-    /// Message processing channel
-    msg_tx: mpsc::Sender<DagMessage>,
-    /// Consensus mechanism
     consensus: Arc<Mutex<QRAvalanche>>,
-    /// Maximum concurrent messages
-    #[allow(dead_code)]
-    max_concurrent: usize,
-    // Validation cache disabled for initial release
-    // validation_cache: Arc<ValidationCache>,
+    permits: Arc<Semaphore>,
 }
 
 impl Dag {
-    /// Creates a new DAG instance
+    /// Construct without spawning tasks or requiring an active Tokio runtime.
     pub fn new(max_concurrent: usize) -> Self {
-        let (msg_tx, mut msg_rx) = mpsc::channel::<DagMessage>(1024);
-        let vertices = Arc::new(RwLock::new(HashMap::new()));
-        let state = Arc::new(RwLock::new(ProcessingState {
-            processing: HashSet::new(),
-            conflicts: HashMap::new(),
-        }));
-        let consensus = Arc::new(Mutex::new(QRAvalanche::new()));
-        // Validation cache disabled for initial release
-        // let validation_cache = Arc::new(ValidationCache::new(Default::default()));
-
-        let vertices_clone = vertices.clone();
-        let state_clone = state.clone();
-        let consensus_clone = consensus.clone();
-        // let validation_cache_clone = validation_cache.clone();
-
-        // Spawn message processing task
-        tokio::spawn(async move {
-            while let Some(msg) = msg_rx.recv().await {
-                let mut state = state_clone.write().await;
-                if state.processing.len() >= max_concurrent {
-                    // Wait for some messages to complete
-                    continue;
-                }
-                let msg_id = msg.id.clone();
-                state.processing.insert(msg_id.clone());
-                drop(state);
-
-                let vertices = vertices_clone.clone();
-                let state = state_clone.clone();
-                let consensus = consensus_clone.clone();
-                // let validation_cache = validation_cache_clone.clone();
-
-                tokio::spawn(async move {
-                    if let Err(e) =
-                        Self::process_message(msg, vertices, state.clone(), consensus).await
-                    {
-                        error!("Message processing failed: {}", e);
-                    }
-                    let mut state = state.write().await;
-                    state.processing.remove(&msg_id);
-                });
-            }
-        });
-
         Self {
-            vertices,
-            state,
-            msg_tx,
-            consensus,
-            max_concurrent,
-            // validation_cache,
+            vertices: Arc::new(RwLock::new(HashMap::new())),
+            consensus: Arc::new(Mutex::new(QRAvalanche::new())),
+            permits: Arc::new(Semaphore::new(max_concurrent.max(1))),
         }
     }
 
-    /// Submits a message for processing
+    /// Return only after local admission succeeds; saturation applies backpressure.
     pub async fn submit_message(&self, msg: DagMessage) -> Result<(), DagError> {
-        self.msg_tx
-            .send(msg)
+        let _permit = self
+            .permits
+            .acquire()
             .await
-            .map_err(|_| DagError::ChannelClosed)
-    }
-
-    /// Processes a single message
-    async fn process_message(
-        msg: DagMessage,
-        vertices: Arc<RwLock<HashMap<VertexId, Vertex>>>,
-        state: Arc<RwLock<ProcessingState>>,
-        consensus: Arc<Mutex<QRAvalanche>>,
-        // validation_cache: Arc<ValidationCache>,
-    ) -> Result<(), DagError> {
-        // Validate parents exist
-        {
-            let vertices = vertices.read().await;
-            for parent in &msg.parents {
-                if !vertices.contains_key(parent) {
-                    return Err(DagError::VertexError(VertexError::ParentNotFound));
-                }
-            }
-        }
-
-        // Check for conflicts
-        let conflicts = Self::detect_conflicts(&msg, &vertices).await?;
-        if !conflicts.is_empty() {
-            let mut state = state.write().await;
-            state.conflicts.insert(msg.id, conflicts);
+            .map_err(|_| DagError::ChannelClosed)?;
+        let mut vertices = self.vertices.write().await;
+        if vertices.contains_key(&msg.id) {
             return Err(DagError::ConflictDetected);
         }
-
-        // Create new vertex
-        let vertex = Vertex::new(msg.id.clone(), msg.payload, msg.parents);
-
-        // Validation cache disabled for initial release
-        // let validation_result = validation_cache.validate(&vertex)?;
-        // if !validation_result.is_valid {
-        //     return Err(DagError::VertexError(VertexError::InvalidSignature));
-        // }
-
-        // Add to DAG
-        {
-            let mut vertices = vertices.write().await;
-            vertices.insert(msg.id.clone(), vertex);
+        if msg.parents.contains(&msg.id) {
+            return Err(VertexError::InvalidParent.into());
         }
-
-        // Update consensus
+        if msg
+            .parents
+            .iter()
+            .any(|parent| !vertices.contains_key(parent))
         {
-            let mut consensus = consensus.lock().await;
-            consensus.process_vertex(msg.id)?;
+            return Err(VertexError::ParentNotFound.into());
         }
-
+        // Siblings may share parents. Equivocation is duplicate identity, not
+        // ordinary branching. Hold one graph write lock through admission.
+        let mut vertex = Vertex::new(msg.id.clone(), msg.payload, msg.parents);
+        vertex.timestamp = msg.timestamp;
+        self.consensus.lock().await.process_vertex(msg.id.clone())?;
+        vertices.insert(msg.id, vertex);
         Ok(())
-    }
-
-    /// Detects conflicts between messages
-    async fn detect_conflicts(
-        msg: &DagMessage,
-        vertices: &Arc<RwLock<HashMap<VertexId, Vertex>>>,
-    ) -> Result<HashSet<VertexId>, DagError> {
-        let vertices = vertices.read().await;
-        let mut conflicts = HashSet::new();
-
-        // Simple conflict detection based on overlapping parents
-        for (id, vertex) in vertices.iter() {
-            if vertex.parents().intersection(&msg.parents).count() > 0 {
-                conflicts.insert(id.clone());
-            }
-        }
-
-        Ok(conflicts)
     }
 
     /// Synchronizes state with another DAG instance
     pub async fn sync_state(&self, other: &Dag) -> Result<(), DagError> {
-        let other_vertices = other.vertices.read().await;
+        // Snapshot before taking a local write lock, so self-sync and opposite
+        // direction sync cannot deadlock through two graph locks.
+        let other_vertices = other.vertices.read().await.clone();
         let mut vertices = self.vertices.write().await;
-
-        for (id, vertex) in other_vertices.iter() {
-            if !vertices.contains_key(id) {
-                vertices.insert(id.clone(), vertex.clone());
+        let mut staged = vertices.clone();
+        for (id, vertex) in other_vertices {
+            if let Some(existing) = staged.get(&id) {
+                if existing.payload != vertex.payload
+                    || existing.parents() != vertex.parents()
+                    || existing.timestamp != vertex.timestamp
+                    || existing.signature != vertex.signature
+                {
+                    return Err(DagError::ConflictDetected);
+                }
+            } else {
+                staged.insert(id, vertex);
             }
         }
-
-        let mut consensus = self.consensus.lock().await;
-        consensus.sync()?;
-
+        // Validate the complete union before committing any changes.
+        let mut resolved = HashSet::new();
+        while resolved.len() < staged.len() {
+            let before = resolved.len();
+            for (id, vertex) in &staged {
+                if vertex
+                    .parents
+                    .iter()
+                    .all(|parent| resolved.contains(parent))
+                {
+                    resolved.insert(id.clone());
+                }
+            }
+            if resolved.len() == before {
+                return Err(VertexError::InvalidParent.into());
+            }
+        }
+        *vertices = staged;
         Ok(())
     }
 }
@@ -268,28 +179,22 @@ mod tests {
     async fn test_conflict_detection() {
         let dag = Dag::new(4);
 
-        // Create two messages with overlapping parents
-        let parent_id = VertexId::new();
-        let mut parents = HashSet::new();
-        parents.insert(parent_id);
-
+        // A repeated identity with different payload is a conflict. Shared
+        // parents alone are legitimate DAG branches.
+        let id = VertexId::new();
         let msg1 = DagMessage {
-            id: VertexId::new(),
+            id: id.clone(),
             payload: vec![1],
-            parents: parents.clone(),
+            parents: HashSet::new(),
             timestamp: 1,
         };
-
         let msg2 = DagMessage {
-            id: VertexId::new(),
+            id,
             payload: vec![2],
-            parents,
+            parents: HashSet::new(),
             timestamp: 2,
         };
-
-        // Submit first message
-        dag.submit_message(msg1.clone()).await.unwrap();
-        sleep(Duration::from_millis(50)).await;
+        dag.submit_message(msg1).await.unwrap();
 
         // Second message should detect conflict
         let result = dag.submit_message(msg2).await;
@@ -322,5 +227,60 @@ mod tests {
         let vertices1 = dag1.vertices.read().await;
         let vertices2 = dag2.vertices.read().await;
         assert_eq!(vertices1.len(), vertices2.len());
+    }
+}
+
+#[cfg(test)]
+mod admission_regressions {
+    use super::*;
+    #[tokio::test]
+    async fn invalid_parent_is_reported_and_siblings_are_retained() {
+        let dag = Dag::new(1);
+        let parent = VertexId::new();
+        let child = DagMessage {
+            id: VertexId::new(),
+            payload: vec![1],
+            parents: [parent.clone()].into_iter().collect(),
+            timestamp: 0,
+        };
+        assert!(dag.submit_message(child.clone()).await.is_err());
+        assert!(dag.vertices.read().await.is_empty());
+        dag.submit_message(DagMessage {
+            id: parent,
+            payload: vec![],
+            parents: HashSet::new(),
+            timestamp: 99,
+        })
+        .await
+        .unwrap();
+        let mut sibling = child.clone();
+        sibling.id = VertexId::new();
+        dag.submit_message(child).await.unwrap();
+        dag.submit_message(sibling).await.unwrap();
+        assert_eq!(dag.vertices.read().await.len(), 3);
+    }
+    #[tokio::test]
+    async fn self_sync_completes_and_conflicting_sync_is_atomic() {
+        let a = Dag::new(1);
+        let b = Dag::new(1);
+        let message = DagMessage {
+            id: VertexId::new(),
+            payload: vec![1],
+            parents: HashSet::new(),
+            timestamp: 1,
+        };
+        a.submit_message(message.clone()).await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(1), a.sync_state(&a))
+            .await
+            .unwrap()
+            .unwrap();
+        let mut conflict = message;
+        conflict.payload = vec![2];
+        b.submit_message(conflict).await.unwrap();
+        assert!(a.sync_state(&b).await.is_err());
+        assert_eq!(
+            a.vertices.read().await.values().next().unwrap().payload,
+            vec![1]
+        );
     }
 }

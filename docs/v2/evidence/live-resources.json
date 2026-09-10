@@ -1,0 +1,22 @@
+{
+  "endpoint": "https://x.ruv.io/mcp",
+  "protocolVersion": "2025-03-26",
+  "writes": false,
+  "resources": [
+    {
+      "uri": "ruv://federation/registry",
+      "contents": 1,
+      "bytes": 894
+    },
+    {
+      "uri": "ruv://swarm/roster",
+      "contents": 1,
+      "bytes": 416
+    },
+    {
+      "uri": "ruv://claims/board",
+      "contents": 1,
+      "bytes": 2
+    }
+  ]
+}

@@ -79,6 +79,9 @@ pub struct QuDAGMCPServer {
 impl QuDAGMCPServer {
     /// Create a new QuDAG MCP server
     pub async fn new(config: ServerConfig) -> Result<Self> {
+        if !matches!(&config.transport, TransportConfig::Stdio) {
+            return Err(Error::config("Network MCP serving is unavailable until authentication middleware and real server transports are connected"));
+        }
         // Initialize logging to stderr (only if not already initialized)
         // For stdio transport, all logs MUST go to stderr to avoid interfering with JSON-RPC
         let _ = tracing_subscriber::fmt()
@@ -799,5 +802,27 @@ mod tests {
         assert!(response.result.is_some());
         let result = response.result.unwrap();
         assert!(result["resources"].is_array());
+    }
+}
+
+#[cfg(test)]
+mod v2_network_boundary_tests {
+    use super::*;
+    #[tokio::test]
+    async fn unauthenticated_network_modes_fail_closed() {
+        for transport in [
+            TransportConfig::Http {
+                server_url: "http://127.0.0.1:8080".into(),
+            },
+            TransportConfig::WebSocket {
+                url: "ws://127.0.0.1:8080".into(),
+            },
+        ] {
+            assert!(
+                QuDAGMCPServer::new(ServerConfig::new().with_transport(transport))
+                    .await
+                    .is_err()
+            );
+        }
     }
 }

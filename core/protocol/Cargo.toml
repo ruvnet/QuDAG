@@ -34,7 +34,7 @@ dashmap = "6.1"
 libp2p = "0.56"
 
 # Database dependencies
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite"] }
 rocksdb = { version = "0.22", optional = true }
 
 # Inter-crate dependencies

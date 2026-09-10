@@ -26,7 +26,7 @@ toml = "0.8"
 dirs = "5.0"
 hex = "0.4"
 rand = "0.8"
-lru = "0.12"
+lru = "0.18.2"
 rpassword = "7.3"
 libc = "0.2"
 whoami = "1.5"
@@ -40,7 +40,7 @@ qudag-protocol = { version = "0.4.0", path = "../../core/protocol" }
 qudag-vault-core = { version = "0.4.0", path = "../../core/vault" }
 qudag-mcp = { version = "0.4.1", path = "../../qudag-mcp" }
 qudag-exchange-core = { version = "0.3.1", path = "../../qudag-exchange/core" }
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 
 [[bin]]
 name = "qudag"

@@ -1,0 +1,25 @@
+{
+  "date": "2026-09-10",
+  "node": "24.19.0",
+  "tests": {
+    "gateway": 10,
+    "member": 12,
+    "agentbbs": 10,
+    "native_ruvector": 4,
+    "hub": 7,
+    "total": 43
+  },
+  "upstream_agentbbs_read_checks": 5,
+  "upstream_agentbbs_commit": "9f2dd89f50f0a56b439b94b60817eeac6a71cf0f",
+  "upstream_ruflo_commit": "dbf450a92787c3c3e19e462eb8e3e8e1975281da",
+  "npm_audit": {
+    "ruflo_nostr": 0,
+    "ruvector_index": 0
+  },
+  "ruflo_coordination": "@claude-flow/cli@3.25.6 hooks route succeeded",
+  "live_gateway_open_reads": true,
+  "live_member_enrollment": false,
+  "live_publication": false,
+  "release_qualified": false,
+  "rust_tests_rerun_this_extension": false
+}

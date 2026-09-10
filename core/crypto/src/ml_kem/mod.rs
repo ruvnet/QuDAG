@@ -4,23 +4,16 @@
 //! ML-KEM provides quantum-resistant key exchange capabilities based on the
 //! Module-LWE problem.
 
-use rand::RngCore;
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
-
 use crate::kem::{Ciphertext, KEMError, KeyEncapsulation, PublicKey, SecretKey, SharedSecret};
+#[allow(deprecated)]
+use ml_kem::ExpandedKeyEncoding;
+use ml_kem::{Decapsulate, Encapsulate, KeyExport, MlKem768 as Backend};
+use rand::RngCore;
+use std::sync::atomic::{AtomicU64, Ordering};
+use zeroize::{Zeroize, Zeroizing};
 
-// Global metrics for ML-KEM operations
-static CACHE_HITS: AtomicU64 = AtomicU64::new(0);
-static CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
 static TOTAL_DECAP_TIME: AtomicU64 = AtomicU64::new(0);
 static DECAP_COUNT: AtomicU64 = AtomicU64::new(0);
-
-// Simple key cache for performance (in real implementation, this would be more sophisticated)
-lazy_static::lazy_static! {
-    static ref KEY_CACHE: Mutex<HashMap<Vec<u8>, Vec<u8>>> = Mutex::new(HashMap::new());
-}
 
 /// ML-KEM 768 implementation
 ///
@@ -62,8 +55,8 @@ impl MlKem768 {
     /// Security level (NIST level 3)
     pub const SECURITY_LEVEL: u8 = 3;
 
-    /// Cache size for key operations
-    pub const CACHE_SIZE: usize = 1024;
+    /// Compatibility constant: secret caching is disabled.
+    pub const CACHE_SIZE: usize = 0;
 
     /// Generate a new keypair using ML-KEM-768
     ///
@@ -80,146 +73,87 @@ impl MlKem768 {
     /// assert_eq!(secret_key.as_bytes().len(), MlKem768::SECRET_KEY_SIZE);
     /// ```
     pub fn keygen() -> Result<(PublicKey, SecretKey), KEMError> {
-        let mut rng = rand::thread_rng();
-        Self::keygen_with_rng(&mut rng)
+        Self::keygen_with_rng(&mut rand::rngs::OsRng)
     }
 
-    /// Generate a keypair with custom RNG for testing
+    /// Generate from 64 fresh bytes supplied by the caller's cryptographic RNG.
+    /// Entropy failures return an error. Seed and serialized secret temporaries
+    /// are zeroized; backend secret keys enable the zeroize feature.
+    #[allow(deprecated)] // Preserve the existing 2400-byte expanded wire format.
     pub fn keygen_with_rng<R: RngCore + rand::CryptoRng>(
-        #[allow(unused_variables)] rng: &mut R,
+        rng: &mut R,
     ) -> Result<(PublicKey, SecretKey), KEMError> {
-        // For now, use a placeholder implementation
-        // In a real implementation, this would use the ML-KEM algorithm
-        let mut pk_bytes = vec![0u8; Self::PUBLIC_KEY_SIZE];
-        let mut sk_bytes = vec![0u8; Self::SECRET_KEY_SIZE];
-
-        rng.fill_bytes(&mut pk_bytes);
-        rng.fill_bytes(&mut sk_bytes);
-
-        // Create some deterministic relationship between pk and sk for testing
-        for i in 0..32 {
-            if i < pk_bytes.len() && i < sk_bytes.len() {
-                sk_bytes[i] = pk_bytes[i] ^ 0xFF;
-            }
-        }
-
-        let public_key =
-            PublicKey::from_bytes(&pk_bytes).map_err(|_| KEMError::KeyGenerationError)?;
-        let secret_key =
-            SecretKey::from_bytes(&sk_bytes).map_err(|_| KEMError::KeyGenerationError)?;
-
-        Ok((public_key, secret_key))
+        let mut seed = Zeroizing::new(ml_kem::Seed::default());
+        rng.try_fill_bytes(seed.as_mut_slice())
+            .map_err(|_| KEMError::KeyGenerationError)?;
+        let secret = ml_kem::DecapsulationKey::<Backend>::from_seed(*seed);
+        seed.zeroize();
+        let public = secret.encapsulation_key().to_bytes();
+        let encoded = Zeroizing::new(secret.to_expanded_bytes());
+        Ok((
+            PublicKey::from_bytes(public.as_slice())?,
+            SecretKey::from_bytes(encoded.as_slice())?,
+        ))
     }
 
-    /// Encapsulate a shared secret using a public key
-    ///
-    /// This function implements the ML-KEM encapsulation algorithm, which:
-    /// 1. Generates a random message
-    /// 2. Derives a shared secret from the message
-    /// 3. Encrypts the message using the public key with error vectors
-    /// 4. Returns both the ciphertext and shared secret
+    /// Encapsulate using ML-KEM-768. Reject noncanonical public polynomials
+    /// before the backend call, as required by FIPS 203 encapsulation checks.
     pub fn encapsulate(pk: &PublicKey) -> Result<(Ciphertext, SharedSecret), KEMError> {
-        // Validate public key size
-        let pk_bytes = pk.as_bytes();
-        if pk_bytes.len() != Self::PUBLIC_KEY_SIZE {
+        let bytes = pk.as_bytes();
+        if bytes.len() != Self::PUBLIC_KEY_SIZE {
             return Err(KEMError::InvalidKey);
         }
-
-        // For now, use a placeholder implementation
-        // In a real implementation, this would use the ML-KEM encapsulation algorithm
-        let mut rng = rand::thread_rng();
-        let mut ct_bytes = vec![0u8; Self::CIPHERTEXT_SIZE];
-        let mut ss_bytes = vec![0u8; Self::SHARED_SECRET_SIZE];
-
-        rng.fill_bytes(&mut ct_bytes);
-        rng.fill_bytes(&mut ss_bytes);
-
-        // Create some deterministic relationship for testing
-        for i in 0..32 {
-            if i < pk_bytes.len() {
-                ct_bytes[i] = pk_bytes[i] ^ 0xAA;
-                ss_bytes[i % Self::SHARED_SECRET_SIZE] ^= pk_bytes[i];
+        for packed in bytes[..1152].chunks(3) {
+            let a = u16::from(packed[0]) | ((u16::from(packed[1]) & 15) << 8);
+            let b = (u16::from(packed[1]) >> 4) | (u16::from(packed[2]) << 4);
+            if a >= 3329 || b >= 3329 {
+                return Err(KEMError::InvalidKey);
             }
         }
-
-        let ciphertext =
-            Ciphertext::from_bytes(&ct_bytes).map_err(|_| KEMError::EncapsulationError)?;
-        let shared_secret =
-            SharedSecret::from_bytes(&ss_bytes).map_err(|_| KEMError::EncapsulationError)?;
-
-        Ok((ciphertext, shared_secret))
+        let encoded = ml_kem::Key::<ml_kem::EncapsulationKey<Backend>>::try_from(bytes)
+            .map_err(|_| KEMError::InvalidKey)?;
+        let public =
+            ml_kem::EncapsulationKey::<Backend>::new(&encoded).map_err(|_| KEMError::InvalidKey)?;
+        let (ct, mut ss) = public.encapsulate();
+        let result = SharedSecret::from_bytes(ss.as_slice());
+        ss.zeroize();
+        Ok((Ciphertext::from_bytes(ct.as_slice())?, result?))
     }
 
-    /// Decapsulate a shared secret using a secret key
-    ///
-    /// This function implements the ML-KEM decapsulation algorithm, which:
-    /// 1. Uses the secret key to decrypt the ciphertext
-    /// 2. Performs polynomial arithmetic to recover the message
-    /// 3. Derives the same shared secret that was generated during encapsulation
-    /// 4. Includes constant-time error checking to prevent side-channel attacks
+    /// ML-KEM implicit rejection returns a different secret for altered ciphertexts.
+    /// Callers must authenticate their protocol. No secrets are globally cached.
+    #[allow(deprecated)] // Compatibility with existing expanded secret keys.
     pub fn decapsulate(sk: &SecretKey, ct: &Ciphertext) -> Result<SharedSecret, KEMError> {
-        let start_time = std::time::Instant::now();
-
-        // Validate input sizes
-        let sk_bytes = sk.as_bytes();
-        let ct_bytes = ct.as_bytes();
-
-        if sk_bytes.len() != Self::SECRET_KEY_SIZE {
+        let start = std::time::Instant::now();
+        if sk.as_bytes().len() != Self::SECRET_KEY_SIZE {
             return Err(KEMError::InvalidKey);
         }
-        if ct_bytes.len() != Self::CIPHERTEXT_SIZE {
-            return Err(KEMError::InvalidLength);
+        let ciphertext = ml_kem::Ciphertext::<Backend>::try_from(ct.as_bytes())
+            .map_err(|_| KEMError::InvalidLength)?;
+        use sha3::{Digest, Sha3_256};
+        use subtle::ConstantTimeEq;
+        let digest = Sha3_256::digest(&sk.as_bytes()[1152..2336]);
+        if !bool::from(digest.as_slice().ct_eq(&sk.as_bytes()[2336..2368])) {
+            return Err(KEMError::InvalidKey);
         }
-
-        // Check cache first for performance
-        let cache_key = {
-            let mut key = Vec::with_capacity(sk_bytes.len() + ct_bytes.len());
-            key.extend_from_slice(sk_bytes);
-            key.extend_from_slice(ct_bytes);
-            key
-        };
-
-        if let Ok(cache) = KEY_CACHE.lock() {
-            if let Some(cached_ss) = cache.get(&cache_key) {
-                CACHE_HITS.fetch_add(1, Ordering::Relaxed);
-                return SharedSecret::from_bytes(cached_ss).map_err(|_| KEMError::InternalError);
-            }
-        }
-        CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
-
-        // For now, use a placeholder implementation
-        // In a real implementation, this would use the ML-KEM decapsulation algorithm
-        let mut ss_bytes = vec![0u8; Self::SHARED_SECRET_SIZE];
-
-        // Reconstruct the shared secret deterministically from sk and ct
-        for i in 0..32 {
-            if i < sk_bytes.len() && i < ct_bytes.len() {
-                ss_bytes[i % Self::SHARED_SECRET_SIZE] ^= sk_bytes[i] ^ ct_bytes[i];
-            }
-        }
-
-        let shared_secret =
-            SharedSecret::from_bytes(&ss_bytes).map_err(|_| KEMError::DecapsulationError)?;
-
-        // Update cache (in a real implementation, you'd want LRU eviction)
-        if let Ok(mut cache) = KEY_CACHE.lock() {
-            if cache.len() < Self::CACHE_SIZE {
-                cache.insert(cache_key, shared_secret.as_bytes().to_vec());
-            }
-        }
-
-        // Update metrics
-        let elapsed = start_time.elapsed().as_nanos() as u64;
-        TOTAL_DECAP_TIME.fetch_add(elapsed, Ordering::Relaxed);
+        let encoded = Zeroizing::new(
+            ml_kem::ExpandedDecapsulationKey::<Backend>::try_from(sk.as_bytes())
+                .map_err(|_| KEMError::InvalidKey)?,
+        );
+        let secret = ml_kem::DecapsulationKey::<Backend>::from_expanded(&encoded)
+            .map_err(|_| KEMError::InvalidKey)?;
+        let mut ss = secret.decapsulate(&ciphertext);
+        let result = SharedSecret::from_bytes(ss.as_slice());
+        ss.zeroize();
+        TOTAL_DECAP_TIME.fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
         DECAP_COUNT.fetch_add(1, Ordering::Relaxed);
-
-        Ok(shared_secret)
+        result
     }
 
     /// Get performance metrics
     pub fn get_metrics() -> Metrics {
-        let cache_hits = CACHE_HITS.load(Ordering::Relaxed);
-        let cache_misses = CACHE_MISSES.load(Ordering::Relaxed);
+        let cache_hits = 0;
+        let cache_misses = 0;
         let total_time = TOTAL_DECAP_TIME.load(Ordering::Relaxed);
         let decap_count = DECAP_COUNT.load(Ordering::Relaxed);
 

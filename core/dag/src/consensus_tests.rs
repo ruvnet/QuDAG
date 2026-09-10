@@ -1,4 +1,5 @@
 //! Comprehensive unit tests for consensus edge cases and invariants
+//! v2: local admission remains Pending until authenticated distributed finality.
 
 #[cfg(test)]
 mod tests {
@@ -30,7 +31,7 @@ mod tests {
 
         // Test processing a vertex
         let status = consensus.process_vertex(vertex_id.clone()).unwrap();
-        assert_eq!(status, ConsensusStatus::Accepted);
+        assert_eq!(status, ConsensusStatus::Pending);
         assert!(consensus.vertices.contains_key(&vertex_id));
         assert!(consensus.tips.contains(&vertex_id));
     }
@@ -44,7 +45,7 @@ mod tests {
         assert!(dag.add_vertex(genesis).is_ok());
 
         // Should have confidence status
-        assert_eq!(dag.get_confidence("genesis"), Some(ConsensusStatus::Final));
+        assert_eq!(dag.get_confidence("genesis"), Some(ConsensusStatus::Pending));
     }
 
     #[test]
@@ -60,10 +61,10 @@ mod tests {
         assert!(dag.add_vertex(vertex_b).is_ok());
         assert!(dag.add_vertex(vertex_c).is_ok());
 
-        // All vertices should achieve consensus
-        assert_eq!(dag.get_confidence("A"), Some(ConsensusStatus::Final));
-        assert_eq!(dag.get_confidence("B"), Some(ConsensusStatus::Final));
-        assert_eq!(dag.get_confidence("C"), Some(ConsensusStatus::Final));
+        // All locally admitted vertices remain pending
+        assert_eq!(dag.get_confidence("A"), Some(ConsensusStatus::Pending));
+        assert_eq!(dag.get_confidence("B"), Some(ConsensusStatus::Pending));
+        assert_eq!(dag.get_confidence("C"), Some(ConsensusStatus::Pending));
     }
 
     #[test]
@@ -124,11 +125,11 @@ mod tests {
         assert!(dag.add_vertex(branch_b).is_ok());
         assert!(dag.add_vertex(merge).is_ok());
 
-        // All vertices should achieve consensus
-        assert_eq!(dag.get_confidence("root"), Some(ConsensusStatus::Final));
-        assert_eq!(dag.get_confidence("A"), Some(ConsensusStatus::Final));
-        assert_eq!(dag.get_confidence("B"), Some(ConsensusStatus::Final));
-        assert_eq!(dag.get_confidence("merge"), Some(ConsensusStatus::Final));
+        // All locally admitted vertices remain pending
+        assert_eq!(dag.get_confidence("root"), Some(ConsensusStatus::Pending));
+        assert_eq!(dag.get_confidence("A"), Some(ConsensusStatus::Pending));
+        assert_eq!(dag.get_confidence("B"), Some(ConsensusStatus::Pending));
+        assert_eq!(dag.get_confidence("merge"), Some(ConsensusStatus::Pending));
     }
 
     #[test]
@@ -137,13 +138,13 @@ mod tests {
 
         // Create linear chain
         let vertices = vec!["A", "B", "C", "D"];
-        let mut parents = vec![];
+        let mut parents: Vec<&str> = vec![];
 
         for vertex_id in &vertices {
             let vertex = if parents.is_empty() {
                 create_test_vertex(vertex_id, vec![])
             } else {
-                create_test_vertex(vertex_id, vec![parents.last().unwrap()])
+                create_test_vertex(vertex_id, vec![*parents.last().unwrap()])
             };
 
             assert!(dag.add_vertex(vertex).is_ok());
@@ -175,14 +176,14 @@ mod tests {
         // Initially no status
         assert!(!consensus.vertices.contains_key(&vertex_id));
 
-        // Process vertex - should be accepted
+        // Processing only registers the vertex; no authenticated vote was recorded.
         let status = consensus.process_vertex(vertex_id.clone()).unwrap();
-        assert_eq!(status, ConsensusStatus::Accepted);
+        assert_eq!(status, ConsensusStatus::Pending);
 
         // Should be in consensus tracking
         assert_eq!(
             consensus.vertices.get(&vertex_id),
-            Some(&ConsensusStatus::Accepted)
+            Some(&ConsensusStatus::Pending)
         );
         assert!(consensus.tips.contains(&vertex_id));
     }
@@ -224,7 +225,7 @@ mod tests {
             );
         }
 
-        // Verify all vertices achieved consensus
+        // Verify all vertices remain admitted without claiming finality
         for (id, _) in [
             ("genesis", vec![]),
             ("a1", vec!["genesis"]),
@@ -237,8 +238,8 @@ mod tests {
         {
             assert_eq!(
                 dag.get_confidence(id),
-                Some(ConsensusStatus::Final),
-                "Vertex {} should have final status",
+                Some(ConsensusStatus::Pending),
+                "Vertex {} should remain pending after local admission",
                 id
             );
         }

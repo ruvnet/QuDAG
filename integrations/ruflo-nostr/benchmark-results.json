@@ -1,0 +1,27 @@
+{
+  "measuredAt": "2026-09-10T01:52:09.291Z",
+  "node": "v24.19.0",
+  "nostrTools": "2.25.2",
+  "ws": "8.21.3",
+  "note": "Ephemeral test key, localhost fixture. No live network federation or production throughput claims.",
+  "reports": [
+    {
+      "operation": "secp256k1 sign coordination event",
+      "iterations": 250,
+      "p50Ms": 2.4864450000000033,
+      "p95Ms": 3.1855019999999996
+    },
+    {
+      "operation": "secp256k1 verify fresh event",
+      "iterations": 250,
+      "p50Ms": 1.5776480000000674,
+      "p95Ms": 1.964191000000028
+    },
+    {
+      "operation": "localhost WS connect AUTH and signed publish ACK",
+      "iterations": 30,
+      "p50Ms": 9.545309999999972,
+      "p95Ms": 11.595338999999967
+    }
+  ]
+}

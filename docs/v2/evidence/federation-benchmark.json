@@ -1,0 +1,34 @@
+{
+  "measuredAt": "2026-09-10T01:48:07.067Z",
+  "node": "v24.19.0",
+  "platform": "linux",
+  "note": "Local fixture measurements. Not production gateway latency or QuDAG consensus throughput.",
+  "reports": [
+    {
+      "operation": "json parse",
+      "iterations": 10000,
+      "payloadBytes": 4169,
+      "meanMs": 0.0025667575
+    },
+    {
+      "operation": "json localhost read roundtrip",
+      "iterations": 100,
+      "p50Ms": 1.748342000000008,
+      "p95Ms": 2.548587999999995,
+      "p99Ms": 2.952185
+    },
+    {
+      "operation": "sse parse",
+      "iterations": 10000,
+      "payloadBytes": 4192,
+      "meanMs": 0.0033252598999999974
+    },
+    {
+      "operation": "sse localhost read roundtrip",
+      "iterations": 100,
+      "p50Ms": 1.6663200000000415,
+      "p95Ms": 2.012662999999975,
+      "p99Ms": 2.269915000000026
+    }
+  ]
+}

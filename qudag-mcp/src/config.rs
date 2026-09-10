@@ -501,9 +501,11 @@ mod tests {
 
     #[test]
     fn test_config_builder() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let vault_path = temp_dir.path().join("test.qdag");
         let config = McpConfig::builder()
             .bind("0.0.0.0", 9090)
-            .vault_path(PathBuf::from("test.qdag"))
+            .vault_path(vault_path.clone())
             .jwt("test-secret".to_string(), Duration::from_secs(7200))
             .rate_limit(50, Duration::from_secs(60))
             .mfa(true)
@@ -512,7 +514,7 @@ mod tests {
 
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 9090);
-        assert_eq!(config.auth.vault_path, PathBuf::from("test.qdag"));
+        assert_eq!(config.auth.vault_path, vault_path);
         assert_eq!(config.auth.jwt_secret, "test-secret");
         assert_eq!(config.auth.jwt_expiration, Duration::from_secs(7200));
         assert_eq!(config.rate_limit.max_requests, 50);
@@ -524,7 +526,8 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let config_path = temp_dir.path().join("test_config.toml");
 
-        let config = McpConfig::default();
+        let mut config = McpConfig::default();
+        config.auth.vault_path = temp_dir.path().join("test.qdag");
         config.save_to_file(&config_path).unwrap();
 
         let loaded_config = McpConfig::from_file(&config_path).unwrap();

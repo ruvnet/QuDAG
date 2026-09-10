@@ -1,3 +1,19 @@
+# QuDAG v2 engineering preview
+
+**Release status: not production qualified.** This branch repairs core security and local DAG correctness, adds RuFlo federation integration, and records reproducible validation. It does not claim a completed distributed consensus protocol or a post-quantum Nostr network.
+
+* Real RustCrypto ML-KEM-768 with independent interoperability tests and secret zeroization.
+* Atomic local DAG admission, deterministic parent ordering, backpressure, and truthful pending status.
+* Fail-closed credential validation, unavailable mock vault operations, and disabled unauthenticated network MCP serving.
+* [AgentBBS and RuFlo collaboration hub](integrations/ruv-stack/README.md) with durable receipts and native RuVector retrieval.
+* [RuFlo MCP observation bridge](integrations/ruflo-x/README.md) for live tools and `ruv://` resources.
+* [Member federation client](integrations/ruflo-nostr/README.md) for the invite and Nostr authentication protocol. Live membership requires a private invite.
+* [Research](docs/v2/research.md), [ADRs](docs/v2/adrs/ADR-200-staged-v2.md), and [validation and remaining gates](docs/v2/VALIDATION.md).
+
+Run `scripts/validate-v2.sh --targeted --ruflo` for the implemented boundaries. `scripts/validate-v2.sh --release` is a separate gate and currently fails. See the evidence before relying on historical capability descriptions below.
+
+---
+
 # QuDAG: The Future of Autonomous, Quantum-Resistant, Zero-Person Businesses 🌐
 
 > The Darkest of Darknets - Built for the Quantum Age and Autonomous AI Swarms

@@ -1,0 +1,1 @@
+{"vertices":10000,"payload_bytes":256,"total_ns":13016682,"admission_p50_ns":270,"admission_p95_ns":531,"admission_p99_ns":712,"topological_order_ns":9417177,"distributed_consensus":false}

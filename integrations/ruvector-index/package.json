@@ -1,0 +1,20 @@
+{
+  "name": "@qudag/ruvector-index",
+  "version": "1.0.0",
+  "description": "Native RuVector disposable retrieval index",
+  "scripts": {
+    "test": "node --test test.mjs",
+    "benchmark": "node benchmark.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@ruvector/core": "0.1.32"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  }
+}

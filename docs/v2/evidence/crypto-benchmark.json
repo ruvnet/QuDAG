@@ -1,0 +1,1 @@
+{"rounds":1000,"warmup":100,"os":"linux","arch":"x86_64","available_parallelism":8,"backend":"RustCrypto ml-kem 0.3.2","keygen":{"mean_ns":45628,"p50_ns":43975,"p95_ns":55613,"p99_ns":76343},"encapsulate":{"mean_ns":43934,"p50_ns":42523,"p95_ns":54171,"p99_ns":69904},"decapsulate":{"mean_ns":56942,"p50_ns":55352,"p95_ns":68111,"p99_ns":81571}}

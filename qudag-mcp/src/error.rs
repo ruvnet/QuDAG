@@ -529,6 +529,7 @@ impl From<std::time::SystemTimeError> for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error as _;
 
     #[test]
     fn test_error_creation() {

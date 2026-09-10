@@ -4,10 +4,7 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-use super::{
-    get_optional_bool_arg, get_optional_string_arg, get_optional_u64_arg, get_required_string_arg,
-    McpTool,
-};
+use super::{get_optional_bool_arg, get_optional_u64_arg, get_required_string_arg, McpTool};
 use crate::error::{Error, Result};
 
 /// Vault tool for password management operations
@@ -26,139 +23,65 @@ impl VaultTool {
     }
 
     /// Initialize a new vault
-    async fn init_vault(&self, args: &Value) -> Result<Value> {
-        let path = get_optional_string_arg(args, "path");
-        let force = get_optional_bool_arg(args, "force").unwrap_or(false);
-
-        // For now, return a mock response
-        // In a real implementation, this would create a new vault
-        Ok(json!({
-            "success": true,
-            "message": "Vault initialized successfully",
-            "path": path.unwrap_or_else(|| "~/.qudag/vault.qdag".to_string()),
-            "force": force
-        }))
+    async fn init_vault(&self, _args: &Value) -> Result<Value> {
+        Err(Error::vault(
+            "init_vault",
+            "Persistent vault backend is not connected; operation unavailable",
+        ))
     }
 
     /// Add a password entry
-    async fn add_entry(&self, args: &Value) -> Result<Value> {
-        let label = get_required_string_arg(args, "label")?;
-        let username = get_required_string_arg(args, "username")?;
-        let password = get_optional_string_arg(args, "password");
-        let generate = get_optional_bool_arg(args, "generate").unwrap_or(false);
-        let length = get_optional_u64_arg(args, "length").unwrap_or(16) as usize;
-        let symbols = get_optional_bool_arg(args, "symbols").unwrap_or(true);
-
-        // Mock implementation
-        let _final_password = if generate {
-            self.generate_password(length, symbols, true)
-        } else {
-            password.unwrap_or_else(|| "[password would be prompted]".to_string())
-        };
-
-        Ok(json!({
-            "success": true,
-            "message": "Password entry added successfully",
-            "label": label,
-            "username": username,
-            "password_generated": generate,
-            "password_length": if generate { Some(length) } else { None }
-        }))
+    async fn add_entry(&self, _args: &Value) -> Result<Value> {
+        Err(Error::vault(
+            "add_entry",
+            "Persistent vault backend is not connected; operation unavailable",
+        ))
     }
 
     /// Get a password entry
-    async fn get_entry(&self, args: &Value) -> Result<Value> {
-        let label = get_required_string_arg(args, "label")?;
-        let show_password = get_optional_bool_arg(args, "show_password").unwrap_or(false);
-
-        // Mock implementation
-        Ok(json!({
-            "success": true,
-            "label": label,
-            "username": "user@example.com",
-            "password": if show_password { "mock_password_123" } else { "[hidden]" },
-            "created": "2024-01-01T00:00:00Z",
-            "modified": "2024-01-01T00:00:00Z"
-        }))
+    async fn get_entry(&self, _args: &Value) -> Result<Value> {
+        Err(Error::vault(
+            "get_entry",
+            "Persistent vault backend is not connected; operation unavailable",
+        ))
     }
 
     /// List password entries
-    async fn list_entries(&self, args: &Value) -> Result<Value> {
-        let category = get_optional_string_arg(args, "category");
-        let format = get_optional_string_arg(args, "format").unwrap_or_else(|| "json".to_string());
-
-        // Mock implementation
-        let entries = vec![
-            json!({
-                "label": "email/google",
-                "username": "user@gmail.com",
-                "category": "email",
-                "created": "2024-01-01T00:00:00Z"
-            }),
-            json!({
-                "label": "social/github",
-                "username": "username",
-                "category": "social",
-                "created": "2024-01-02T00:00:00Z"
-            }),
-        ];
-
-        let filtered_entries = if let Some(ref cat) = category {
-            entries
-                .into_iter()
-                .filter(|entry| entry["category"].as_str() == Some(cat))
-                .collect::<Vec<_>>()
-        } else {
-            entries
-        };
-
-        Ok(json!({
-            "success": true,
-            "entries": filtered_entries,
-            "count": filtered_entries.len(),
-            "format": format,
-            "category_filter": category
-        }))
+    async fn list_entries(&self, _args: &Value) -> Result<Value> {
+        Err(Error::vault(
+            "list_entries",
+            "Persistent vault backend is not connected; operation unavailable",
+        ))
     }
 
     /// Remove a password entry
-    async fn remove_entry(&self, args: &Value) -> Result<Value> {
-        let label = get_required_string_arg(args, "label")?;
-        let force = get_optional_bool_arg(args, "force").unwrap_or(false);
-
-        Ok(json!({
-            "success": true,
-            "message": "Password entry removed successfully",
-            "label": label,
-            "force": force
-        }))
+    async fn remove_entry(&self, _args: &Value) -> Result<Value> {
+        Err(Error::vault(
+            "remove_entry",
+            "Persistent vault backend is not connected; operation unavailable",
+        ))
     }
 
     /// Update a password entry
-    async fn update_entry(&self, args: &Value) -> Result<Value> {
-        let label = get_required_string_arg(args, "label")?;
-        let username = get_optional_string_arg(args, "username");
-        let password = get_optional_string_arg(args, "password");
-        let generate = get_optional_bool_arg(args, "generate").unwrap_or(false);
-
-        Ok(json!({
-            "success": true,
-            "message": "Password entry updated successfully",
-            "label": label,
-            "updated_fields": {
-                "username": username.is_some(),
-                "password": password.is_some() || generate
-            },
-            "password_generated": generate
-        }))
+    async fn update_entry(&self, _args: &Value) -> Result<Value> {
+        Err(Error::vault(
+            "update_entry",
+            "Persistent vault backend is not connected; operation unavailable",
+        ))
     }
 
     /// Generate a password
     async fn generate_password_cmd(&self, args: &Value) -> Result<Value> {
-        let length = get_optional_u64_arg(args, "length").unwrap_or(16) as usize;
+        let length = get_optional_u64_arg(args, "length").unwrap_or(16);
         let symbols = get_optional_bool_arg(args, "symbols").unwrap_or(true);
         let numbers = get_optional_bool_arg(args, "numbers").unwrap_or(true);
-        let count = get_optional_u64_arg(args, "count").unwrap_or(1) as usize;
+        let count = get_optional_u64_arg(args, "count").unwrap_or(1);
+        if !(8..=1024).contains(&length) || !(1..=100).contains(&count) {
+            return Err(Error::invalid_request(
+                "Password length must be 8..1024 and count 1..100",
+            ));
+        }
+        let length = length as usize;
 
         let passwords: Vec<String> = (0..count)
             .map(|_| self.generate_password(length, symbols, numbers))
@@ -175,41 +98,11 @@ impl VaultTool {
     }
 
     /// Get vault statistics
-    async fn get_stats(&self, args: &Value) -> Result<Value> {
-        let verbose = get_optional_bool_arg(args, "verbose").unwrap_or(false);
-
-        let mut stats = json!({
-            "success": true,
-            "total_entries": 15,
-            "categories": 5,
-            "vault_size_bytes": 4096,
-            "created": "2024-01-01T00:00:00Z",
-            "last_modified": "2024-01-15T12:00:00Z"
-        });
-
-        if verbose {
-            stats["detailed"] = json!({
-                "entries_by_category": {
-                    "email": 5,
-                    "social": 3,
-                    "banking": 2,
-                    "server": 3,
-                    "other": 2
-                },
-                "password_strength": {
-                    "strong": 10,
-                    "medium": 3,
-                    "weak": 2
-                },
-                "encryption": {
-                    "algorithm": "AES-256-GCM",
-                    "kdf": "Argon2id",
-                    "quantum_resistant": true
-                }
-            });
-        }
-
-        Ok(stats)
+    async fn get_stats(&self, _args: &Value) -> Result<Value> {
+        Err(Error::vault(
+            "get_stats",
+            "Persistent vault backend is not connected; operation unavailable",
+        ))
     }
 
     /// Helper method to generate a password
@@ -369,5 +262,41 @@ impl McpTool for VaultTool {
         metadata.insert("tags".to_string(), json!(["password", "vault", "security"]));
         metadata.insert("version".to_string(), json!("1.0.0"));
         metadata
+    }
+}
+
+#[cfg(test)]
+mod v2_security_tests {
+    use super::*;
+    #[tokio::test]
+    async fn disconnected_storage_never_reports_success() {
+        let tool = VaultTool::new();
+        for operation in ["init", "add", "get", "list", "remove", "update", "stats"] {
+            assert!(tool
+                .execute(Some(json!({"operation": operation})))
+                .await
+                .is_err());
+        }
+    }
+    #[tokio::test]
+    async fn generation_is_bounded() {
+        let tool = VaultTool::new();
+        for args in [
+            json!({"operation":"generate","length":u64::MAX}),
+            json!({"operation":"generate","count":u64::MAX}),
+            json!({"operation":"generate","length":0}),
+        ] {
+            assert!(tool.execute(Some(args)).await.is_err());
+        }
+        let result = tool
+            .execute(Some(json!({"operation":"generate","length":32,"count":2})))
+            .await
+            .unwrap();
+        assert_eq!(result["passwords"].as_array().unwrap().len(), 2);
+        assert!(result["passwords"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|v| v.as_str().unwrap().len() == 32));
     }
 }

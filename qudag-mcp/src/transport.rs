@@ -526,7 +526,7 @@ mod tests {
         let transport_result = config.create_transport().await;
         assert!(transport_result.is_ok());
 
-        let mut transport = transport_result.unwrap();
+        let transport = transport_result.unwrap();
         assert!(transport.is_connected());
     }
 

@@ -1,0 +1,8 @@
+{
+  "measuredAt": "2026-09-10T01:52:43.308136+00:00",
+  "command": "npm audit --omit=dev --json",
+  "exitCode": 0,
+  "lockfileSha256": "0e3a24ed8b6ff0f2f8548567fd7a4a623586935e24cf917d5568d6930e054026",
+  "result": "audit-results.json",
+  "limitations": "Registry advisory snapshot, not an independent code audit or cryptographic proof."
+}

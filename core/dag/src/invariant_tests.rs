@@ -1,4 +1,5 @@
 //! Tests for DAG invariants and property verification
+//! v2: local admission remains Pending until authenticated distributed finality.
 
 #[cfg(test)]
 mod tests {
@@ -53,25 +54,25 @@ mod tests {
         assert!(c_pos < d_pos);
     }
 
-    /// Test that once a vertex achieves consensus, it remains stable
+    /// Test that local admission remains stable without unearned finality
     #[test]
     fn test_consensus_stability_invariant() {
         let mut dag = DAGConsensus::new();
         let vertex = create_test_vertex("stable", vec![]);
 
-        // Add vertex and verify it reaches consensus
+        // Add vertex and verify it remains pending
         assert!(dag.add_vertex(vertex).is_ok());
-        assert_eq!(dag.get_confidence("stable"), Some(ConsensusStatus::Final));
+        assert_eq!(dag.get_confidence("stable"), Some(ConsensusStatus::Pending));
 
         // Consensus status should remain stable
         for _ in 0..10 {
-            assert_eq!(dag.get_confidence("stable"), Some(ConsensusStatus::Final));
+            assert_eq!(dag.get_confidence("stable"), Some(ConsensusStatus::Pending));
         }
 
-        // Adding other vertices shouldn't affect existing consensus
+        // Adding other vertices shouldn't affect existing pending admission
         let vertex2 = create_test_vertex("other", vec![]);
         assert!(dag.add_vertex(vertex2).is_ok());
-        assert_eq!(dag.get_confidence("stable"), Some(ConsensusStatus::Final));
+        assert_eq!(dag.get_confidence("stable"), Some(ConsensusStatus::Pending));
     }
 
     /// Test that DAG preserves partial order
@@ -144,14 +145,14 @@ mod tests {
         assert!(dag.add_vertex(branch1).is_ok());
         assert!(dag.add_vertex(branch2).is_ok());
 
-        // Both branches should achieve consensus
-        assert_eq!(dag.get_confidence("branch1"), Some(ConsensusStatus::Final));
-        assert_eq!(dag.get_confidence("branch2"), Some(ConsensusStatus::Final));
+        // Both locally admitted branches should remain pending
+        assert_eq!(dag.get_confidence("branch1"), Some(ConsensusStatus::Pending));
+        assert_eq!(dag.get_confidence("branch2"), Some(ConsensusStatus::Pending));
 
         // Merge should work
         let merge = create_test_vertex("merge", vec!["branch1", "branch2"]);
         assert!(dag.add_vertex(merge).is_ok());
-        assert_eq!(dag.get_confidence("merge"), Some(ConsensusStatus::Final));
+        assert_eq!(dag.get_confidence("merge"), Some(ConsensusStatus::Pending));
     }
 
     /// Test that DAG handles Byzantine scenarios properly
@@ -171,9 +172,9 @@ mod tests {
         let result = dag.add_vertex(byzantine_fork);
         assert!(result.is_err());
 
-        // Honest vertices should maintain their consensus
-        assert_eq!(dag.get_confidence("honest1"), Some(ConsensusStatus::Final));
-        assert_eq!(dag.get_confidence("honest2"), Some(ConsensusStatus::Final));
+        // Honest vertices should maintain their pending admission
+        assert_eq!(dag.get_confidence("honest1"), Some(ConsensusStatus::Pending));
+        assert_eq!(dag.get_confidence("honest2"), Some(ConsensusStatus::Pending));
     }
 
     /// Property-based test for DAG invariants
@@ -184,7 +185,7 @@ mod tests {
             max_parents in 1..3usize
         ) {
             let mut dag = DAGConsensus::new();
-            let mut vertex_ids = Vec::new();
+            let mut vertex_ids: Vec<String> = Vec::new();
 
             // Add vertices with valid parent relationships
             for i in 0..vertex_count {
@@ -204,9 +205,9 @@ mod tests {
                 vertex_ids.push(id);
             }
 
-            // Verify all vertices achieved consensus
+            // Verify all vertices remain admitted without claiming finality
             for id in &vertex_ids {
-                prop_assert_eq!(dag.get_confidence(id), Some(ConsensusStatus::Final));
+                prop_assert_eq!(dag.get_confidence(id), Some(ConsensusStatus::Pending));
             }
 
             // Verify total order respects partial order
@@ -228,7 +229,7 @@ mod tests {
             )
         ) {
             let mut dag = DAGConsensus::new();
-            let mut vertex_ids = Vec::new();
+            let mut vertex_ids: Vec<String> = Vec::new();
 
             // Create vertices first
             for i in 0..20 {
@@ -281,15 +282,16 @@ mod tests {
             )
         ) {
             let mut dag = DAGConsensus::new();
-            let mut vertex_counter = 0;
+            let mut vertex_counter: usize = 0;
             let mut consensus_levels = Vec::new();
 
             for (op, payload) in operations {
                 match op {
                     "add" => {
                         let vertex_id = format!("V{}", vertex_counter);
+                        let parent_id = format!("V{}", vertex_counter.saturating_sub(1));
                         let parents = if vertex_counter > 0 {
-                            vec![format!("V{}", vertex_counter - 1).as_str()]
+                            vec![parent_id.as_str()]
                         } else {
                             vec![]
                         };
@@ -300,11 +302,11 @@ mod tests {
                         }
                     },
                     "query" => {
-                        // Record current consensus level
+                        // Record number of pending local admissions
                         let mut current_level = 0;
                         for i in 0..vertex_counter {
                             let vertex_id = format!("V{}", i);
-                            if dag.get_confidence(&vertex_id) == Some(ConsensusStatus::Final) {
+                            if dag.get_confidence(&vertex_id) == Some(ConsensusStatus::Pending) {
                                 current_level += 1;
                             }
                         }
@@ -317,7 +319,7 @@ mod tests {
             // Property: Consensus is monotonic (never decreases)
             for i in 1..consensus_levels.len() {
                 prop_assert!(consensus_levels[i] >= consensus_levels[i-1],
-                    "Consensus level decreased: {} -> {}", consensus_levels[i-1], consensus_levels[i]);
+                    "Pending admission count decreased: {} -> {}", consensus_levels[i-1], consensus_levels[i]);
             }
         }
 
@@ -329,7 +331,8 @@ mod tests {
             )
         ) {
             let mut dag = DAGConsensus::new();
-            let mut vertex_ids = Vec::new();
+            let mut vertex_ids: Vec<String> = Vec::new();
+            let mut admitted_parents: HashSet<String> = HashSet::new();
 
             for (i, parents) in vertex_structure.iter().enumerate() {
                 let vertex_id = format!("V{}", i);
@@ -339,9 +342,11 @@ mod tests {
                     .map(|&p| vertex_ids[p].as_str())
                     .collect();
 
+                let selected_parents: Vec<String> = parent_names.iter().map(|name| (*name).to_owned()).collect();
                 let vertex = create_test_vertex(&vertex_id, parent_names);
                 if dag.add_vertex(vertex).is_ok() {
                     vertex_ids.push(vertex_id);
+                    admitted_parents.extend(selected_parents);
 
                     // Property: Tips are always vertices with no children
                     let tips = dag.get_tips();
@@ -352,16 +357,12 @@ mod tests {
                             "Tip {} is not a valid vertex", tip);
                     }
 
-                    // No vertex with children should be a tip
-                    for (j, child_parents) in vertex_structure.iter().enumerate().skip(i + 1) {
-                        for &parent_idx in child_parents {
-                            if parent_idx < vertex_ids.len() {
-                                let parent_name = &vertex_ids[parent_idx];
-                                prop_assert!(!tips.contains(parent_name) || j > vertex_ids.len(),
-                                    "Vertex {} is a tip but has child {}", parent_name, j);
-                            }
-                        }
-                    }
+                    // Compare against admitted edges only: future children are not in the DAG.
+                    // Exact set equality also detects missing tips, not just extra tips.
+                    let expected_tips: HashSet<String> = vertex_ids.iter()
+                        .filter(|id| !admitted_parents.contains(*id)).cloned().collect();
+                    let actual_tips: HashSet<String> = tips.into_iter().collect();
+                    prop_assert_eq!(actual_tips, expected_tips);
                 }
             }
         }
@@ -412,10 +413,10 @@ mod tests {
                 }
             }
 
-            // Property: All successfully added vertices should achieve consensus
+            // Property: All successfully added vertices remain pending
             for vertex_id in &all_vertices {
-                prop_assert_eq!(dag.get_confidence(vertex_id), Some(ConsensusStatus::Final),
-                    "Vertex {} failed to achieve consensus", vertex_id);
+                prop_assert_eq!(dag.get_confidence(vertex_id), Some(ConsensusStatus::Pending),
+                    "Vertex {} did not remain pending", vertex_id);
             }
         }
 
@@ -431,8 +432,9 @@ mod tests {
 
             for (i, message) in message_sequence.iter().enumerate() {
                 let vertex_id = format!("msg_{}", i);
+                let parent_id = format!("msg_{}", i.saturating_sub(1));
                 let parents = if i > 0 {
-                    vec![format!("msg_{}", i - 1).as_str()]
+                    vec![parent_id.as_str()]
                 } else {
                     vec![]
                 };
@@ -442,10 +444,10 @@ mod tests {
                 if dag.add_vertex(vertex).is_ok() {
                     processed_count += 1;
 
-                    // Property: Liveness - messages eventually achieve consensus
+                    // Property: Local admission accepts messages without claiming distributed liveness
                     let confidence = dag.get_confidence(&vertex_id);
-                    prop_assert_eq!(confidence, Some(ConsensusStatus::Final),
-                        "Message {} did not achieve consensus", vertex_id);
+                    prop_assert_eq!(confidence, Some(ConsensusStatus::Pending),
+                        "Message {} did not remain pending", vertex_id);
                 }
             }
 
@@ -479,8 +481,9 @@ mod tests {
             // Add honest messages first
             for (i, message) in honest_messages.iter().enumerate() {
                 let vertex_id = format!("honest_{}", i);
+                let parent_id = format!("honest_{}", i.saturating_sub(1));
                 let parents = if i > 0 {
-                    vec![format!("honest_{}", i - 1).as_str()]
+                    vec![parent_id.as_str()]
                 } else {
                     vec![]
                 };
@@ -495,7 +498,7 @@ mod tests {
 
             // Attempt Byzantine attacks
             for (i, attack) in byzantine_attacks.iter().enumerate() {
-                let attack_result = match attack {
+                let attack_result = match *attack {
                     "duplicate_vertex" => {
                         // Try to add duplicate vertex
                         if !honest_vertices.is_empty() {
@@ -528,16 +531,16 @@ mod tests {
                 } else {
                     // If attack was accepted, verify it doesn't break honest vertices
                     for honest_id in &honest_vertices {
-                        prop_assert_eq!(dag.get_confidence(honest_id), Some(ConsensusStatus::Final),
+                        prop_assert_eq!(dag.get_confidence(honest_id), Some(ConsensusStatus::Pending),
                             "Byzantine attack affected honest vertex {}", honest_id);
                     }
                 }
             }
 
-            // Property: Honest vertices should maintain their consensus despite attacks
+            // Property: Honest vertices should maintain their pending admission despite attacks
             for honest_id in &honest_vertices {
-                prop_assert_eq!(dag.get_confidence(honest_id), Some(ConsensusStatus::Final),
-                    "Honest vertex {} lost consensus after Byzantine attacks", honest_id);
+                prop_assert_eq!(dag.get_confidence(honest_id), Some(ConsensusStatus::Pending),
+                    "Honest vertex {} lost its pending admission after invalid insertions", honest_id);
             }
 
             // Property: Total order should still be valid
@@ -573,7 +576,7 @@ mod tests {
         let multi_parent = create_test_vertex("multi", vec!["root1", "root2", "root3"]);
         assert!(dag.add_vertex(multi_parent).is_ok());
 
-        // All should achieve consensus
-        assert_eq!(dag.get_confidence("multi"), Some(ConsensusStatus::Final));
+        // All should remain pending after local admission
+        assert_eq!(dag.get_confidence("multi"), Some(ConsensusStatus::Pending));
     }
 }

@@ -53,7 +53,7 @@ impl PartialEq for PublicKey {
 impl Eq for PublicKey {}
 
 /// ML-KEM secret key.
-#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKey(Vec<u8>);
 
 impl SecretKey {
@@ -109,7 +109,7 @@ impl PartialEq for Ciphertext {
 impl Eq for Ciphertext {}
 
 /// ML-KEM shared secret.
-#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct SharedSecret(Vec<u8>);
 
 impl SharedSecret {
@@ -152,7 +152,7 @@ pub trait KeyEncapsulation {
 }
 
 /// ML-KEM key pair
-#[derive(Debug, ZeroizeOnDrop)]
+#[derive(ZeroizeOnDrop)]
 pub struct KeyPair {
     pub public_key: Vec<u8>,
     pub secret_key: Vec<u8>,
@@ -165,12 +165,18 @@ impl Default for KeyPair {
 }
 
 impl KeyPair {
-    /// Create a new key pair (placeholder implementation)
+    /// Generate a real ML-KEM-768 pair using the backend system RNG.
     pub fn new() -> Self {
-        Self {
-            public_key: vec![0u8; 32], // Placeholder
-            secret_key: vec![0u8; 32], // Placeholder
-        }
+        Self::try_new().expect("ML-KEM key generation failed")
+    }
+
+    /// Fallible constructor for callers that propagate cryptographic errors.
+    pub fn try_new() -> Result<Self, KEMError> {
+        let (public, secret) = crate::ml_kem::MlKem768::keygen()?;
+        Ok(Self {
+            public_key: public.as_bytes().to_vec(),
+            secret_key: secret.as_bytes().to_vec(),
+        })
     }
 
     /// Get public key reference
@@ -181,5 +187,26 @@ impl KeyPair {
     /// Get secret key reference  
     pub fn secret_key(&self) -> &[u8] {
         &self.secret_key
+    }
+}
+
+impl std::fmt::Debug for SecretKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SecretKey([REDACTED])")
+    }
+}
+
+impl std::fmt::Debug for SharedSecret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SharedSecret([REDACTED])")
+    }
+}
+
+impl std::fmt::Debug for KeyPair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KeyPair")
+            .field("public_key", &self.public_key)
+            .field("secret_key", &"[REDACTED]")
+            .finish()
     }
 }

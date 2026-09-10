@@ -542,7 +542,7 @@ fn matrix_vector_multiply(
 
             let mut product = [0i32; ML_DSA_N];
             for k in 0..ML_DSA_N {
-                product[k] = montgomery_reduce(a_ntt[k] as i64 * s1_ntt[j][k] as i64);
+                product[k] = (i64::from(a_ntt[k]) * i64::from(s1_ntt[j][k])).rem_euclid(i64::from(ML_DSA_Q)) as i32;
             }
 
             // Add to result
@@ -563,57 +563,51 @@ fn matrix_vector_multiply(
     Ok(t)
 }
 
-/// Number-Theoretic Transform (NTT) implementation
+/// Experimental reference arithmetic only. Production ML-DSA uses PQClean.
+/// This variable-time O(N^2) transform is not suitable for secret processing.
+#[allow(dead_code)]
+fn modular_pow(mut base: i64, mut exponent: usize) -> i64 {
+    let mut result = 1;
+    while exponent > 0 {
+        if exponent & 1 != 0 { result = result * base % i64::from(ML_DSA_Q); }
+        base = base * base % i64::from(ML_DSA_Q);
+        exponent >>= 1;
+    }
+    result
+}
+
+/// Evaluate at the 256 odd powers of primitive 512th root 1753.
 #[allow(dead_code)]
 fn ntt(poly: &mut [i32; ML_DSA_N]) {
-    let mut k = 1;
-    let mut len = 128;
-
-    while len >= 2 {
-        let mut start = 0;
-        while start < ML_DSA_N {
-            let zeta = ntt_zetas()[k];
-            k += 1;
-
-            for j in start..start + len {
-                let t = montgomery_reduce(zeta as i64 * poly[j + len] as i64);
-                poly[j + len] = poly[j].wrapping_sub(t);
-                poly[j] = poly[j].wrapping_add(t);
-            }
-
-            start += len << 1;
+    let input = *poly;
+    let q = i64::from(ML_DSA_Q);
+    for (k, output) in poly.iter_mut().enumerate() {
+        let root = modular_pow(1753, 2 * k + 1);
+        let mut value = 0;
+        for coefficient in input.iter().rev() {
+            value = (value * root + i64::from(*coefficient)).rem_euclid(q);
         }
-        len >>= 1;
+        *output = value as i32;
     }
 }
 
-/// Inverse Number-Theoretic Transform (INTT) implementation
+/// Exact inverse of the experimental reference transform, modulo q.
 #[allow(dead_code)]
 fn invntt(poly: &mut [i32; ML_DSA_N]) {
-    let mut k = 127;
-    let mut len = 2;
-
-    while len <= 128 {
-        let mut start = 0;
-        while start < ML_DSA_N {
-            let zeta = ntt_zetas()[k];
-            k -= 1;
-
-            for j in start..start + len {
-                let t = poly[j];
-                poly[j] = barrett_reduce(t.wrapping_add(poly[j + len]));
-                poly[j + len] = poly[j + len].wrapping_sub(t);
-                poly[j + len] = montgomery_reduce(zeta as i64 * poly[j + len] as i64);
-            }
-
-            start += len << 1;
+    let input = *poly;
+    let q = i64::from(ML_DSA_Q);
+    let inv_n = modular_pow(ML_DSA_N as i64, (ML_DSA_Q - 2) as usize);
+    let mut accumulator = [0i64; ML_DSA_N];
+    for (k, value) in input.iter().enumerate() {
+        let inverse_root = modular_pow(modular_pow(1753, 2 * k + 1), (ML_DSA_Q - 2) as usize);
+        let mut power = 1;
+        for coefficient in &mut accumulator {
+            *coefficient = (*coefficient + i64::from(*value) * power).rem_euclid(q);
+            power = power * inverse_root % q;
         }
-        len <<= 1;
     }
-
-    // Multiply by n^(-1) = 8347681 in Montgomery domain
-    for i in 0..ML_DSA_N {
-        poly[i] = montgomery_reduce(8347681i64 * poly[i] as i64);
+    for (output, value) in poly.iter_mut().zip(accumulator) {
+        *output = (value * inv_n % q) as i32;
     }
 }
 
@@ -1028,15 +1022,35 @@ mod tests {
 
     #[test]
     fn test_ntt_operations() {
-        let mut poly = [1i32; ML_DSA_N];
-        let original = poly;
-
-        ntt(&mut poly);
-        invntt(&mut poly);
-
-        // After NTT and INTT, should be close to original (modulo rounding)
-        for i in 0..ML_DSA_N {
-            assert!((poly[i] - original[i]).abs() < 100);
+        for variant in 0..4 {
+            let mut poly = std::array::from_fn(|i| match variant {
+                0 => 1,
+                1 => i as i32,
+                2 => -(i as i32),
+                _ => ML_DSA_Q - 1 - i as i32,
+            });
+            let original = poly;
+            ntt(&mut poly);
+            invntt(&mut poly);
+            for i in 0..ML_DSA_N {
+                assert_eq!(poly[i], original[i].rem_euclid(ML_DSA_Q));
+            }
         }
+    }
+
+    #[test]
+    fn test_reference_ntt_negacyclic_product() {
+        let mut a = [0; ML_DSA_N];
+        let mut b = [0; ML_DSA_N];
+        a[255] = 1;
+        b[1] = 1;
+        ntt(&mut a);
+        ntt(&mut b);
+        for i in 0..ML_DSA_N {
+            a[i] = (i64::from(a[i]) * i64::from(b[i]) % i64::from(ML_DSA_Q)) as i32;
+        }
+        invntt(&mut a);
+        assert_eq!(a[0], ML_DSA_Q - 1);
+        assert!(a[1..].iter().all(|&x| x == 0));
     }
 }

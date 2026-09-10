@@ -19,7 +19,7 @@
 //!
 //! ```rust
 //! use qudag_dag::{QrDag, Vertex, VertexId, ConsensusConfig};
-//! use std::collections::HashSet;
+//! use std::collections::{BTreeSet, HashMap, HashSet};
 //!
 //! // Create a new DAG consensus instance
 //! let mut dag = QrDag::new();
@@ -100,7 +100,7 @@ pub type QrDag = DAGConsensus;
 
 // Note: We export both Confidence (detailed confidence info) and ConsensusStatus (simple status)
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::time::Duration;
 
 /// Configuration for DAG consensus algorithm
@@ -127,9 +127,10 @@ impl Default for ConsensusConfig {
     }
 }
 
-/// Main DAG consensus implementation for test compatibility
+/// Deterministic local DAG admission facade. Admission remains Pending until
+/// a separately authenticated consensus protocol establishes finality.
 pub struct DAGConsensus {
-    dag: Dag,
+    vertices: HashMap<VertexId, Vertex>,
     #[allow(dead_code)]
     config: ConsensusConfig,
     consensus: QRAvalanche,
@@ -150,7 +151,7 @@ impl DAGConsensus {
     /// Creates a new DAG consensus instance with custom configuration
     pub fn with_config(config: ConsensusConfig) -> Self {
         Self {
-            dag: Dag::new(100), // Default max concurrent
+            vertices: HashMap::new(),
             config,
             consensus: QRAvalanche::new(),
         }
@@ -167,6 +168,14 @@ impl DAGConsensus {
             )));
         }
 
+        // Check for self-references (cycles)
+        if vertex.parents.contains(&vertex.id) {
+            return Err(DagError::ConsensusError(format!(
+                "Validation error: vertex {} references itself",
+                vertex_id_str
+            )));
+        }
+
         // Validate vertex parents exist (except for genesis)
         if !vertex.parents.is_empty() {
             for parent in &vertex.parents {
@@ -179,41 +188,16 @@ impl DAGConsensus {
             }
         }
 
-        // Check for self-references (cycles)
-        if vertex.parents.contains(&vertex.id) {
-            return Err(DagError::ConsensusError(format!(
-                "Validation error: vertex {} references itself",
-                vertex_id_str
-            )));
-        }
-
-        // Add to consensus tracking
+        // Commit only after every structural check passes. Local admission is
+        // not a distributed vote and cannot establish finality.
         self.consensus
             .vertices
-            .insert(vertex.id.clone(), ConsensusStatus::Final);
+            .insert(vertex.id.clone(), ConsensusStatus::Pending);
+        for parent in &vertex.parents {
+            self.consensus.tips.remove(parent);
+        }
         self.consensus.tips.insert(vertex.id.clone());
-
-        // Convert Vertex to DagMessage and submit
-        let msg = DagMessage {
-            id: vertex.id.clone(),
-            payload: vertex.payload.clone(),
-            parents: vertex.parents(),
-            timestamp: vertex.timestamp,
-        };
-
-        // Since this is sync interface for tests, we'll use blocking call
-        // In real implementation this would be async
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async { self.dag.submit_message(msg).await })
-            .map_err(|e| match e {
-                dag::DagError::VertexError(_) => {
-                    DagError::ConsensusError(format!("Invalid vertex: {}", e))
-                }
-                dag::DagError::ConflictDetected => {
-                    DagError::ConsensusError("Conflict detected".to_string())
-                }
-                _ => DagError::ConsensusError(format!("DAG error: {}", e)),
-            })?;
+        self.vertices.insert(vertex.id.clone(), vertex);
 
         Ok(())
     }
@@ -224,19 +208,43 @@ impl DAGConsensus {
         self.consensus.vertices.get(&id).cloned()
     }
 
-    /// Gets the total order of vertices (simplified implementation)
+    /// Deterministic local topological order, using raw IDs to break ties.
+    /// This is not a finalized distributed ordering. The string API rejects
+    /// non-UTF8 IDs rather than silently aliasing them through lossy decoding.
     pub fn get_total_order(&self) -> Result<Vec<String>> {
-        // Simple topological sort based on timestamps
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
-            let vertices = self.dag.vertices.read().await;
-            let mut ordered: Vec<_> = vertices.values().collect();
-            ordered.sort_by_key(|v| v.timestamp);
-            Ok(ordered
-                .iter()
-                .map(|v| String::from_utf8_lossy(v.id.as_bytes()).to_string())
-                .collect())
-        })
+        let mut indegree = HashMap::new();
+        let mut children: HashMap<VertexId, Vec<VertexId>> = HashMap::new();
+        let mut ready = BTreeSet::new();
+        for (id, vertex) in &self.vertices {
+            let parents = vertex.parents();
+            indegree.insert(id.clone(), parents.len());
+            if parents.is_empty() {
+                ready.insert(id.as_bytes().to_vec());
+            }
+            for parent in parents {
+                children.entry(parent).or_default().push(id.clone());
+            }
+        }
+        let mut order = Vec::with_capacity(self.vertices.len());
+        while let Some(bytes) = ready.pop_first() {
+            let id = VertexId::from_bytes(bytes.clone());
+            order.push(String::from_utf8(bytes).map_err(|_| {
+                DagError::ConsensusError("String order API requires UTF-8 IDs".into())
+            })?);
+            for child in children.get(&id).into_iter().flatten() {
+                let count = indegree
+                    .get_mut(child)
+                    .ok_or_else(|| DagError::ConsensusError("Missing child".into()))?;
+                *count -= 1;
+                if *count == 0 {
+                    ready.insert(child.as_bytes().to_vec());
+                }
+            }
+        }
+        if order.len() != self.vertices.len() {
+            return Err(DagError::ConsensusError("Cycle or missing parent".into()));
+        }
+        Ok(order)
     }
 
     /// Gets current DAG tips
@@ -258,13 +266,88 @@ impl DAGConsensus {
     /// Check if the DAG contains a message (for test compatibility)
     pub fn contains_message(&self, message: &[u8]) -> bool {
         let vertex_id = VertexId::from_bytes(message.to_vec());
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async { self.dag.vertices.read().await.contains_key(&vertex_id) })
+        self.vertices.contains_key(&vertex_id)
     }
 
-    /// Verify message signature (placeholder for test compatibility)
+    /// Legacy unsigned API cannot establish authenticity and always rejects.
+    #[deprecated(note = "Use verify_signed_message with an explicit ML-DSA signature")]
     pub fn verify_message(&self, _message: &[u8], _public_key: &[u8]) -> bool {
-        // Placeholder implementation
-        true
+        false
+    }
+}
+
+impl DAGConsensus {
+    /// Verify an explicitly supplied ML-DSA signature. Trust in the supplied key
+    /// must be established by the caller; this does not grant DAG membership.
+    pub fn verify_signed_message(
+        &self,
+        message: &[u8],
+        signature: &[u8],
+        public_key: &[u8],
+    ) -> bool {
+        qudag_crypto::ml_dsa::MlDsaPublicKey::from_bytes(public_key)
+            .and_then(|key| key.verify(message, signature))
+            .is_ok()
+    }
+}
+
+#[cfg(test)]
+mod signature_boundary_tests {
+    use super::*;
+    #[test]
+    #[allow(deprecated)]
+    fn unsigned_and_forged_messages_are_rejected() {
+        let dag = DAGConsensus::new();
+        assert!(!dag.verify_message(b"untrusted", b"arbitrary"));
+        assert!(!dag.verify_signed_message(b"untrusted", b"forged", b"arbitrary"));
+    }
+    #[test]
+    fn authentic_message_passes_but_mutation_fails() {
+        let mut rng = rand::thread_rng();
+        let key = qudag_crypto::ml_dsa::MlDsaKeyPair::generate(&mut rng).unwrap();
+        let sig = key.sign(b"message", &mut rng).unwrap();
+        let dag = DAGConsensus::new();
+        assert!(dag.verify_signed_message(b"message", &sig, key.public_key()));
+        assert!(!dag.verify_signed_message(b"tampered", &sig, key.public_key()));
+    }
+}
+
+#[cfg(test)]
+mod v2_admission_tests {
+    use super::*;
+    fn vertex(id: &str, parents: &[&str], timestamp: u64) -> Vertex {
+        let mut v = Vertex::new(
+            VertexId::from_bytes(id.as_bytes().to_vec()),
+            vec![1],
+            parents
+                .iter()
+                .map(|p| VertexId::from_bytes(p.as_bytes().to_vec()))
+                .collect(),
+        );
+        v.timestamp = timestamp;
+        v
+    }
+    #[test]
+    fn admission_is_atomic_pending_and_parent_ordered() {
+        let mut dag = DAGConsensus::new();
+        dag.add_vertex(vertex("parent", &[], 999)).unwrap();
+        assert!(dag.add_vertex(vertex("invalid", &["absent"], 0)).is_err());
+        assert_eq!(dag.get_confidence("invalid"), None);
+        dag.add_vertex(vertex("child", &["parent"], 0)).unwrap();
+        assert_eq!(dag.get_total_order().unwrap(), vec!["parent", "child"]);
+        assert_eq!(dag.get_tips(), vec!["child"]);
+        assert_eq!(dag.get_confidence("child"), Some(ConsensusStatus::Pending));
+    }
+    #[test]
+    fn arrival_order_does_not_change_topological_order() {
+        let mut a = DAGConsensus::new();
+        let mut b = DAGConsensus::new();
+        for id in ["a", "b"] {
+            a.add_vertex(vertex(id, &[], 1)).unwrap();
+        }
+        for id in ["b", "a"] {
+            b.add_vertex(vertex(id, &[], 1)).unwrap();
+        }
+        assert_eq!(a.get_total_order().unwrap(), b.get_total_order().unwrap());
     }
 }

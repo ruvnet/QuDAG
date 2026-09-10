@@ -1,0 +1,15 @@
+{
+  "measuredAt": "2026-09-10T01:39:09.558607+00:00",
+  "endpoint": "https://x.ruv.io/mcp",
+  "protocolVersion": "2025-03-26",
+  "operation": "federation_identity",
+  "writes": false,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"pubkey\":\"31481fc42f92b75679d609fdc7d87daea83784d75f231657e70ece6dc0ca93c6\",\"relay\":\"wss://buzz-relay-186366152200.us-central1.run.app\",\"httpBase\":\"https://buzz-relay-186366152200.us-central1.run.app\"}"
+      }
+    ]
+  }
+}

@@ -1,0 +1,90 @@
+name: QuDAG v2 validation
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  targeted:
+    name: Focused v2 security and federation tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install native build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config protobuf-compiler
+      - name: Run focused validation
+        env:
+          QUDAG_V2_ARTIFACT_DIR: ${{ runner.temp }}/qudag-v2-targeted
+        run: scripts/validate-v2.sh --targeted
+      - name: Preserve validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qudag-v2-targeted
+          path: ${{ runner.temp }}/qudag-v2-targeted
+
+  full-tests:
+    name: Release gate full workspace and DAG tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install native build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config protobuf-compiler
+      - name: Full DAG library gate
+        run: cargo test --locked -p qudag-dag --lib
+      - name: Full workspace gate
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --workspace --all-targets
+
+  dependency-audit:
+    name: Release gate dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install pinned cargo audit
+        run: cargo install cargo-audit --version 0.22.2 --locked
+      - name: Fail on vulnerabilities and warnings
+        run: cargo audit --deny warnings
+      - uses: actions/setup-node@v4
+        if: ${{ !cancelled() }}
+        with:
+          node-version: '22'
+      - name: Audit member dependencies
+        if: ${{ !cancelled() }}
+        run: |
+          npm ci --ignore-scripts --prefix integrations/ruflo-nostr
+          npm audit --omit=dev --prefix integrations/ruflo-nostr
+
+  release-qualified:
+    name: Release qualification
+    needs: [targeted, full-tests, dependency-audit]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every gate
+        env:
+          TARGETED_RESULT: ${{ needs.targeted.result }}
+          FULL_RESULT: ${{ needs.full-tests.result }}
+          AUDIT_RESULT: ${{ needs.dependency-audit.result }}
+        run: |
+          test "$TARGETED_RESULT" = success
+          test "$FULL_RESULT" = success
+          test "$AUDIT_RESULT" = success

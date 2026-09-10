@@ -1,0 +1,11 @@
+{
+  "measuredAt": "2026-09-10T01:49:46.483046+00:00",
+  "baseCommit": "6c17c5974b75e5ab367b6023256d10d2b20e033a",
+  "cargoLockSha256": "a6c7e58f32353085886f028b55bebc3ddd527e401d23f851af7661e76eb17b0d",
+  "rust": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "node": "v24.19.0",
+  "ruflo": "@claude-flow/cli@3.25.6",
+  "cargoAudit": "0.22.2",
+  "cpu": "AMD EPYC 9V74 80-Core Processor",
+  "benchmarkCaveat": "Shared container, no CPU pinning, no distributed consensus or constant-time claim"
+}

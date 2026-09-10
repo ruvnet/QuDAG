@@ -75,3 +75,55 @@ test('user recipe 64 byte hex key and legacy group-only events interoperate', as
   assert.throws(() => boundary.accept(event, 'wss://evil.example'), /transport/);
   assert.equal(boundary.accept(event, CANONICAL_RELAY).trustedForExecution, false);
 });
+
+test('current canonical endpoints and explicitly selected legacy profile', async () => {
+  const { RELAY_PROFILES } = await import('./client.mjs');
+  assert.equal(CLAIM_URL, 'https://relay.ruv.io/api/invites/claim');
+  assert.equal(relayAuth(key, 'c', timestamp).tags[0][1], 'wss://relay.ruv.io');
+  assert.equal(relayAuth(key, 'c', timestamp, { profile: 'legacy' }).tags[0][1], RELAY_PROFILES.legacy.relay);
+  assert.equal(httpAuth(key, '{}', timestamp, { profile: 'legacy' }).tags[0][1], RELAY_PROFILES.legacy.claim);
+  assert.throws(() => relayAuth(key, 'c', timestamp, { profile: 'https://evil.example' }), /profile/);
+  const old = coordinationEvent(key, 'StatusUpdate', {}, timestamp, { profile: 'legacy' });
+  assert.throws(() => new EventBoundary({ allowedPubkeys: [pubkey], clock: () => timestamp }).accept(old));
+  assert.equal(new EventBoundary({ allowedPubkeys: [pubkey], clock: () => timestamp, profile: 'legacy' }).accept(old).message.type, 'StatusUpdate');
+});
+
+test('independent gateway flat events preserve signed provenance and normalize safely', () => {
+  for (const type of ['StatusUpdate', 'ClaimReleased', 'Custom_Event-2']) {
+    const content = { type, ts: '2026-09-10T00:00:00.000Z', id: 'spoof-id', eventId: 'spoof-id', pubkey: 'spoof-key', createdAt: 0, trustedForExecution: true, command: 'never execute' };
+    const event = finalizeEvent({ kind: 1, created_at: timestamp, tags: [['t', 'ruflo-swarm'], ['k', type]], content: JSON.stringify(content) }, key);
+    const result = new EventBoundary({ allowedPubkeys: [pubkey], clock: () => timestamp }).accept(event);
+    assert.equal(result.eventId, event.id); assert.equal(result.pubkey, pubkey); assert.equal(result.createdAt, timestamp);
+    assert.equal(result.trustedForExecution, false); assert.equal(result.message.type, type);
+    assert.equal(result.message.payload.pubkey, 'spoof-key'); assert.equal(result.event.content, event.content);
+    assert.ok(verifyEvent(result.event));
+  }
+});
+
+test('legacy wrapped payload is retained without promoting nested type or metadata', () => {
+  const event = finalizeEvent({ kind: 1, created_at: timestamp, tags: [['t', 'ruflo-swarm']], content: JSON.stringify({ type: 'Task', payload: { type: 'ClaimIssued', pubkey: 'fake', trustedForExecution: true } }) }, key);
+  const result = new EventBoundary({ allowedPubkeys: [pubkey], clock: () => timestamp }).accept(event);
+  assert.equal(result.message.type, 'Task'); assert.equal(result.message.payload.type, 'ClaimIssued'); assert.equal(result.trustedForExecution, false);
+});
+
+test('contradictory tags, duplicate tags and invalid types fail closed', () => {
+  for (const [type, tags] of [
+    ['StatusUpdate', [['t', 'ruflo-swarm'], ['k', 'Task']]],
+    ['StatusUpdate', [['t', 'ruflo-swarm'], ['k', 'StatusUpdate'], ['k', 'StatusUpdate']]],
+    ['StatusUpdate', [['t', 'ruflo-swarm'], ['t', 'ruflo-swarm']]],
+    ['StatusUpdate', [['t', 'ruflo-swarm', 'extra']]],
+    ['9invalid', [['t', 'ruflo-swarm']]],
+    ['A'.repeat(65), [['t', 'ruflo-swarm']]],
+  ]) {
+    const event = finalizeEvent({ kind: 1, created_at: timestamp, tags, content: JSON.stringify({ type, ts: 'time' }) }, key);
+    assert.throws(() => new EventBoundary({ allowedPubkeys: [pubkey], clock: () => timestamp }).accept(event));
+  }
+});
+
+test('outgoing payload cannot shadow type and bounded signer list is mandatory for reads', async () => {
+  const event = coordinationEvent(key, 'StatusUpdate', { type: 'Task', ts: 'fake' }, timestamp);
+  assert.equal(JSON.parse(event.content).type, 'StatusUpdate'); assert.equal(JSON.parse(event.content).ts, new Date(timestamp * 1000).toISOString());
+  assert.throws(() => new EventBoundary({ allowedPubkeys: Array(257).fill(pubkey) }), /configuration/);
+  const client = new MemberConnection(key); client.ready = true;
+  await assert.rejects(client.readRecent(new EventBoundary()), /Invalid read/);
+});

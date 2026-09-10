@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-09-10T03:04:39.570Z",
+  "node": "v24.19.0",
+  "platform": "linux",
+  "arch": "x64",
+  "backend": {
+    "name": "@ruvector/core",
+    "version": "0.1.32",
+    "binaryVersion": "0.1.30",
+    "native": true
+  },
+  "dimensions": 64,
+  "count": 1000,
+  "queries": 100,
+  "k": 10,
+  "seed": 481516,
+  "recallAtK": 1,
+  "insertMs": 88.60607700000001,
+  "insertPerSecond": 11285.9076245978,
+  "searchMs": {
+    "p50": 0.5419730000000129,
+    "p95": 0.7554509999999937,
+    "total": 57.31067899999988
+  },
+  "exactOracleMs": 37.24606300000005,
+  "scope": "Local synthetic normalized random vectors; native HNSW, no network, no semantic quality claim"
+}

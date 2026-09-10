@@ -22,7 +22,7 @@ node cli.mjs claim /private/directory/qudag.key < /private/directory/invite.txt
 # Authenticates to the live relay, then closes. Does not publish.
 node cli.mjs connect /private/directory/qudag.key
 
-# Explicit publication. JSON payload comes from stdin; type is an allowlisted value.
+# Explicit publication. JSON payload comes from stdin; type follows the federation message type syntax.
 printf '%s' '{"name":"my-node"}' | node cli.mjs publish /private/directory/qudag.key PeerHello
 
 # Read only signed events from operator-approved public keys.
@@ -44,24 +44,43 @@ or auth headers. Public event payloads are not confidential.
 ## Protocol bindings
 
 Invite claim is exactly `POST
-https://buzz-relay-186366152200.us-central1.run.app/api/invites/claim` with JSON
+https://relay.ruv.io/api/invites/claim` with JSON
 `{"code":"..."}` and a NIP-98 `Nostr` Authorization header. The signed kind 27235
 event binds the exact URL, uppercase POST, timestamp and SHA256 of the exact
 serialized body. Redirects are rejected and response bytes and time are bounded.
 
 WebSocket transport connects to `wss://x.ruv.io`. NIP-42 kind 22242 signatures
 bind the server challenge and **canonical relay tag**
-`wss://buzz-relay-186366152200.us-central1.run.app`, as required by the supplied
-federation protocol. Authentication success requires a matching positive OK.
+`wss://relay.ruv.io`, as reported by the live federation identity. Authentication success requires a matching positive OK.
 The alias must never replace the canonical relay in the signed auth event.
 
-Published kind 1 events carry `t=ruflo-swarm` and a canonical `relay` domain tag.
-Content is `{"type":"PeerHello|Status|Task|Result|ClaimIssued","payload":{...}}`.
-The canonical relay tag is optional on incoming kind 1 events; when present it
-must match. Group-only events from existing peers are accepted if all other
-checks pass. Transport origin is validated separately, rather than inferred from
-an unsigned socket alias or a data tag. Live peer schema interoperability remains
-unverified.
+Published kind 1 events carry `t=ruflo-swarm`, `k=<type>` and a canonical
+`relay` domain tag. Content follows the gateway flat schema:
+`{"type":"StatusUpdate","ts":"2026-09-10T00:00:00.000Z","status":"ready"}`.
+Types use `/^[A-Za-z][A-Za-z0-9_-]{0,63}$/`, including `ClaimReleased` and
+future extensions. `TYPES` remains a historical example list, not an allowlist.
+Outgoing payloads cannot override the supplied type or timestamp.
+
+The canonical relay tag is optional on incoming events; when present it must
+match. The `k` tag is optional for older events; when present it must match the
+content type. Duplicate group, type or relay tags are rejected. Group tags must
+be exactly `["t","ruflo-swarm"]`.
+
+`EventBoundary.accept(event)` returns
+`{event, eventId, pubkey, createdAt, message: {type, payload}, trustedForExecution:false}`.
+The signed event is preserved as a verified JSON clone. Flat content becomes
+`message.payload` after removing its top level `type`; all other fields,
+including `ts`, remain data. Only exact legacy `{type,payload}` objects are
+unwrapped. A flat object with additional fields and a `payload` field stays flat.
+Payload fields never overwrite the verified event identity or execution flag.
+This API change preserves provenance for AgentBBS projections.
+
+The default profile is `current`. Operators may explicitly set
+`RUFLO_RELAY_PROFILE=legacy` or API `{profile:'legacy'}` to select the old
+Cloud Run claim URL and canonical relay. Legacy connections use that old relay
+directly; current connections use the `x.ruv.io` WebSocket alias. Discovery never
+changes trusted destinations. Unknown profiles fail closed. Connect and boundary
+profiles must agree. No automatic migration or domain fallback occurs.
 
 ## Trust and bounds
 
@@ -72,7 +91,7 @@ Incoming events must also pass the explicit local public-key allowlist. Relay
 membership and gateway claims are not automatically imported into that list.
 
 The boundary checks event signatures locally, exact group tags and any optional domain tag, supported
-message types, 16 KiB content, 32 KiB events, a 300 second age window and 30 second
+message type syntax, 16 KiB content, 32 KiB events, a 300 second age window and 30 second
 future skew. Its replay map has a 4096 entry cap and fails closed when full.
 Expired entries can be reclaimed only after their event acceptance window closes.
 Replay state lives only in an EventBoundary instance. Recreating the boundary,
@@ -82,17 +101,21 @@ effects across reconnects or restarts. No downstream execution exists
 in this client. Task and ClaimIssued payloads remain untrusted observations.
 
 WebSocket frames are bounded at 64 KiB, connections and operations at 10 seconds,
-reads at 100 events and concurrent publications at four. Read events pass the
+reads at 100 events and concurrent publications at four. Reads require 1 to 256
+explicitly allowed signer keys and include those keys in the Nostr authors
+filter; mismatched responses still fail local verification. Read events pass the
 same boundary before returning. Unexpected or tampered events fail the read and
 close the connection. Repeated auth challenges close rather than silently sign
 additional challenges. There is no automatic reconnect or publication retry.
 
 ## Verification and primary sources
 
-Offline tests exercise exact HTTP signature bindings, canonical NIP-42 tags,
+Twelve offline tests exercise exact HTTP signature bindings, canonical NIP-42 tags,
 private key lifecycle, signature tampering, unauthorized signers, domain/time
 rejection, replay capacity, and local WebSocket authentication, publish ACK,
 verified reads and denied membership. None establish live enrollment success.
+
+[Pinned federation gateway schema](https://github.com/ruvnet/ruflo/blob/dbf450a92787c3c3e19e462eb8e3e8e1975281da/plugins/ruflo-x-gateway/src/nostr-federation.mjs)
 
 [NIP-01 event/signature format](https://github.com/nostr-protocol/nips/blob/master/01.md)
 

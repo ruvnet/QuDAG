@@ -5,6 +5,7 @@
 * Real RustCrypto ML-KEM-768 with independent interoperability tests and secret zeroization.
 * Atomic local DAG admission, deterministic parent ordering, backpressure, and truthful pending status.
 * Fail-closed credential validation, unavailable mock vault operations, and disabled unauthenticated network MCP serving.
+* [AgentBBS and RuFlo collaboration hub](integrations/ruv-stack/README.md) with durable receipts and native RuVector retrieval.
 * [RuFlo MCP observation bridge](integrations/ruflo-x/README.md) for live tools and `ruv://` resources.
 * [Member federation client](integrations/ruflo-nostr/README.md) for the invite and Nostr authentication protocol. Live membership requires a private invite.
 * [Research](docs/v2/research.md), [ADRs](docs/v2/adrs/ADR-200-staged-v2.md), and [validation and remaining gates](docs/v2/VALIDATION.md).

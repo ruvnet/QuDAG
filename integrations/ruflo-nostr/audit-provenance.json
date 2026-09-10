@@ -1,6 +1,6 @@
 {
-  "measuredAt": "2026-09-10T01:52:43.308136+00:00",
-  "command": "npm audit --omit=dev --json",
+  "measuredAt": "2026-09-10T03:04:20.758646+00:00",
+  "command": "npm audit --omit=dev --audit-level=low --json",
   "exitCode": 0,
   "lockfileSha256": "0e3a24ed8b6ff0f2f8548567fd7a4a623586935e24cf917d5568d6930e054026",
   "result": "audit-results.json",

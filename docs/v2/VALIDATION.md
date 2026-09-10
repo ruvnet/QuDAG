@@ -74,3 +74,13 @@ The dependency refresh removes five vulnerability entries and four unsoundness w
 Rollback: remove MCP registration and stop member processes to disable federation integration. Do not restore placeholder cryptography or accept old placeholder keys; rotate invalid legacy keys. No live federation writes need reversal.
 
 Acceptance: `scripts/validate-v2.sh --release` must pass, and a permitted member must complete invite claim, canonical relay authentication, signed publication acknowledgment and independently verified receipt before this work is described as complete end to end v2.
+
+## AgentBBS and federation extension, 2026-09-10
+
+Added standalone AgentBBS MCP adapter, current relay.ruv.io federation compatibility, durable SQLite receipt hub and native RuVector retrieval. The integrated hub exposes a local MCP workflow to RuFlo. It preserves source provenance and drafts; it does not execute remote tasks or write into the Rust DAG.
+
+Current Node validation: 10 gateway tests, 12 member tests, 10 AgentBBS subprocess tests, 4 native RuVector tests and 7 hub workflow tests. Actual upstream AgentBBS Rust MCP server passes 5 additional read checks using the reproducible locked harness. The 124 previously reported Rust checks were not rerun for this Node only extension. Existing full workspace and Rust dependency release blockers remain unresolved.
+
+Public federation identity, sync and claim reads were inspected. Current gateway identity identifies relay.ruv.io. No live member enrollment, authenticated relay publication or public board post was performed. Fixture publication tests do not substitute for an authorized live E2E check.
+
+Pinned RuFlo 3.25.6 advisory routing ran successfully for this extension. The current registry reports CLI 3.40.0; source may describe unreleased versions and is not substituted for the installed coordination version. Native RuVector and AgentBBS source pins, build commands, benchmark methodology and results are in their integration directories. CI now installs and tests the additional integrations on Node 24.

@@ -1,0 +1,16 @@
+import {mkdtempSync,mkdirSync,copyFileSync,writeFileSync,realpathSync} from 'node:fs';
+import {join,isAbsolute} from 'node:path';
+import {tmpdir} from 'node:os';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+const upstream=process.argv[2];
+if(!upstream || !isAbsolute(upstream)) throw new Error('Supply absolute path to trusted AgentBBS checkout');
+const root=realpathSync(upstream);
+const build=mkdtempSync(join(tmpdir(),'qudag-agentbbs-'));
+mkdirSync(join(build,'src'));
+copyFileSync(fileURLToPath(new URL('./upstream-harness.rs',import.meta.url)),join(build,'src/main.rs'));
+copyFileSync(fileURLToPath(new URL('./upstream-harness.lock',import.meta.url)),join(build,'Cargo.lock'));
+writeFileSync(join(build,'Cargo.toml'),`[package]\nname="qudag-agentbbs-harness"\nversion="0.1.0"\nedition="2021"\n[dependencies]\nagentbbs-core={path=${JSON.stringify(join(root,'crates/agentbbs-core'))}}\nagentbbs-mcp={path=${JSON.stringify(join(root,'crates/agentbbs-mcp'))}}\ntokio={version="1.49.0",features=["full"]}\n`);
+const built=spawnSync('cargo',['build','--locked','--manifest-path',join(build,'Cargo.toml')],{stdio:'inherit',shell:false,timeout:300000});
+if(built.error || built.status!==0) throw new Error('Upstream harness build failed');
+console.log(join(build,'target/debug/qudag-agentbbs-harness'));

@@ -23,7 +23,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
       - name: Install native build prerequisites
         run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config protobuf-compiler
       - name: Run focused validation
@@ -66,12 +66,14 @@ jobs:
       - uses: actions/setup-node@v4
         if: ${{ !cancelled() }}
         with:
-          node-version: '22'
+          node-version: '24'
       - name: Audit member dependencies
         if: ${{ !cancelled() }}
         run: |
           npm ci --ignore-scripts --prefix integrations/ruflo-nostr
           npm audit --omit=dev --prefix integrations/ruflo-nostr
+          npm ci --ignore-scripts --prefix integrations/ruvector-index
+          npm audit --omit=dev --prefix integrations/ruvector-index
 
   release-qualified:
     name: Release qualification

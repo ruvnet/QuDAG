@@ -33,7 +33,7 @@ artifact_dir="$(cd "$artifact_dir" && pwd)"
 printf 'Validation mode: %s\nArtifacts: %s\n' "$mode" "$artifact_dir"
 command -v cargo >/dev/null
 command -v node >/dev/null
-node -e 'if (Number(process.versions.node.split(".")[0]) < 22) { console.error("Node >=22 required"); process.exit(1); }'
+node -e 'if (Number(process.versions.node.split(".")[0]) < 24) { console.error("Node >=24 required"); process.exit(1); }'
 run_logged() {
   local label="$1"
   shift
@@ -54,8 +54,14 @@ fi
 run_logged federation-tests node --test integrations/ruflo-x/test.mjs
 run_logged member-install npm ci --ignore-scripts --prefix integrations/ruflo-nostr
 run_logged member-tests npm test --prefix integrations/ruflo-nostr
+run_logged agentbbs-tests npm test --prefix integrations/agentbbs
+run_logged ruvector-install npm ci --ignore-scripts --prefix integrations/ruvector-index
+run_logged ruvector-tests npm test --prefix integrations/ruvector-index
+run_logged stack-tests npm test --prefix integrations/ruv-stack
+node integrations/ruvector-index/benchmark.mjs > "$artifact_dir/ruvector-benchmark.json"
 if [[ "$mode" == release ]]; then
   run_logged member-audit npm audit --omit=dev --prefix integrations/ruflo-nostr
+  run_logged ruvector-audit npm audit --omit=dev --prefix integrations/ruvector-index
 fi
 node integrations/ruflo-x/benchmark.mjs > "$artifact_dir/federation-benchmark.json"
 cargo run --locked -p qudag-crypto --release --example ml_kem_v2_bench > "$artifact_dir/crypto-benchmark.json"

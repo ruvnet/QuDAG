@@ -43,9 +43,10 @@ export async function execute(
     
     child.on('error', reject);
     
-    child.on('exit', (code) => {
+    // Wait for captured streams to close as well as for the process to exit.
+    child.on('close', (code) => {
       resolve({
-        code: code || 0,
+        code: code ?? 1,
         stdout: stdout.join(''),
         stderr: stderr.join('')
       });

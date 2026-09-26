@@ -37,8 +37,10 @@ async function main() {
     });
     
     // Forward the exit code
-    child.on('exit', (code) => {
-      process.exit(code || 0);
+    child.on('close', (code) => {
+      // Node reports null after signal termination; absence of an exit code
+      // must never turn an interrupted native command into a successful CLI.
+      process.exit(code ?? 1);
     });
     
     // Handle errors

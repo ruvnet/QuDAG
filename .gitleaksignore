@@ -1,0 +1,3 @@
+# Reviewed gitleaks false positives (fingerprint per line).
+# Mock placeholder key strings returned by the stub crypto MCP tool.
+9bcb855935e1ed31fb6730275460843b909c0eef:qudag-mcp/src/tools/crypto.rs:generic-api-key:36

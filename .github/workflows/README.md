@@ -69,17 +69,10 @@ Comprehensive security analysis workflow.
 
 **Schedule:** Runs weekly and on dependency changes
 
-### 5. Performance Benchmarks (`benchmarks.yml`)
-Performance tracking and regression detection.
-
-**Features:**
-- ⚡ Crypto operation benchmarks
-- 🔗 DAG consensus performance
-- 🌐 Network throughput tests
-- 📦 WASM performance tracking
-- 💾 Memory usage profiling
-- 📊 Comparative analysis on PRs
-- 📈 Historical performance tracking
+### 5. Performance Benchmarks (removed)
+The daily `benchmarks.yml` criterion workflow was removed: its benches targeted the v1
+APIs and no longer compile (#17). The maintained fixture benchmarks (ML-KEM v2, DAG
+admission, federation, ruvector index) run in `v2.yml` via `scripts/validate-v2.sh`.
 
 ## Docker Configurations
 

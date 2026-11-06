@@ -74,10 +74,9 @@ impl rUv {
             return Err("Percentage must be between 0.0 and 1.0");
         }
 
+        // percentage is in [0, 1], so the product never exceeds self.0, and an
+        // f64-to-u64 `as` cast saturates rather than wrapping.
         let result = (self.0 as f64 * percentage).round() as u64;
-        if result > u64::MAX {
-            return Err("rUv multiplication overflow");
-        }
 
         Ok(Self(result))
     }

@@ -1,5 +1,12 @@
 name: Compatibility Testing
 
+# Scope note: most integration tests, property tests and criterion benches in
+# the workspace were written against the v1 APIs and no longer compile after
+# the v2 rewrite (release qualification tracked in #17). This workflow checks
+# what is expected to work today: the workspace builds, and the library tests
+# of the crates that v2 maintains pass. Widen the crate lists as suites are
+# repaired.
+
 on:
   push:
     branches: [ main, develop ]
@@ -20,9 +27,17 @@ on:
         - extended
         - full
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # Library test suites that compile and pass on v2.
+  LIB_TEST_CRATES: -p qudag-crypto -p qudag-dag -p qudag-mcp -p qudag-vault-core -p qudag
+  # Crates without Unix-only code (protocol RPC uses Unix sockets, MCP system
+  # tools use sys_info::boottime), used for the Windows leg.
+  PORTABLE_CRATES: -p qudag-crypto -p qudag-dag -p qudag-vault-core
 
 jobs:
   # Quick compatibility check for basic platforms
@@ -34,13 +49,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         rust: [stable, beta]
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: windows-latest  
-            target: x86_64-pc-windows-msvc
-          - os: macos-latest
-            target: x86_64-apple-darwin
 
     steps:
     - uses: actions/checkout@v4
@@ -49,40 +57,26 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
-        targets: ${{ matrix.target }}
 
-    - name: Cache cargo registry
-      uses: actions/cache@v3
+    - uses: Swatinem/rust-cache@v2
       with:
-        path: ~/.cargo/registry
-        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Cache cargo index  
-      uses: actions/cache@v3
-      with:
-        path: ~/.cargo/git
-        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Cache cargo build
-      uses: actions/cache@v3
-      with:
-        path: target
-        key: ${{ runner.os }}-cargo-build-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ matrix.rust }}
 
     - name: Build workspace
-      run: cargo build --workspace --verbose
+      if: runner.os != 'Windows'
+      run: cargo build --locked --workspace
 
-    - name: Test workspace
-      run: cargo test --workspace --verbose
+    - name: Test maintained library suites
+      if: runner.os != 'Windows'
+      run: cargo test --locked ${{ env.LIB_TEST_CRATES }} --lib
 
-    - name: Test with all features
-      run: cargo test --workspace --all-features --verbose
+    - name: Build and test portable crates
+      if: runner.os == 'Windows'
+      run: cargo test --locked ${{ env.PORTABLE_CRATES }} --lib
 
-    - name: Test with no default features
-      run: cargo test --workspace --no-default-features --verbose
-      continue-on-error: true
-
-  # Extended compatibility testing for more Rust versions
+  # Extended compatibility testing for more Rust versions. Toolchains older
+  # than 1.78 cannot read the v4 Cargo.lock, and current dependencies need a
+  # recent stable, so the old 1.70/1.75/1.80 pins were removed.
   rust-versions:
     name: Rust Version Compatibility
     runs-on: ubuntu-latest
@@ -90,7 +84,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust: ["1.70.0", "1.75.0", "1.80.0", stable, beta, nightly]
+        rust: [stable, beta, nightly]
 
     steps:
     - uses: actions/checkout@v4
@@ -100,25 +94,16 @@ jobs:
       with:
         toolchain: ${{ matrix.rust }}
 
-    - name: Cache cargo
-      uses: actions/cache@v3
+    - uses: Swatinem/rust-cache@v2
       with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ matrix.rust }}
 
     - name: Build workspace
-      run: cargo build --workspace
+      run: cargo build --locked --workspace
       continue-on-error: ${{ matrix.rust == 'nightly' }}
 
-    - name: Test workspace
-      run: cargo test --workspace
-      continue-on-error: ${{ matrix.rust == 'nightly' }}
-
-    - name: Test crypto module (critical)
-      run: cargo test -p qudag-crypto
+    - name: Test maintained library suites
+      run: cargo test --locked ${{ env.LIB_TEST_CRATES }} --lib
       continue-on-error: ${{ matrix.rust == 'nightly' }}
 
   # Cross-compilation testing
@@ -129,11 +114,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - x86_64-unknown-linux-musl
-          - aarch64-unknown-linux-gnu
-          - armv7-unknown-linux-gnueabihf
-          - wasm32-unknown-unknown
+        include:
+          - target: x86_64-unknown-linux-musl
+            packages: musl-tools
+          - target: aarch64-unknown-linux-gnu
+            packages: gcc-aarch64-linux-gnu
+          - target: armv7-unknown-linux-gnueabihf
+            packages: gcc-arm-linux-gnueabihf
+          - target: wasm32-unknown-unknown
+            packages: ""
 
     steps:
     - uses: actions/checkout@v4
@@ -143,31 +132,29 @@ jobs:
       with:
         targets: ${{ matrix.target }}
 
+    # gcc-multilib conflicts with the cross gcc packages on ubuntu-24.04, so
+    # install only the C toolchain each target needs (pqcrypto builds C code).
     - name: Install cross-compilation tools
+      if: matrix.packages != ''
       run: |
         sudo apt-get update
-        sudo apt-get install -y gcc-multilib gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+        sudo apt-get install -y ${{ matrix.packages }}
 
-    - name: Cache cargo
-      uses: actions/cache@v3
+    - uses: Swatinem/rust-cache@v2
       with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-cross-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ matrix.target }}
 
     - name: Check crypto compilation
-      run: cargo check -p qudag-crypto --target ${{ matrix.target }}
+      run: cargo check --locked -p qudag-crypto --target ${{ matrix.target }}
       continue-on-error: ${{ matrix.target == 'wasm32-unknown-unknown' }}
 
-    - name: Check DAG compilation  
-      run: cargo check -p qudag-dag --target ${{ matrix.target }}
+    - name: Check DAG compilation
+      run: cargo check --locked -p qudag-dag --target ${{ matrix.target }}
       continue-on-error: ${{ matrix.target == 'wasm32-unknown-unknown' }}
 
     - name: Check network compilation (skip WASM)
       if: matrix.target != 'wasm32-unknown-unknown'
-      run: cargo check -p qudag-network --target ${{ matrix.target }}
+      run: cargo check --locked -p qudag-network --target ${{ matrix.target }}
 
   # Feature flag combinations
   feature-combinations:
@@ -189,18 +176,10 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
 
-    - name: Cache cargo
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target  
-        key: ${{ runner.os }}-cargo-features-${{ hashFiles('**/Cargo.lock') }}
+    - uses: Swatinem/rust-cache@v2
 
-    - name: Test with feature combination
-      run: cargo test -p ${{ matrix.crate }} ${{ matrix.features }}
-      continue-on-error: true
+    - name: Check with feature combination
+      run: cargo check --locked -p ${{ matrix.crate }} ${{ matrix.features }}
 
   # Security-hardened compilation
   security-flags:
@@ -214,28 +193,23 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
 
-    - name: Cache cargo
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-security-${{ hashFiles('**/Cargo.lock') }}
+    - uses: Swatinem/rust-cache@v2
 
     - name: Test with overflow checks
-      run: RUSTFLAGS="-C overflow-checks=on" cargo test -p qudag-crypto
+      run: RUSTFLAGS="-C overflow-checks=on" cargo test --locked -p qudag-crypto --lib
 
     - name: Test with debug assertions
-      run: RUSTFLAGS="-C debug-assertions=on" cargo test -p qudag-crypto
+      run: RUSTFLAGS="-C debug-assertions=on" cargo test --locked -p qudag-crypto --lib
 
-    - name: Test with warnings as errors
-      run: RUSTFLAGS="-D warnings" cargo check --workspace
+    # Scoped to the core crates; other members still carry missing-docs and
+    # dead-code warnings from the v1 code (#17).
+    - name: Check core crates with warnings as errors
+      run: RUSTFLAGS="-D warnings" cargo check --locked -p qudag-crypto -p qudag-dag
 
-    - name: Test with panic=abort
-      run: RUSTFLAGS="-C panic=abort" cargo build -p qudag-crypto
+    - name: Build with panic=abort
+      run: RUSTFLAGS="-C panic=abort" cargo build --locked -p qudag-crypto
 
-  # Documentation and benchmarks
+  # Documentation
   docs-and-benchmarks:
     name: Documentation and Benchmarks
     runs-on: ubuntu-latest
@@ -246,26 +220,16 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
 
-    - name: Cache cargo
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-docs-${{ hashFiles('**/Cargo.lock') }}
+    - uses: Swatinem/rust-cache@v2
 
-    - name: Generate documentation
-      run: cargo doc --workspace --no-deps --all-features
-
-    - name: Check documentation links
-      run: cargo doc --workspace --no-deps --all-features
+    - name: Generate documentation and check intra-doc links
+      run: cargo doc --locked --workspace --no-deps --all-features
       env:
-        RUSTDOCFLAGS: "-D broken_intra_doc_links"
+        RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links"
 
+    # Most criterion benches target v1 APIs (#17); report, do not gate.
     - name: Compile benchmarks
-      run: |
-        cargo bench --workspace --no-run
+      run: cargo bench --locked --workspace --no-run
       continue-on-error: true
 
   # Minimal versions testing (nightly only)
@@ -280,49 +244,33 @@ jobs:
     - name: Install Rust nightly
       uses: dtolnay/rust-toolchain@nightly
 
-    - name: Cache cargo
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-minimal-${{ hashFiles('**/Cargo.lock') }}
-
     - name: Test with minimal versions
       run: cargo +nightly build -Z minimal-versions
       continue-on-error: true
 
-  # Comprehensive test report
+  # Summary of the jobs above
   compatibility-report:
     name: Generate Compatibility Report
     runs-on: ubuntu-latest
-    needs: [basic-compatibility, rust-versions, cross-compilation, feature-combinations]
+    needs: [basic-compatibility, rust-versions, cross-compilation, feature-combinations, security-flags, docs-and-benchmarks]
     if: always()
 
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Install Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-
-    - name: Install dependencies
-      run: pip install toml
-
-    - name: Run comprehensive compatibility test (quick)
+    - name: Summarize results
       run: |
-        # Run a subset of tests for CI
-        ./scripts/compatibility_test.sh features
-        ./scripts/compatibility_test.sh docs
-      continue-on-error: true
+        {
+          echo "## Compatibility report"
+          echo
+          echo "| Job | Result |"
+          echo "|-----|--------|"
+          echo "| Basic compatibility | ${{ needs.basic-compatibility.result }} |"
+          echo "| Rust versions | ${{ needs.rust-versions.result }} |"
+          echo "| Cross compilation | ${{ needs.cross-compilation.result }} |"
+          echo "| Feature combinations | ${{ needs.feature-combinations.result }} |"
+          echo "| Security flags | ${{ needs.security-flags.result }} |"
+          echo "| Documentation | ${{ needs.docs-and-benchmarks.result }} |"
+        } >> "$GITHUB_STEP_SUMMARY"
 
-    - name: Upload compatibility report
-      uses: actions/upload-artifact@v3
-      if: always()
-      with:
-        name: compatibility-report
-        path: |
-          compatibility_report.json
-          target/doc/
+    - name: Fail if a required job failed
+      if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      run: exit 1

@@ -189,45 +189,8 @@ impl PerformanceTracker {
 
         #[cfg(target_os = "macos")]
         {
-            // Use task_info on macOS
-            use std::mem;
-            use std::ptr;
-
-            extern "C" {
-                fn task_info(
-                    task: u32,
-                    flavor: u32,
-                    task_info: *mut u8,
-                    task_info_count: *mut u32,
-                ) -> i32;
-                fn mach_task_self() -> u32;
-            }
-
-            const MACH_TASK_BASIC_INFO: u32 = 20;
-
-            #[repr(C)]
-            struct TaskBasicInfo {
-                suspend_count: u32,
-                virtual_size: u64,
-                resident_size: u64,
-                user_time: [u32; 2],
-                system_time: [u32; 2],
-                policy: u32,
-            }
-
-            unsafe {
-                let mut info: TaskBasicInfo = mem::zeroed();
-                let mut count = (mem::size_of::<TaskBasicInfo>() / mem::size_of::<u32>()) as u32;
-
-                if task_info(
-                    mach_task_self(),
-                    MACH_TASK_BASIC_INFO,
-                    &mut info as *mut _ as *mut u8,
-                    &mut count,
-                ) == 0
-                {
-                    return info.resident_size as usize;
-                }
+            if let Some(bytes) = macos_resident_size() {
+                return bytes;
             }
         }
 
@@ -510,5 +473,53 @@ mod tests {
         let results = AsyncOptimizer::batch_execute(tasks).await;
         assert_eq!(results.len(), 3);
         assert!(results.iter().all(|r| r.is_ok()));
+    }
+}
+
+/// Resident set size of the current task via `task_info(MACH_TASK_BASIC_INFO)`.
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+fn macos_resident_size() -> Option<usize> {
+    use std::mem;
+
+    extern "C" {
+        fn task_info(
+            task: u32,
+            flavor: u32,
+            task_info: *mut i32,
+            task_info_count: *mut u32,
+        ) -> i32;
+        fn mach_task_self() -> u32;
+    }
+
+    const MACH_TASK_BASIC_INFO: u32 = 20;
+    const KERN_SUCCESS: i32 = 0;
+
+    /// `struct mach_task_basic_info` from <mach/task_info.h>.
+    #[repr(C)]
+    struct MachTaskBasicInfo {
+        virtual_size: u64,
+        resident_size: u64,
+        resident_size_max: u64,
+        user_time: [i32; 2],
+        system_time: [i32; 2],
+        policy: i32,
+        suspend_count: i32,
+    }
+
+    let mut count = (mem::size_of::<MachTaskBasicInfo>() / mem::size_of::<i32>()) as u32;
+    // SAFETY: `info` is a plain-old-data struct with the exact layout of
+    // mach_task_basic_info, zero is a valid bit pattern for it, and `count`
+    // tells the kernel the buffer size in natural_t units, so task_info never
+    // writes past it.
+    unsafe {
+        let mut info: MachTaskBasicInfo = mem::zeroed();
+        let kr = task_info(
+            mach_task_self(),
+            MACH_TASK_BASIC_INFO,
+            &mut info as *mut MachTaskBasicInfo as *mut i32,
+            &mut count,
+        );
+        (kr == KERN_SUCCESS).then_some(info.resident_size as usize)
     }
 }

@@ -21,12 +21,17 @@ on:
         description: 'Existing tag to (re)build release binaries for (e.g. v1.2.3)'
         required: true
         type: string
+      dry_run:
+        description: 'Build and package only: checks out the dispatched ref, publishes nothing'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref_name }}
+  group: release-${{ inputs.dry_run && 'dry-' || '' }}${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -42,7 +47,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         timeout-minutes: 5
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ inputs.dry_run && github.sha || env.TAG }}
 
       - name: Tag must equal v<qudag-npm version>
         timeout-minutes: 2
@@ -91,7 +96,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         timeout-minutes: 5
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ inputs.dry_run && github.sha || env.TAG }}
 
       - name: Install Rust target
         timeout-minutes: 10
@@ -140,6 +145,7 @@ jobs:
   release:
     name: Publish GitHub release
     needs: build
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

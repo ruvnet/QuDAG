@@ -37,7 +37,7 @@ npm install qudag
 
 ## 📋 Prerequisites
 
-- Node.js >= 16.0.0
+- Node.js >= 18.0.0
 - Supported platforms:
   - Linux (x64, arm64)
   - macOS (x64, arm64)

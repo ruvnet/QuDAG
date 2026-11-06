@@ -166,16 +166,29 @@ This NPM package acts as a wrapper around the native QuDAG binary, providing:
 
 ### Binary Download Issues
 
+During `npm install`, the package downloads `qudag-v<version>-<target>.tar.gz`
+from the matching [GitHub release](https://github.com/ruvnet/QuDAG/releases),
+verifies it against the release's `.sha256` checksum, and installs the binary.
+Prebuilt binaries exist for linux-x64, linux-arm64, darwin-x64, darwin-arm64
+and win32-x64. If the download fails (404, network error, checksum mismatch),
+the install fails with a non-zero exit code and the reason.
+
 If the binary fails to download during installation:
 
 1. Check your internet connection
 2. Verify your platform is supported
 3. Check if a proxy is blocking GitHub access
-4. Try manual installation:
+
+Environment variables:
+
+| Variable | Effect |
+|---|---|
+| `QUDAG_SKIP_BINARY_DOWNLOAD=1` | Skip the download during `npm install` (offline installs, CI caches). The binary is downloaded and checksum-verified on first use instead. |
+| `QUDAG_DOWNLOAD_BASE_URL` | Fetch archives from a mirror with the same layout as `https://github.com/ruvnet/QuDAG/releases/download`. The checksum is still enforced. |
 
 ```bash
-# The binary will be downloaded on first use
-npx qudag@latest --help
+# Offline install; the binary will be downloaded on first use
+QUDAG_SKIP_BINARY_DOWNLOAD=1 npm install qudag
 ```
 
 ### Permission Issues on Linux/macOS

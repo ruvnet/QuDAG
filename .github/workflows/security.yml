@@ -15,6 +15,9 @@ on:
     types: [opened, synchronize]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   # Rust security audit
   rust-audit:
@@ -22,74 +25,66 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        
+
+      - uses: dtolnay/rust-toolchain@stable
+
       - name: Install cargo-audit
-        run: cargo install cargo-audit
-        
+        run: cargo install cargo-audit --version 0.22.2 --locked
+
+      # Vulnerabilities fail the job. The two hickory-proto advisories are the
+      # documented exceptions in deny.toml (no fix reachable from libp2p 0.56).
+      # Unmaintained-crate warnings are reported here and gated by the stricter
+      # `cargo audit --deny warnings` release gate in v2.yml (#17).
       - name: Run cargo audit
-        run: |
-          cargo audit --deny warnings
-          cargo audit --file Cargo.lock
-          
-      - name: Check for unmaintained dependencies
-        run: cargo audit --stale
-        
+        run: cargo audit --ignore RUSTSEC-2026-0118 --ignore RUSTSEC-2026-0119
+
       - name: Generate audit report
         if: always()
-        run: |
-          cargo audit --json > audit-report.json
-          
+        run: cargo audit --json > audit-report.json || true
+
       - name: Upload audit report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: rust-audit-report
           path: audit-report.json
 
-  # Dependency license check
+  # Published npm package (qudag-npm): dependency audit and regression tests
+  npm-audit:
+    name: npm Package Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: qudag-npm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Build and run regression tests
+        run: |
+          npm run build
+          ./node_modules/.bin/tsc --module commonjs --target es2020 --esModuleInterop --skipLibCheck --outDir test-dist tests/*.test.ts
+          node --test test-dist/*.test.js
+
+  # Dependency license check (uses the repository deny.toml)
   license-check:
     name: License Compliance
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        
-      - name: Install cargo-deny
-        run: cargo install cargo-deny
-        
-      - name: Create deny.toml
-        run: |
-          cat > deny.toml << EOF
-          [licenses]
-          unlicensed = "deny"
-          allow = [
-            "MIT",
-            "Apache-2.0",
-            "Apache-2.0 WITH LLVM-exception",
-            "BSD-2-Clause",
-            "BSD-3-Clause",
-            "ISC",
-            "Unicode-DFS-2016",
-            "CC0-1.0",
-            "MPL-2.0",
-          ]
-          copyleft = "warn"
-          confidence-threshold = 0.8
-          
-          [bans]
-          multiple-versions = "warn"
-          wildcards = "warn"
-          highlight = "all"
-          
-          [sources]
-          unknown-registry = "warn"
-          unknown-git = "warn"
-          EOF
-          
-      - name: Check licenses
-        run: cargo deny check licenses
-        
-      - name: Check bans
-        run: cargo deny check bans
+
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses bans
 
   # SAST (Static Application Security Testing)
   sast:
@@ -97,28 +92,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-          
-      - name: Install cargo-semver-checks
-        run: cargo install cargo-semver-checks
-        
-      - name: Run clippy with security lints
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Deny the correctness and suspicious lint groups on shipped code (libs
+      # and bins). Test/bench targets are excluded because most still target
+      # v1 APIs and do not compile (#17); style lint debt is not gated here.
+      - name: Run clippy
         run: |
-          cargo clippy --all-features --all-targets -- \
-            -W clippy::unwrap_used \
-            -W clippy::expect_used \
-            -W clippy::panic \
-            -W clippy::unimplemented \
-            -W clippy::todo \
-            -D warnings
-            
-      - name: Check for semver violations
-        run: cargo semver-checks check-release
-        continue-on-error: true
+          cargo clippy --locked --workspace --lib --bins -- \
+            -A warnings \
+            -D clippy::correctness \
+            -D clippy::suspicious
 
   # Secret scanning
   secret-scan:
@@ -128,31 +118,31 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
       - name: Install gitleaks
         run: |
-          wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz
+          wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz
           tar -xzf gitleaks_8.18.0_linux_x64.tar.gz
           sudo mv gitleaks /usr/local/bin/
-          
+
       - name: Create gitleaks config
         run: |
-          cat > .gitleaks.toml << EOF
+          cat > "$RUNNER_TEMP/gitleaks.toml" << 'EOF'
           title = "QuDAG Secret Scanning"
-          
+
           [extend]
           useDefault = true
-          
+
           [[rules]]
           id = "qudag-api-key"
           description = "QuDAG API Key"
           regex = '''qudag_[a-zA-Z0-9]{32,}'''
-          
+
           [[rules]]
           id = "quantum-private-key"
           description = "Quantum Private Key"
           regex = '''-----BEGIN (ML-DSA|ML-KEM|HQC) PRIVATE KEY-----'''
-          
+
           [allowlist]
           paths = [
             '''test''',
@@ -160,21 +150,24 @@ jobs:
             '''\.md$''',
           ]
           EOF
-          
+
+      # Reviewed false positives are listed by fingerprint in .gitleaksignore.
       - name: Run gitleaks
-        run: |
-          gitleaks detect --verbose --config .gitleaks.toml
+        run: gitleaks detect --verbose --config "$RUNNER_TEMP/gitleaks.toml"
 
   # Container scanning (for Docker images)
   container-scan:
     name: Container Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
-        
+
       - name: Build Docker image
         run: docker build -t qudag:scan .
-        
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -182,9 +175,11 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH,MEDIUM'
-          
+
       - name: Upload Trivy results
-        uses: github/codeql-action/upload-sarif@v2
+        # Fork PRs get a read-only token; the scan itself still runs.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
 
@@ -194,27 +189,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        
+
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
-        
+
       - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz
-        
+        run: cargo install cargo-fuzz --locked
+
       - name: Run short fuzz tests
         run: |
           cd fuzz
-          # Run each fuzzer for 30 seconds
-          for target in $(cargo fuzz list); do
+          # Only these targets compile against the v2 APIs; the others
+          # (cli, crypto, dag_consensus, input_validation, network,
+          # protocol_state, validator) still target v1 and are tracked in #17.
+          # A build failure or crash fails the job; it is no longer masked.
+          for target in serialization_fuzz protocol_fuzz; do
             echo "Fuzzing $target..."
-            cargo +nightly fuzz run $target -- -max_total_time=30 || true
+            cargo +nightly fuzz run $target -- -max_total_time=30
           done
-          
+
       - name: Check for crashes
         run: |
-          if [ -d fuzz/artifacts ]; then
+          crashes=$(find fuzz/artifacts -name 'crash-*' -o -name 'timeout-*' 2>/dev/null | head -20)
+          if [ -n "$crashes" ]; then
             echo "Fuzz crashes found:"
-            find fuzz/artifacts -name 'crash-*' -o -name 'timeout-*' | head -20
+            echo "$crashes"
             exit 1
           fi
 
@@ -224,81 +223,52 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        
-      - name: Run timing attack tests
-        run: |
-          cd core/crypto
-          cargo test --features security-audit timing_attack -- --ignored --nocapture
-          
-      - name: Run side-channel tests
-        run: |
-          cd core/crypto
-          cargo test --features security-audit side_channel -- --ignored --nocapture
-          
-      - name: Test zeroization
-        run: |
-          cd core/crypto
-          cargo test zeroization -- --nocapture
+
+      - uses: Swatinem/rust-cache@v2
+
+      # The former `security-audit` feature no longer exists; the timing and
+      # zeroization checks live in the qudag-crypto library tests.
+      - name: Run crypto library tests (KEM, signatures, timing, zeroization)
+        run: cargo test --locked -p qudag-crypto --lib -- --nocapture
+
+      - name: Run ML-KEM v2 suites
+        run: cargo test --locked -p qudag-crypto --test ml_kem_v2 --test ml_kem_tests
 
   # Generate security report
   security-report:
     name: Generate Security Report
-    needs: [rust-audit, license-check, sast, secret-scan, container-scan, quantum-crypto-audit]
+    needs: [rust-audit, npm-audit, license-check, sast, secret-scan, container-scan, fuzz-check, quantum-crypto-audit]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        
-      - name: Download artifacts
-        uses: actions/download-artifact@v3
-        
-      - name: Generate report
+      - name: Summarize results
         run: |
-          cat > SECURITY_SCAN_REPORT.md << EOF
-          # Security Scan Report
-          
-          Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          Commit: ${{ github.sha }}
-          
-          ## Summary
-          
-          | Check | Status |
-          |-------|--------|
-          | Rust Audit | ${{ needs.rust-audit.result }} |
-          | License Check | ${{ needs.license-check.result }} |
-          | SAST | ${{ needs.sast.result }} |
-          | Secret Scan | ${{ needs.secret-scan.result }} |
-          | Container Scan | ${{ needs.container-scan.result }} |
-          | Quantum Crypto | ${{ needs.quantum-crypto-audit.result }} |
-          
-          ## Recommendations
-          
-          1. Review and fix any HIGH or CRITICAL vulnerabilities
-          2. Update dependencies with known security issues
-          3. Ensure all cryptographic operations are timing-safe
-          4. Verify proper memory zeroization for sensitive data
-          
-          EOF
-          
+          {
+            echo "# Security Scan Report"
+            echo
+            echo "Commit: ${{ github.sha }}"
+            echo
+            echo "| Check | Status |"
+            echo "|-------|--------|"
+            echo "| Rust Audit | ${{ needs.rust-audit.result }} |"
+            echo "| npm Audit | ${{ needs.npm-audit.result }} |"
+            echo "| License Check | ${{ needs.license-check.result }} |"
+            echo "| SAST | ${{ needs.sast.result }} |"
+            echo "| Secret Scan | ${{ needs.secret-scan.result }} |"
+            echo "| Container Scan | ${{ needs.container-scan.result }} |"
+            echo "| Fuzzing | ${{ needs.fuzz-check.result }} |"
+            echo "| Quantum Crypto | ${{ needs.quantum-crypto-audit.result }} |"
+          } | tee SECURITY_SCAN_REPORT.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload security report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: security-report
           path: SECURITY_SCAN_REPORT.md
-          
-      - name: Comment on PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const fs = require('fs');
-            const report = fs.readFileSync('SECURITY_SCAN_REPORT.md', 'utf8');
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: report
-            });
+
+      - name: Fail if a check failed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

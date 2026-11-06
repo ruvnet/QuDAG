@@ -1,6 +1,7 @@
 # Multi-stage build for QuDAG node
 # Stage 1: Build environment
-FROM rust:1.75-slim AS builder
+# rust:1-slim tracks current stable (Cargo.lock v4 needs Cargo >= 1.78).
+FROM rust:1-slim-bookworm AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -23,12 +24,13 @@ COPY benchmarks/ ./benchmarks/
 COPY tools/ ./tools/
 COPY qudag-exchange/ ./qudag-exchange/
 COPY qudag-mcp/ ./qudag-mcp/
+COPY qudag-wasm/ ./qudag-wasm/
 
-# Build release binary with all features including Exchange
-RUN cargo build --release --bin qudag --features "cli full exchange"
+# Build the node CLI (the qudag binary lives in tools/cli)
+RUN cargo build --locked --release -p qudag-cli --bin qudag
 
 # Build standalone Exchange CLI
-RUN cargo build --release --bin qudag-exchange --manifest-path ./qudag-exchange/cli/Cargo.toml
+RUN cargo build --locked --release --bin qudag-exchange --manifest-path ./qudag-exchange/cli/Cargo.toml --target-dir /qudag/target
 
 # Stage 2: Runtime environment
 FROM debian:bookworm-slim

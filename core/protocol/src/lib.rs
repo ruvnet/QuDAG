@@ -37,8 +37,6 @@ pub use optimization_config::{
     AsyncCoordinationConfig, ConfigError as OptimizationConfigError, MessageChunkingConfig,
     OptimizationConfig, ValidationCacheConfig,
 };
-#[cfg(feature = "rocksdb")]
-pub use persistence::RocksDbBackend;
 pub use persistence::{
     FileStateStore, MemoryStateStore, PeerInfo as PersistencePeerInfo, PersistenceError,
     PersistentNodeRunner, Result as PersistenceResult, StartupState, StateStore, StorageStats,

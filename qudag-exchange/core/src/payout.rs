@@ -403,7 +403,7 @@ impl FeeRouter {
         Ok(())
     }
 
-    /// Private helper methods
+    // Private helper methods
 
     fn determine_split_template(&self, roles: &[ContributorRole]) -> Result<String> {
         let has_plugin = roles

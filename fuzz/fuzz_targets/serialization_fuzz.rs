@@ -59,11 +59,10 @@ fn test_bincode_serialization(data: &ComplexData) -> Result<(), Box<dyn std::err
         let mut corrupted = serialized.clone();
         corrupted[serialized.len() / 2] ^= 0xFF;
         
-        // Should fail gracefully
-        let result: Result<ComplexData, _> = bincode::deserialize(&corrupted);
-        if result.is_ok() {
-            return Err("Corrupted data deserialized successfully".into());
-        }
+        // Must not panic. bincode has no checksum, so a flipped byte inside a
+        // string or integer payload can still decode to a valid (different)
+        // value; only a panic or a crash is a finding here.
+        let _: Result<ComplexData, _> = bincode::deserialize(&corrupted);
     }
     
     Ok(())
@@ -240,7 +239,7 @@ fn create_network_packet_from_fuzz(data: &[u8]) -> NetworkPacket {
         3 => PacketType::Error(String::from_utf8_lossy(&data[..std::cmp::min(data.len(), 32)]).to_string()),
         _ => PacketType::Custom {
             code: u16::from_le_bytes([data[2 % data.len()], data[3 % data.len()]]),
-            data: data[4..std::cmp::min(data.len(), 32)].to_vec(),
+            data: data.get(4..std::cmp::min(data.len(), 32)).unwrap_or(&[]).to_vec(),
         },
     };
     
@@ -257,7 +256,7 @@ fn create_network_packet_from_fuzz(data: &[u8]) -> NetworkPacket {
         data[13 % data.len()],
     ]);
     
-    let payload = data[14..std::cmp::min(data.len(), 1024)].to_vec();
+    let payload = data.get(14..std::cmp::min(data.len(), 1024)).unwrap_or(&[]).to_vec();
     
     // Simple checksum calculation
     let checksum = payload.iter().map(|&b| b as u32).sum::<u32>();

@@ -8,8 +8,9 @@ import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { platform as getPlatform, arch as getArch } from 'os';
 
-// Binary version - should match the Rust crate version
-const BINARY_VERSION = 'v1.0.2';
+// Binary version - dynamically read from package.json to stay in sync
+import { version as PKG_VERSION } from '../package.json';
+const BINARY_VERSION = `v${PKG_VERSION}`;
 const GITHUB_REPO = 'ruvnet/QuDAG';
 
 // Platform mapping

@@ -6,7 +6,9 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream, UnixListener, UnixStream};
+use tokio::net::{TcpListener, TcpStream};
+#[cfg(unix)]
+use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
 use tokio::time::{timeout, Duration};
 use tracing::{debug, error, info, warn};
@@ -598,6 +600,14 @@ impl RpcServer {
                         }
                     }
                 }
+                #[cfg(not(unix))]
+                RpcTransport::Unix(path) => {
+                    error!(
+                        "Unix socket RPC transport ({}) is not supported on this platform",
+                        path
+                    );
+                }
+                #[cfg(unix)]
                 RpcTransport::Unix(path) => {
                     // Remove existing socket file if it exists
                     let _ = std::fs::remove_file(&path);
@@ -689,6 +699,7 @@ async fn handle_tcp_connection(
 }
 
 /// Handle Unix socket RPC connection
+#[cfg(unix)]
 async fn handle_unix_connection(
     mut stream: UnixStream,
     command_tx: mpsc::Sender<(RpcCommand, tokio::sync::oneshot::Sender<serde_json::Value>)>,

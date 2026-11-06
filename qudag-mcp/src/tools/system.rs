@@ -34,13 +34,7 @@ impl SystemTool {
             "arch": env::consts::ARCH,
             "family": env::consts::FAMILY,
             "version": sys_info::os_release().unwrap_or_else(|_| "unknown".to_string()),
-            "uptime": sys_info::boottime().map(|t| {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs();
-                now - t.tv_sec as u64
-            }).unwrap_or(0),
+            "uptime": uptime_seconds(),
             "cpuCount": sys_info::cpu_num().unwrap_or(0),
             "timestamp": chrono::Utc::now().to_rfc3339()
         });
@@ -298,4 +292,19 @@ impl McpTool for SystemTool {
             ))),
         }
     }
+}
+
+/// Seconds since boot; 0 where sys-info has no boottime() (Windows) or on error.
+fn uptime_seconds() -> u64 {
+    #[cfg(not(windows))]
+    {
+        if let Ok(t) = sys_info::boottime() {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            return now.saturating_sub(t.tv_sec as u64);
+        }
+    }
+    0
 }

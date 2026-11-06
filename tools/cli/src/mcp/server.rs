@@ -470,6 +470,8 @@ pub async fn test_mcp_server(endpoint: String) -> Result<(), CliError> {
 
 // Helper functions
 
+#[cfg(unix)]
+#[allow(dead_code)]
 async fn setup_shutdown_handler() -> tokio::signal::unix::Signal {
     use tokio::signal::unix::{signal, SignalKind};
     signal(SignalKind::interrupt()).expect("Failed to setup signal handler")

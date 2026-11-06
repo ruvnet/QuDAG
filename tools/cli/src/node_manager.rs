@@ -184,16 +184,9 @@ impl NodeManager {
             // Run in foreground
             info!("Running node in foreground mode");
 
-            // Set up signal handlers
-            let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())?;
-            let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt())?;
-
             tokio::select! {
-                _ = sigterm.recv() => {
-                    info!("Received SIGTERM, shutting down...");
-                }
-                _ = sigint.recv() => {
-                    info!("Received SIGINT, shutting down...");
+                sig = wait_for_shutdown_signal() => {
+                    info!("Received {}, shutting down...", sig?);
                 }
                 status = child.wait() => {
                     match status {
@@ -377,11 +370,8 @@ WantedBy=multi-user.target
 
             let mut child = cmd.spawn()?;
 
-            // Set up signal handler
-            let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt())?;
-
             tokio::select! {
-                _ = sigint.recv() => {
+                _ = signal::ctrl_c() => {
                     child.kill().await?;
                 }
                 _ = child.wait() => {}
@@ -445,10 +435,20 @@ WantedBy=multi-user.target
 
     /// Check if a process is alive (sync)
     fn check_process_alive_sync(pid: u32) -> bool {
-        // Use nix crate or system call
-        #[allow(unsafe_code)]
-        unsafe {
-            libc::kill(pid as i32, 0) == 0
+        #[cfg(unix)]
+        {
+            #[allow(unsafe_code)]
+            unsafe {
+                libc::kill(pid as i32, 0) == 0
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            std::process::Command::new("tasklist")
+                .args(["/FI", &format!("PID eq {}", pid), "/NH"])
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).contains(&pid.to_string()))
+                .unwrap_or(false)
         }
     }
 
@@ -651,4 +651,22 @@ mod tests {
         // Check non-existent process
         assert!(!NodeManager::check_process_alive_sync(999999));
     }
+}
+
+/// Wait for SIGTERM or SIGINT (Unix) / Ctrl-C (other platforms).
+#[cfg(unix)]
+async fn wait_for_shutdown_signal() -> std::io::Result<&'static str> {
+    let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())?;
+    let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt())?;
+    tokio::select! {
+        _ = sigterm.recv() => Ok("SIGTERM"),
+        _ = sigint.recv() => Ok("SIGINT"),
+    }
+}
+
+/// Wait for SIGTERM or SIGINT (Unix) / Ctrl-C (other platforms).
+#[cfg(not(unix))]
+async fn wait_for_shutdown_signal() -> std::io::Result<&'static str> {
+    signal::ctrl_c().await?;
+    Ok("Ctrl-C")
 }

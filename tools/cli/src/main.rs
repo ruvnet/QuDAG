@@ -25,7 +25,7 @@ pub struct NodeConfig {
 }
 
 #[derive(Parser)]
-#[command(name = "qudag")]
+#[command(name = "qudag", version)]
 #[command(about = "QuDAG Protocol CLI", long_about = None)]
 struct Cli {
     #[command(subcommand)]

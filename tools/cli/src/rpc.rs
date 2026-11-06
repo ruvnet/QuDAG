@@ -4,10 +4,14 @@ use qudag_protocol::NodeConfig;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
-use tokio::net::{TcpStream, UnixStream};
+use tokio::net::TcpStream;
+#[cfg(unix)]
+use tokio::net::UnixStream;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, timeout, Duration};
 use tracing::{debug, warn};
+#[cfg(not(unix))]
+use unix_unsupported::UnixStream;
 use uuid::Uuid;
 
 /// RPC request
@@ -148,6 +152,7 @@ impl AsyncReadWrite for TcpStream {
     }
 }
 
+#[cfg(unix)]
 #[async_trait::async_trait]
 impl AsyncReadWrite for UnixStream {
     async fn read_u32(&mut self) -> Result<u32> {
@@ -650,5 +655,47 @@ mod tests {
 
         assert!(deserialized.result.is_some());
         assert!(deserialized.error.is_none());
+    }
+}
+
+/// Unix domain sockets are unavailable on this platform: connecting fails with
+/// `Unsupported`, so no value of this type is ever constructed.
+#[cfg(not(unix))]
+mod unix_unsupported {
+    use super::{AsyncReadWrite, Result};
+
+    #[derive(Debug)]
+    pub struct UnixStream(());
+
+    fn unsupported() -> std::io::Error {
+        std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Unix domain socket RPC transport is not supported on this platform; use TCP",
+        )
+    }
+
+    impl UnixStream {
+        pub async fn connect(_path: &str) -> std::io::Result<Self> {
+            Err(unsupported())
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl AsyncReadWrite for UnixStream {
+        async fn read_u32(&mut self) -> Result<u32> {
+            Err(unsupported().into())
+        }
+        async fn read_exact(&mut self, _buf: &mut [u8]) -> Result<()> {
+            Err(unsupported().into())
+        }
+        async fn write_u32(&mut self, _val: u32) -> Result<()> {
+            Err(unsupported().into())
+        }
+        async fn write_all(&mut self, _buf: &[u8]) -> Result<()> {
+            Err(unsupported().into())
+        }
+        async fn flush(&mut self) -> Result<()> {
+            Err(unsupported().into())
+        }
     }
 }

@@ -4,7 +4,9 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
 license.workspace = true
+include = ["/src/**", "/Cargo.toml", "/README.md"]
 description = "P2P networking layer for QuDAG - LibP2P with onion routing, dark addressing, and quantum encryption"
 documentation = "https://docs.rs/qudag-network"
 readme = "README.md"
@@ -54,7 +56,7 @@ sha2 = "0.10"
 hkdf = "0.12"
 
 # Other dependencies
-qudag-crypto = { version = "0.4.0", path = "../crypto" }
+qudag-crypto = { version = "0.6.0", path = "../crypto" }
 
 # Compression for message chunking
 zstd = "0.13"

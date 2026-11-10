@@ -3420,7 +3420,7 @@ dependencies = [
 
 [[package]]
 name = "qudag-crypto"
-version = "0.4.3"
+version = "0.6.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -3449,7 +3449,7 @@ dependencies = [
 
 [[package]]
 name = "qudag-dag"
-version = "0.4.3"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3473,7 +3473,7 @@ dependencies = [
 
 [[package]]
 name = "qudag-network"
-version = "0.4.3"
+version = "0.6.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -3517,7 +3517,7 @@ dependencies = [
 
 [[package]]
 name = "qudag-protocol"
-version = "0.4.3"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3544,7 +3544,7 @@ dependencies = [
 
 [[package]]
 name = "qudag-vault-core"
-version = "0.4.3"
+version = "0.6.0"
 dependencies = [
  "aes-gcm",
  "argon2",

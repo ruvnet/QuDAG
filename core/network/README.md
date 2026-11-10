@@ -17,7 +17,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qudag-network = "0.1"
+qudag-network = "0.6"
 ```
 
 ## Examples

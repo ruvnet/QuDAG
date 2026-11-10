@@ -16,7 +16,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qudag-dag = "0.1"
+qudag-dag = "0.6"
 ```
 
 ## Examples

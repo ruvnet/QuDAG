@@ -40,8 +40,9 @@ toml = "0.8"
 hex = "0.4"
 
 [workspace.package]
-version = "0.4.3"
+version = "0.6.0"
 edition = "2021"
 authors = ["rUv <https://github.com/ruvnet>"]
 repository = "https://github.com/ruvnet/QuDAG"
+homepage = "https://ruv.io"
 license = "MIT OR Apache-2.0"

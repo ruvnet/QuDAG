@@ -23,7 +23,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qudag-vault-core = "0.1.0"
+qudag-vault-core = "0.6"
 ```
 
 Or install via cargo:

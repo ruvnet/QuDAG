@@ -4,7 +4,9 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
 license.workspace = true
+include = ["/src/**", "/Cargo.toml", "/README.md"]
 description = "DAG consensus implementation for QuDAG - QR-Avalanche algorithm with Byzantine fault tolerance"
 documentation = "https://docs.rs/qudag-dag"
 readme = "README.md"
@@ -35,7 +37,7 @@ rayon = "1.8"
 petgraph = "0.6"
 
 # Other dependencies
-qudag-crypto = { version = "0.4.0", path = "../crypto" }
+qudag-crypto = { version = "0.6.0", path = "../crypto" }
 
 [dev-dependencies]
 proptest.workspace = true

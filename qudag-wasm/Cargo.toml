@@ -1,10 +1,12 @@
 [package]
 name = "qudag-wasm"
-version = "0.1.0"
+version = "0.6.0"
 edition = "2021"
 authors = ["QuDAG WASM Developer"]
 repository = "https://github.com/ruvnet/QuDAG"
+homepage = "https://ruv.io"
 license = "MIT OR Apache-2.0"
+include = ["/src/**", "/Cargo.toml", "/README.md"]
 description = "WASM bindings for QuDAG - Quantum Ultra-Fast Distributed Acyclic Graph"
 documentation = "https://docs.rs/qudag-wasm"
 readme = "README.md"
@@ -24,7 +26,7 @@ wee_alloc = { version = "0.4", optional = true }
 # QuDAG dependencies with conditional compilation
 # Note: qudag-crypto has C dependencies that don't work with WASM
 # Using it only for non-WASM targets
-qudag-dag = { version = "0.4.0", path = "../core/dag", optional = true }
+qudag-dag = { version = "0.6.0", path = "../core/dag", optional = true }
 
 # Async and serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -77,10 +79,10 @@ web-sys = { version = "0.3", features = [
 ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-qudag = { version = "1.2.1", path = "../qudag", optional = true }
-qudag-crypto = { version = "0.4.0", path = "../core/crypto" }
-qudag-network = { version = "0.4.0", path = "../core/network", optional = true }
-qudag-protocol = { version = "0.4.0", path = "../core/protocol", optional = true }
+qudag = { version = "2.0.0", path = "../qudag", optional = true }
+qudag-crypto = { version = "0.6.0", path = "../core/crypto" }
+qudag-network = { version = "0.6.0", path = "../core/network", optional = true }
+qudag-protocol = { version = "0.6.0", path = "../core/protocol", optional = true }
 tokio = { version = "1.0", features = ["sync", "macros", "rt-multi-thread"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

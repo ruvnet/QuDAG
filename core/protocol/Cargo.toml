@@ -31,10 +31,9 @@ async-trait = "0.1"
 toml = "0.8"
 hex = "0.4"
 dashmap = "6.1"
-libp2p = "0.56"
+libp2p = "0.57"
 
 # Database dependencies
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite"] }
 rocksdb = { version = "0.22", optional = true }
 
 # Inter-crate dependencies

@@ -35,17 +35,17 @@ Add QuDAG to your Rust project:
 
 ```toml
 [dependencies]
-qudag = "1.3"
+qudag = "2.0"
 ```
 
 Or install specific components:
 
 ```toml
 [dependencies]
-qudag-crypto = "0.4"      # Quantum-resistant cryptography
-qudag-network = "0.4"     # P2P networking
-qudag-dag = "0.4"         # DAG consensus
-qudag-exchange-core = "0.3"  # Resource exchange
+qudag-crypto = "0.6"      # Quantum-resistant cryptography
+qudag-network = "0.6"     # P2P networking
+qudag-dag = "0.6"         # DAG consensus
+qudag-exchange-core = "0.6"  # Resource exchange
 ```
 
 ## 🚀 Quick Start

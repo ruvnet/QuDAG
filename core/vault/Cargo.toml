@@ -5,9 +5,10 @@ edition.workspace = true
 authors.workspace = true
 description = "Quantum-resistant password vault library with post-quantum cryptography"
 license.workspace = true
+include = ["/src/**", "/Cargo.toml", "/README.md"]
 repository.workspace = true
-homepage = "https://github.com/ruvnet/QuDAG/tree/main/core/vault"
-documentation = "https://docs.rs/qudag-vault"
+homepage.workspace = true
+documentation = "https://docs.rs/qudag-vault-core"
 readme = "README.md"
 keywords = ["password-manager", "vault", "cryptography", "post-quantum", "security"]
 categories = ["cryptography", "authentication"]
@@ -15,8 +16,8 @@ rust-version = "1.75"
 
 [dependencies]
 # QuDAG dependencies for integration
-qudag-crypto = { version = "0.4.0", path = "../crypto" }
-qudag-dag = { version = "0.4.0", path = "../dag" }
+qudag-crypto = { version = "0.6.0", path = "../crypto" }
+qudag-dag = { version = "0.6.0", path = "../dag" }
 
 # Cryptography
 aes-gcm = "0.10"

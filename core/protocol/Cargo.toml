@@ -4,7 +4,9 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 repository.workspace = true
+homepage.workspace = true
 license.workspace = true
+include = ["/src/**", "/Cargo.toml", "/README.md"]
 description = "Protocol implementation for QuDAG - Orchestrates crypto, DAG, and network components"
 documentation = "https://docs.rs/qudag-protocol"
 readme = "README.md"
@@ -37,9 +39,9 @@ libp2p = "0.57"
 rocksdb = { version = "0.22", optional = true }
 
 # Inter-crate dependencies
-qudag-crypto = { version = "0.4.0", path = "../crypto" }
-qudag-dag = { version = "0.4.0", path = "../dag" }
-qudag-network = { version = "0.4.0", path = "../network" }
+qudag-crypto = { version = "0.6.0", path = "../crypto" }
+qudag-dag = { version = "0.6.0", path = "../dag" }
+qudag-network = { version = "0.6.0", path = "../network" }
 
 [features]
 default = []

@@ -16,7 +16,7 @@ categories = ["wasm", "cryptography", "web-programming"]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-qudag-exchange-core = { version = "0.3.0", path = "../core", default-features = false }
+qudag-exchange-core = { version = "0.6.0", path = "../core", default-features = false }
 
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"

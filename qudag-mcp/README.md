@@ -37,7 +37,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qudag-mcp = "1.0.0"
+qudag-mcp = "0.6"
 ```
 
 Or install via cargo:

@@ -17,7 +17,7 @@ name = "qudag-exchange-server"
 path = "src/main.rs"
 
 [dependencies]
-qudag-exchange-core = { version = "0.3.0", path = "../core" }
+qudag-exchange-core = { version = "0.6.0", path = "../core" }
 
 # Web framework
 axum = "0.7"

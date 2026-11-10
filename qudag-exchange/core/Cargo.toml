@@ -1,21 +1,23 @@
 [package]
 name = "qudag-exchange-core"
-version = "0.3.1"
+version = "0.6.0"
 authors = ["QuDAG Exchange Team"]
 edition = "2021"
 license = "MIT"
+include = ["/src/**", "/Cargo.toml", "/README.md"]
 description = "Core QuDAG Exchange library with quantum-resistant rUv token system"
 documentation = "https://docs.rs/qudag-exchange-core"
 repository = "https://github.com/ruvnet/QuDAG"
+homepage = "https://ruv.io"
 readme = "README.md"
 keywords = ["qudag", "exchange", "quantum", "tokens", "blockchain"]
 categories = ["cryptography", "finance"]
 
 [dependencies]
 # QuDAG dependencies
-qudag-vault-core = { version = "0.4.0", path = "../../core/vault" }
-qudag-dag = { version = "0.4.0", path = "../../core/dag" }
-qudag-crypto = { version = "0.4.0", path = "../../core/crypto" }
+qudag-vault-core = { version = "0.6.0", path = "../../core/vault" }
+qudag-dag = { version = "0.6.0", path = "../../core/dag" }
+qudag-crypto = { version = "0.6.0", path = "../../core/crypto" }
 
 # Core dependencies
 tokio = { version = "1.40", features = ["full"], optional = true }

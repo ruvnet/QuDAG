@@ -33,7 +33,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qudag-exchange-core = "0.3.0"
+qudag-exchange-core = "0.6"
 ```
 
 ### Basic Usage
@@ -197,7 +197,7 @@ The library supports WebAssembly deployment with `no_std`:
 
 ```toml
 [dependencies]
-qudag-exchange-core = { version = "0.3.0", default-features = false }
+qudag-exchange-core = { version = "0.6", default-features = false }
 ```
 
 ## Examples

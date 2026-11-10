@@ -63,17 +63,23 @@ jobs:
     name: Build ${{ matrix.target }}
     needs: check
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # Linux builds run inside ubuntu:22.04 (glibc 2.35 headers, but symbol
+          # versions resolve to <= 2.34) so the binaries run on Ubuntu 22.04 and
+          # Debian 12. The glibc gate below enforces the floor.
+          - os: ubuntu-24.04
+            container: ubuntu:22.04
             target: x86_64-unknown-linux-gnu
             exe: qudag
             smoke: true
           # Native arm64 runner: aws-lc-sys (via rustls) does not build under `cross`.
           - os: ubuntu-24.04-arm
+            container: ubuntu:22.04
             target: aarch64-unknown-linux-gnu
             exe: qudag
             smoke: true
@@ -93,6 +99,15 @@ jobs:
       run:
         shell: bash
     steps:
+      - name: Bootstrap ubuntu:22.04 build container (keeps the glibc floor)
+        if: matrix.container != ''
+        timeout-minutes: 10
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git curl ca-certificates build-essential pkg-config libssl-dev cmake clang libclang-dev file
+          git config --global --add safe.directory '*'
+
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         timeout-minutes: 5
         with:
@@ -121,6 +136,24 @@ jobs:
         run: |
           ./target/${{ matrix.target }}/release/${{ matrix.exe }} --version
           ./target/${{ matrix.target }}/release/${{ matrix.exe }} --help > /dev/null
+
+      - name: glibc floor and arm64 LDAPR gate
+        if: runner.os == 'Linux'
+        timeout-minutes: 2
+        run: |
+          BIN="./target/${{ matrix.target }}/release/${{ matrix.exe }}"
+          file "$BIN"
+          MAX=$(objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sort -V | tail -1)
+          echo "max glibc symbol: $MAX"
+          if [ -z "$MAX" ]; then echo "::error::no GLIBC_ symbols found in $BIN"; exit 1; fi
+          if [ "$(printf '%s\n' "$MAX" GLIBC_2.34 | sort -V | tail -1)" != GLIBC_2.34 ]; then
+            echo "::error::$BIN needs $MAX; the floor is GLIBC_2.34 (Ubuntu 22.04 / Debian 12)"; exit 1
+          fi
+          if [ "${{ matrix.target }}" = aarch64-unknown-linux-gnu ]; then
+            N=$(objdump -d "$BIN" | grep -c ldapr || true)
+            echo "ldapr instructions: $N"
+            if [ "$N" != 0 ]; then echo "::error::$BIN contains $N LDAPR instructions (ARMv8.3+); must be 0"; exit 1; fi
+          fi
 
       - name: Package
         timeout-minutes: 5

@@ -31,12 +31,11 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit --version 0.22.2 --locked
 
-      # Vulnerabilities fail the job. The two hickory-proto advisories are the
-      # documented exceptions in deny.toml (no fix reachable from libp2p 0.56).
+      # Vulnerabilities fail the job, with no exceptions.
       # Unmaintained-crate warnings are reported here and gated by the stricter
       # `cargo audit --deny warnings` release gate in v2.yml (#17).
       - name: Run cargo audit
-        run: cargo audit --ignore RUSTSEC-2026-0118 --ignore RUSTSEC-2026-0119
+        run: cargo audit
 
       - name: Generate audit report
         if: always()

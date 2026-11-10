@@ -35,13 +35,13 @@ libc = "0.2"
 whoami = "1.5"
 tracing-subscriber = "0.3"
 pin-project = "1.1"
-libp2p = { version = "0.56", features = ["identify", "kad", "gossipsub", "ping", "relay", "dcutr", "autonat", "request-response", "dns", "tcp", "noise", "yamux", "websocket", "quic", "tls", "metrics"] }
-# Use published versions from crates.io
-qudag-crypto = "0.1.1"
-qudag-dag = "0.1.1" 
-qudag-network = "0.1.1"
-qudag-protocol = "0.1.1"
-qudag-vault-core = "0.2.0"
+libp2p = { version = "0.57", features = ["identify", "kad", "gossipsub", "ping", "relay", "dcutr", "autonat", "request-response", "dns", "tcp", "noise", "yamux", "websocket", "quic", "tls", "metrics"] }
+# Workspace crates by path (the published 0.1.x crates pin libp2p 0.53 and sqlx 0.7)
+qudag-crypto = { path = "../core/crypto" }
+qudag-dag = { path = "../core/dag" }
+qudag-network = { path = "../core/network" }
+qudag-protocol = { path = "../core/protocol" }
+qudag-vault-core = { path = "../core/vault" }
 axum = "0.7"
 tower-http = { version = "0.5", features = ["cors"] }
 

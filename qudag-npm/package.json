@@ -1,23 +1,26 @@
 {
   "name": "qudag",
-  "version": "1.2.3",
-  "description": "QuDAG - Quantum-Resistant Distributed Communication Platform",
+  "version": "1.2.4",
+  "description": "QuDAG CLI for Node.js: installs the native qudag binary (checksum-verified) for a quantum-resistant DAG network with ML-KEM, ML-DSA and .dark addresses.",
   "keywords": [
     "qudag",
-    "quantum",
-    "dag",
-    "p2p",
-    "darknet",
-    "blockchain",
-    "cryptography",
+    "quantum-resistant",
     "post-quantum",
     "ml-kem",
-    "ml-dsa"
+    "ml-dsa",
+    "dag",
+    "p2p",
+    "libp2p",
+    "cryptography",
+    "dark-addressing",
+    "cli",
+    "npx"
   ],
-  "homepage": "https://github.com/ruvnet/QuDAG",
+  "homepage": "https://ruv.io",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ruvnet/QuDAG.git"
+    "url": "git+https://github.com/ruvnet/QuDAG.git",
+    "directory": "qudag-npm"
   },
   "license": "MIT OR Apache-2.0",
   "author": "rUv <ruv@ruv.net>",
@@ -66,5 +69,8 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "bugs": {
+    "url": "https://github.com/ruvnet/QuDAG/issues"
   }
 }

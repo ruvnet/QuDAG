@@ -1183,7 +1183,7 @@ async fn run_node(node_config: NodeConfig) -> Result<(), Box<dyn std::error::Err
                 .map_err(|e| format!("Failed to bind HTTP server: {}", e))?;
             axum::serve(listener, app).await
                 .map_err(|e| format!("HTTP server error: {}", e))?;
-            Ok::<(), Box<dyn std::error::Error>>(())
+            Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
         };
         
         Some(tokio::spawn(http_server))
@@ -1334,7 +1334,7 @@ async fn health_handler(
     drop(vertices_guard);
     drop(dag_lock);
     
-    let peer_count = p2p.peer_count().await;
+    let peer_count = p2p.connected_peers().await.len();
     
     Json(HealthResponse {
         status: "healthy".to_string(),
@@ -1360,7 +1360,7 @@ async fn metrics_handler(
     drop(vertices_guard);
     drop(dag_lock);
     
-    let peer_count = p2p.peer_count().await;
+    let peer_count = p2p.connected_peers().await.len();
     let messages = *messages_processed.read().await;
     let uptime = start_time.elapsed().as_secs();
     
@@ -1398,7 +1398,7 @@ async fn status_handler(
     drop(vertices_guard);
     drop(dag_lock);
     
-    let peer_count = p2p.peer_count().await;
+    let peer_count = p2p.connected_peers().await.len();
     let peers = p2p.connected_peers().await;
     let uptime = start_time.elapsed().as_secs();
     

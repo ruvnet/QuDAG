@@ -1,6 +1,6 @@
 {
   "name": "qudag",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "QuDAG CLI for Node.js: installs the native qudag binary (checksum-verified) for a quantum-resistant DAG network with ML-KEM, ML-DSA and .dark addresses.",
   "keywords": [
     "qudag",

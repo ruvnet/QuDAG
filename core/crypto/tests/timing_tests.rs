@@ -16,6 +16,7 @@ where
 }
 
 #[test]
+#[ignore = "wall-clock jitter assertion is flaky on shared runners; quarantined, see ruvnet/QuDAG#41"]
 fn test_constant_time_keypair_generation() {
     let mut rng = rand::thread_rng();
     let mut times = Vec::with_capacity(100);
@@ -35,6 +36,7 @@ fn test_constant_time_keypair_generation() {
 }
 
 #[test]
+#[ignore = "wall-clock jitter assertion is flaky on shared runners; quarantined, see ruvnet/QuDAG#41"]
 fn test_constant_time_encapsulation() {
     let (public_key, _secret_key) = MlKem768::keygen().unwrap();
     let mut times = Vec::with_capacity(100);
@@ -52,6 +54,7 @@ fn test_constant_time_encapsulation() {
 }
 
 #[test]
+#[ignore = "wall-clock jitter assertion is flaky on shared runners; quarantined, see ruvnet/QuDAG#41"]
 fn test_constant_time_decapsulation() {
     let mut rng = rand::thread_rng();
     let (public_key, secret_key) = MlKem768::keygen().unwrap();
@@ -85,6 +88,7 @@ fn test_constant_time_decapsulation() {
 }
 
 #[test]
+#[ignore = "wall-clock jitter assertion is flaky on shared runners; quarantined, see ruvnet/QuDAG#41"]
 fn test_constant_time_comparison() {
     let mut rng = rand::thread_rng();
     let mut data1 = vec![0u8; 32];

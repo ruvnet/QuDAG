@@ -440,10 +440,15 @@ impl SecureConnection {
 ///
 /// # Example
 /// ```rust
+/// # use qudag_network::{ConnectionManager, PeerId};
+/// # async fn example() -> Result<(), qudag_network::NetworkError> {
 /// let manager = ConnectionManager::new(100); // 100 max connections
+/// let peer_id = PeerId::random();
 /// manager.connect(peer_id).await?;
-/// let status = manager.get_status(&peer_id).await;
-/// let metrics = manager.get_metrics().await;
+/// let status = manager.get_status(&peer_id);
+/// let metrics = manager.get_metrics();
+/// # Ok(())
+/// # }
 /// ```
 pub struct ConnectionManager {
     /// Maximum concurrent connections
@@ -580,8 +585,12 @@ impl ConnectionInfo {
 
     /// Check if connection is healthy
     pub fn is_healthy(&self) -> bool {
-        self.quality_score > 0.5 && self.last_activity.elapsed() < Duration::from_secs(300)
-        // 5 minutes
+        // Failed or closed connections are never healthy, whatever their score
+        !matches!(
+            self.status,
+            ConnectionStatus::Failed(_) | ConnectionStatus::Disconnected
+        ) && self.quality_score > 0.5
+            && self.last_activity.elapsed() < Duration::from_secs(300) // 5 minutes
     }
 }
 
@@ -1355,6 +1364,7 @@ impl ConnectionManager {
                 // Connection is still valid and healthy, reuse it
                 self.connections.insert(peer_id, conn_info.clone());
                 debug!("Reusing pooled healthy connection for peer {:?}", peer_id);
+                self.refresh_connection_metrics();
 
                 // Record successful circuit breaker operation
                 if let Some(mut circuit_breaker) = self.circuit_breakers.get_mut(&peer_id) {
@@ -1383,6 +1393,7 @@ impl ConnectionManager {
         // Create new connection with enhanced monitoring
         let connecting_info = ConnectionInfo::new(ConnectionStatus::Connecting);
         self.connections.insert(peer_id, connecting_info);
+        self.refresh_connection_metrics();
         debug!("Creating new connection for peer {:?}", peer_id);
 
         // Simulate connection establishment (in real implementation, this would be actual network code)
@@ -1399,6 +1410,7 @@ impl ConnectionManager {
             connected_info.update_activity(true, connection_time, 0);
 
             self.connections.insert(peer_id, connected_info.clone());
+            self.refresh_connection_metrics();
             self.quality_scores
                 .insert(peer_id, connected_info.quality_score);
 
@@ -1417,6 +1429,7 @@ impl ConnectionManager {
             let failed_info =
                 ConnectionInfo::new(ConnectionStatus::Failed("Connection timeout".into()));
             self.connections.insert(peer_id, failed_info);
+            self.refresh_connection_metrics();
 
             // Record failed circuit breaker operation
             self.circuit_breakers
@@ -1492,16 +1505,20 @@ impl ConnectionManager {
             self.connections.insert(peer_id, conn_info);
         }
 
-        // Update metrics with high-performance lock
-        let mut metrics = self.metrics.write();
-        metrics.connections = self.connections.len();
+        self.refresh_connection_metrics();
+    }
 
-        // Count active (healthy) connections
+    /// Recomputes the connection counts in the metrics snapshot. Called after
+    /// every change to the connection table so `get_metrics` stays in step
+    /// with `connection_count`.
+    fn refresh_connection_metrics(&self) {
         let active_count = self
             .connections
             .iter()
             .filter(|entry| entry.value().is_healthy())
             .count();
+        let mut metrics = self.metrics.write();
+        metrics.connections = self.connections.len();
         metrics.active_connections = active_count;
     }
 
@@ -1535,17 +1552,7 @@ impl ConnectionManager {
         // Clean expired connections from pool (non-blocking)
         self.cleanup_pool();
 
-        // Update metrics with high-performance lock
-        let mut metrics = self.metrics.write();
-        metrics.connections = self.connections.len();
-
-        // Count active (healthy) connections
-        let active_count = self
-            .connections
-            .iter()
-            .filter(|entry| entry.value().is_healthy())
-            .count();
-        metrics.active_connections = active_count;
+        self.refresh_connection_metrics();
     }
 
     /// Cleanup expired connections from the pool

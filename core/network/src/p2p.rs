@@ -30,7 +30,8 @@ pub enum NetworkBehaviourEvent {
     Gossipsub(gossipsub::Event),
     Mdns(mdns::Event),
     Ping(ping::Event),
-    Identify(identify::Event),
+    /// Boxed: `identify::Event` is several times larger than the other events
+    Identify(Box<identify::Event>),
     Relay(relay::Event),
     Dcutr(dcutr::Event),
     RequestResponse(request_response::Event<QuDagRequest, QuDagResponse>),
@@ -73,7 +74,7 @@ impl From<ping::Event> for NetworkBehaviourEvent {
 
 impl From<identify::Event> for NetworkBehaviourEvent {
     fn from(event: identify::Event) -> Self {
-        NetworkBehaviourEvent::Identify(event)
+        NetworkBehaviourEvent::Identify(Box::new(event))
     }
 }
 
@@ -693,7 +694,7 @@ impl P2PNode {
                 self.handle_ping_event(ping_event).await?;
             }
             NetworkBehaviourEvent::Identify(identify_event) => {
-                self.handle_identify_event(identify_event).await?;
+                self.handle_identify_event(*identify_event).await?;
             }
             NetworkBehaviourEvent::RequestResponse(req_res_event) => {
                 self.handle_request_response_event(req_res_event).await?;
@@ -1209,7 +1210,7 @@ fn build_transport(
 
     // Add WebSocket support if enabled
     let transport: Boxed<(LibP2PPeerId, StreamMuxerBox)> = if config.enable_websocket {
-        let ws = websocket::WsConfig::new(tcp::tokio::Transport::new(
+        let ws = websocket::Config::new(tcp::tokio::Transport::new(
             tcp::Config::default().nodelay(true),
         ));
         base_transport

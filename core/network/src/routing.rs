@@ -726,15 +726,8 @@ impl Router {
         let mut min_bandwidth = u64::MAX;
 
         for hop in hops {
-            if let Some(peer) = peers.get(hop) {
-                if let Some(bw) = peer.capabilities.bandwidth_capacity {
-                    min_bandwidth = min_bandwidth.min(bw);
-                } else {
-                    return None;
-                }
-            } else {
-                return None;
-            }
+            let bw = peers.get(hop)?.capabilities.bandwidth_capacity?;
+            min_bandwidth = min_bandwidth.min(bw);
         }
 
         if min_bandwidth == u64::MAX {

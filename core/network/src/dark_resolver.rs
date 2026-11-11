@@ -246,7 +246,7 @@ impl DarkResolver {
             format!("{}.dark", name)
         } else {
             // Use first 8 chars of address as subdomain
-            format!("{}.dark", &address[..8].to_lowercase())
+            format!("{}.dark", address[..8].to_lowercase())
         };
 
         Ok(DarkAddress { address, domain })

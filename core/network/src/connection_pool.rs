@@ -488,7 +488,7 @@ impl ConnectionPool {
 
         for entry in self.active.iter() {
             let peer_id = *entry.key();
-            for (_, conn) in entry.value().iter() {
+            for conn in entry.value().values() {
                 self.destroy_connection(peer_id, conn.clone());
             }
         }

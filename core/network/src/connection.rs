@@ -1114,8 +1114,9 @@ impl HealthCheck for PingHealthCheck {
     async fn check(&self, _peer_id: &PeerId, connection: &ConnectionInfo) -> HealthCheckResult {
         let start = Instant::now();
 
-        // Simulate ping check (in real implementation, this would send actual ping)
-        let success = connection.is_healthy() && rand::random::<f64>() > 0.1;
+        // Simulated ping: the result reflects the tracked connection health
+        // (in a real implementation this would send an actual ping)
+        let success = connection.is_healthy();
         let response_time = start.elapsed();
 
         HealthCheckResult {
@@ -1401,46 +1402,26 @@ impl ConnectionManager {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         let connection_time = start_time.elapsed();
 
-        // Simulate connection success/failure (90% success rate)
-        let success = rand::random::<f64>() > 0.1;
+        // The simulated handshake always succeeds; a real transport reports
+        // failures through update_status.
+        let mut connected_info = ConnectionInfo::new(ConnectionStatus::Connected);
+        connected_info.update_activity(true, connection_time, 0);
 
-        if success {
-            // Update to connected status on success
-            let mut connected_info = ConnectionInfo::new(ConnectionStatus::Connected);
-            connected_info.update_activity(true, connection_time, 0);
+        self.connections.insert(peer_id, connected_info.clone());
+        self.refresh_connection_metrics();
+        self.quality_scores
+            .insert(peer_id, connected_info.quality_score);
 
-            self.connections.insert(peer_id, connected_info.clone());
-            self.refresh_connection_metrics();
-            self.quality_scores
-                .insert(peer_id, connected_info.quality_score);
+        // Record successful circuit breaker operation
+        self.circuit_breakers
+            .entry(peer_id)
+            .or_default()
+            .record_result(true);
 
-            // Record successful circuit breaker operation
-            self.circuit_breakers
-                .entry(peer_id)
-                .or_default()
-                .record_result(true);
-
-            debug!(
-                "Successfully connected to peer {:?} in {:?}",
-                peer_id, connection_time
-            );
-        } else {
-            // Handle connection failure
-            let failed_info =
-                ConnectionInfo::new(ConnectionStatus::Failed("Connection timeout".into()));
-            self.connections.insert(peer_id, failed_info);
-            self.refresh_connection_metrics();
-
-            // Record failed circuit breaker operation
-            self.circuit_breakers
-                .entry(peer_id)
-                .or_default()
-                .record_result(false);
-
-            return Err(NetworkError::ConnectionError(
-                "Failed to establish connection".into(),
-            ));
-        }
+        debug!(
+            "Successfully connected to peer {:?} in {:?}",
+            peer_id, connection_time
+        );
 
         Ok(())
     }
@@ -2424,29 +2405,18 @@ impl WarmingManager {
         let mut stats = self.stats.write().await;
         stats.total_attempts += 1;
 
-        if rand::random::<f64>() > 0.1 {
-            // 90% success rate
-            self.warming_states.insert(peer_id, WarmingState::Warm);
-            stats.successful_warmings += 1;
+        // The simulated warm-up always succeeds
+        self.warming_states.insert(peer_id, WarmingState::Warm);
+        stats.successful_warmings += 1;
 
-            // Update average warming time
-            let total_time =
-                stats.avg_warming_time.as_millis() as f64 * stats.successful_warmings as f64;
-            let new_avg = (total_time + warming_time.as_millis() as f64)
-                / (stats.successful_warmings + 1) as f64;
-            stats.avg_warming_time = Duration::from_millis(new_avg as u64);
+        // Update average warming time
+        let total_time =
+            stats.avg_warming_time.as_millis() as f64 * stats.successful_warmings as f64;
+        let new_avg =
+            (total_time + warming_time.as_millis() as f64) / (stats.successful_warmings + 1) as f64;
+        stats.avg_warming_time = Duration::from_millis(new_avg as u64);
 
-            Ok(())
-        } else {
-            self.warming_states.insert(
-                peer_id,
-                WarmingState::FailedToWarm("Warming timeout".to_string()),
-            );
-            stats.failed_warmings += 1;
-            Err(NetworkError::ConnectionError(
-                "Connection warming failed".into(),
-            ))
-        }
+        Ok(())
     }
 
     /// Get warming state for a peer

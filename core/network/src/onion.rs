@@ -997,8 +997,8 @@ pub struct CircuitManager {
     circuits: HashMap<u64, Circuit>,
     /// Circuit creation rate limiter
     creation_rate: f64,
-    /// Last circuit creation time
-    last_creation: Instant,
+    /// Last circuit creation time (`None` until the first circuit is built)
+    last_creation: Option<Instant>,
     /// Maximum concurrent circuits
     max_circuits: usize,
     /// Circuit lifetime
@@ -1053,7 +1053,7 @@ impl CircuitManager {
         Self {
             circuits: HashMap::new(),
             creation_rate: 1.0, // 1 circuit per second max
-            last_creation: Instant::now(),
+            last_creation: None,
             max_circuits: 100,
             circuit_lifetime: Duration::from_secs(600), // 10 minutes
             rotation_interval: Duration::from_secs(300), // 5 minutes
@@ -1067,8 +1067,10 @@ impl CircuitManager {
         directory: &DirectoryClient,
     ) -> Result<u64, OnionError> {
         // Rate limiting
-        let elapsed = self.last_creation.elapsed().as_secs_f64();
-        if elapsed < 1.0 / self.creation_rate {
+        let rate_limited = self
+            .last_creation
+            .is_some_and(|last| last.elapsed().as_secs_f64() < 1.0 / self.creation_rate);
+        if rate_limited {
             return Err(OnionError::RouteError(
                 "Circuit creation rate limit exceeded".into(),
             ));
@@ -1099,7 +1101,7 @@ impl CircuitManager {
         };
 
         self.circuits.insert(circuit_id, circuit);
-        self.last_creation = Instant::now();
+        self.last_creation = Some(Instant::now());
 
         Ok(circuit_id)
     }
@@ -1232,8 +1234,8 @@ pub struct DirectoryClient {
     /// Directory servers
     #[allow(dead_code)]
     directory_servers: Vec<String>,
-    /// Last directory update
-    last_update: Arc<TokioMutex<Instant>>,
+    /// Last directory update (`None` until the directory is first fetched)
+    last_update: Arc<TokioMutex<Option<Instant>>>,
     /// Update interval
     update_interval: Duration,
 }
@@ -1288,7 +1290,7 @@ impl DirectoryClient {
                 "dir2.qudag.net:9030".to_string(),
                 "dir3.qudag.net:9030".to_string(),
             ],
-            last_update: Arc::new(TokioMutex::new(Instant::now())),
+            last_update: Arc::new(TokioMutex::new(None)),
             update_interval: Duration::from_secs(3600), // 1 hour
         }
     }
@@ -1375,7 +1377,7 @@ impl DirectoryClient {
     async fn update_directory_if_needed(&self) -> Result<(), OnionError> {
         let last_update = *self.last_update.lock().await;
 
-        if last_update.elapsed() < self.update_interval {
+        if last_update.is_some_and(|last| last.elapsed() < self.update_interval) {
             return Ok(());
         }
 
@@ -1383,7 +1385,7 @@ impl DirectoryClient {
         // For now, we'll simulate with some dummy nodes
         self.populate_dummy_nodes().await;
 
-        *self.last_update.lock().await = Instant::now();
+        *self.last_update.lock().await = Some(Instant::now());
         Ok(())
     }
 

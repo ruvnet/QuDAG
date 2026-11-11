@@ -162,7 +162,7 @@ fn bench_concurrent_access(c: &mut Criterion) {
     let mut group = c.benchmark_group("concurrent");
 
     let ledger = Arc::new(MockLedger::with_accounts(1_000_000));
-    let num_threads = num_cpus::get();
+    let num_threads = std::thread::available_parallelism().map_or(1, |n| n.get());
 
     group.throughput(Throughput::Elements(num_threads as u64 * 1000));
 
@@ -242,7 +242,7 @@ fn bench_cache_performance(c: &mut Criterion) {
 
         b.iter(|| {
             let mut cache_guard = cache.lock();
-            cache_guard.get(black_box(&account_id))
+            cache_guard.get(black_box(&account_id)).copied()
         });
     });
 
@@ -254,7 +254,7 @@ fn bench_cache_performance(c: &mut Criterion) {
             counter += 1;
 
             let mut cache_guard = cache.lock();
-            cache_guard.get(black_box(&account_id))
+            cache_guard.get(black_box(&account_id)).copied()
         });
     });
 

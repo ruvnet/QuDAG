@@ -29,7 +29,9 @@ pub struct LedgerState {
     pub metadata: StateMetadata,
 
     /// Transaction history (limited to recent)
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    ///
+    /// Always serialized: state is encoded with bincode, which is not
+    /// self-describing, so a skipped field cannot be decoded again.
     pub recent_transactions: Vec<TransactionRecord>,
 
     /// Checkpoint history

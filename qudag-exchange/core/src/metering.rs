@@ -170,7 +170,7 @@ impl ResourceMeter {
                 base_cost: rUv::new(1),
                 per_unit_cost: rUv::new(1), // 1 rUv per KB
                 min_fee: rUv::new(1),
-                max_units: 1024 * 1024, // 1MB max
+                max_units: 1024, // 1MB max (units are KB)
             },
         );
 

@@ -53,7 +53,9 @@ fn test_business_plan_config_builder() {
 
 #[test]
 fn test_fee_router_contributor_registration() {
-    let payout_config = PayoutConfig::default();
+    // Registration requires an enabled payout system (disabled by default).
+    let mut payout_config = PayoutConfig::default();
+    payout_config.enabled = true;
     let mut fee_router = FeeRouter::new(payout_config);
 
     // Register an agent provider
@@ -63,7 +65,7 @@ fn test_fee_router_contributor_registration() {
             agent_id: "agent_456".to_string(),
             resource_consumed: 100,
         },
-        custom_percentage: Some(0.90), // 90% instead of default
+        custom_percentage: Some(0.80), // within the default 85% cap
         registered_at: Timestamp::new(1000),
         total_earnings: rUv::new(0),
         last_payout: None,
@@ -76,7 +78,7 @@ fn test_fee_router_contributor_registration() {
     // Verify contributor is registered
     let contributor = fee_router.get_contributor("agent_456").unwrap();
     assert_eq!(contributor.vault_id.as_str(), "vault_123");
-    assert_eq!(contributor.custom_percentage, Some(0.90));
+    assert_eq!(contributor.custom_percentage, Some(0.80));
     assert_eq!(contributor.total_earnings.amount(), 0);
 }
 

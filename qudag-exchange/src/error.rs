@@ -1,7 +1,7 @@
 //! Error types for QuDAG Exchange with security-focused error handling
 
 use thiserror::Error;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::Zeroize;
 
 /// Main error type for the exchange
 #[derive(Error, Debug)]

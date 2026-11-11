@@ -189,7 +189,7 @@ impl FeeModel {
             self.params.f_min + (self.params.f_max - self.params.f_min) * alpha * beta
         };
 
-        Ok(fee_rate.max(0.0).min(1.0)) // Clamp to [0, 1]
+        Ok(fee_rate.clamp(0.0, 1.0))
     }
 
     /// Calculate actual fee amount for a transaction

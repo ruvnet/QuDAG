@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
 )]
+#[allow(non_camel_case_types)] // `rUv` is the established public token name
 pub struct rUv(pub u64);
 
 impl rUv {
@@ -64,6 +65,7 @@ impl rUv {
     }
 
     /// Add another rUv amount (returns Error on overflow)
+    #[allow(clippy::should_implement_trait)] // fallible, so it cannot be `std::ops::Add`
     pub fn add(self, other: Self) -> Result<Self, &'static str> {
         self.checked_add(other).ok_or("rUv addition overflow")
     }

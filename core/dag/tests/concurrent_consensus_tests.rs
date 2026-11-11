@@ -204,6 +204,8 @@ async fn test_concurrent_consensus_voting() {
             let mut vote_conflicts = 0;
             // The first vote this voter cast on each target
             let mut first_votes: HashMap<Hash, bool> = HashMap::new();
+            // Set once this voter equivocates; every later vote from it is rejected
+            let mut flagged = false;
 
             for i in 0..VOTES_PER_VOTER {
                 // Select random target to vote on
@@ -222,13 +224,18 @@ async fn test_concurrent_consensus_voting() {
                 let first_vote = *first_votes.entry(target_hash).or_insert(vote_value);
                 match result {
                     Ok(()) => {
-                        // Only a vote consistent with this voter's earlier vote is accepted
+                        // Only a consistent vote from an unflagged voter is accepted
+                        assert!(!flagged, "vote from a flagged Byzantine voter was accepted");
                         assert_eq!(vote_value, first_vote, "conflicting vote was accepted");
                         votes_cast += 1;
                     }
                     Err(ConsensusError::ByzantineBehavior(_)) => {
-                        // Changing a vote on the same vertex is equivocation
-                        assert_ne!(vote_value, first_vote, "consistent vote was rejected");
+                        // Changing a vote on the same vertex is equivocation; it flags the voter
+                        assert!(
+                            flagged || vote_value != first_vote,
+                            "consistent vote from an unflagged voter was rejected"
+                        );
+                        flagged = true;
                         vote_conflicts += 1;
                     }
                     Err(e) => panic!("Voter {} vote {}: unexpected error: {}", voter_id, i, e),

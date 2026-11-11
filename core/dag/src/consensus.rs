@@ -396,9 +396,25 @@ impl QRAvalanche {
         voter_id: VertexId,
         vote: bool,
     ) -> Result<(), ConsensusError> {
-        // Record the vote
-        self.voting_record
-            .record_vote(vertex_id.clone(), voter_id.clone(), vote)?;
+        // Votes from a voter already flagged as Byzantine are rejected and counted.
+        if self.voting_record.byzantine_voters.contains(&voter_id) {
+            self.metrics.record_byzantine_behavior();
+            return Err(ConsensusError::ByzantineBehavior(format!(
+                "Vote from flagged Byzantine voter {:?} rejected for vertex {:?}",
+                voter_id, vertex_id
+            )));
+        }
+
+        // Record the vote; a conflicting vote flags the voter and is counted.
+        if let Err(e) = self
+            .voting_record
+            .record_vote(vertex_id.clone(), voter_id.clone(), vote)
+        {
+            if matches!(e, ConsensusError::ByzantineBehavior(_)) {
+                self.metrics.record_byzantine_behavior();
+            }
+            return Err(e);
+        }
 
         // Update confidence based on votes
         let (positive, negative) = self.voting_record.get_vote_counts(&vertex_id);
@@ -703,22 +719,15 @@ impl QRAvalanche {
         Ok((positive_votes, negative_votes))
     }
 
-    /// Simulate a participant's vote (placeholder for actual network query)
-    fn simulate_participant_vote(&self, vertex_id: &VertexId, participant_id: &VertexId) -> bool {
-        // Simple simulation: vote based on hash of vertex and participant
-        let vertex_bytes = vertex_id.as_bytes();
-        let participant_bytes = participant_id.as_bytes();
-
-        let mut hash_value = 0u64;
-        for (i, &v_byte) in vertex_bytes.iter().enumerate() {
-            if i < participant_bytes.len() {
-                hash_value = hash_value
-                    .wrapping_add((v_byte as u64).wrapping_mul(participant_bytes[i] as u64));
-            }
-        }
-
-        // Return true if hash is even (50% probability)
-        hash_value.is_multiple_of(2)
+    /// Simulate a participant's vote (placeholder for an actual network query).
+    ///
+    /// Byzantine voters are filtered out by the caller, so every simulated
+    /// participant is honest. With no conflicting vertex tracked here, an honest
+    /// participant prefers the queried vertex and votes for it. (The previous
+    /// placeholder voted by byte parity of the two IDs, so whether consensus
+    /// could ever be reached depended on the IDs chosen.)
+    fn simulate_participant_vote(&self, vertex_id: &VertexId, _participant_id: &VertexId) -> bool {
+        self.vertices.contains_key(vertex_id)
     }
 
     /// Run a full consensus round using QR-Avalanche protocol

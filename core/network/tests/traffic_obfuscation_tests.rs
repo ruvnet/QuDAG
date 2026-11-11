@@ -2,7 +2,7 @@
 
 use qudag_network::{
     message::MessageQueue,
-    onion::{MixMessage, MixMessageType, MixNode},
+    onion::{MixConfig, MixMessage, MixMessageType, MixNode},
     traffic_obfuscation::{
         ObfuscationPattern, TrafficObfuscationConfig, TrafficObfuscator, DEFAULT_MESSAGE_SIZE,
         STANDARD_MESSAGE_SIZES,
@@ -54,8 +54,9 @@ async fn test_dummy_traffic_generation() {
     let obfuscator = TrafficObfuscator::new(config);
     obfuscator.start().await;
 
-    // Wait for dummy traffic generation
-    sleep(Duration::from_millis(500)).await;
+    // Wait for dummy traffic generation: one 50% draw per 100ms tick, so ~20
+    // draws make a zero-dummy outcome vanishingly unlikely (~1e-6)
+    sleep(Duration::from_millis(2000)).await;
 
     let stats = obfuscator.get_stats().await;
     assert!(stats.dummy_messages > 0);
@@ -100,7 +101,8 @@ async fn test_mix_network_batching() {
     };
 
     let obfuscator = TrafficObfuscator::new(config);
-    obfuscator.start().await;
+    // The batch is processed by hand below, so the background flusher and dummy
+    // generator (started by `start`) stay off.
 
     // Send messages to fill a batch
     for i in 0..5 {
@@ -190,6 +192,9 @@ async fn test_message_queue_with_obfuscation() {
         enable_size_normalization: true,
         standard_message_size: 2048,
         enable_dummy_traffic: false, // Disable for predictable test
+        // Batched messages leave through process_batch, not the queue; disable
+        // batching so obfuscated messages are queued directly.
+        enable_mix_batching: false,
         ..Default::default()
     };
 
@@ -300,7 +305,13 @@ async fn test_size_normalization_standard_sizes() {
 
 #[tokio::test]
 async fn test_mix_node_integration() {
-    let mut mix_node = MixNode::new(vec![1, 2, 3, 4]);
+    // Padding stops at the first dummy the generator declines, so make cover
+    // traffic deterministic for this test.
+    let config = MixConfig {
+        dummy_probability: 1.0,
+        ..Default::default()
+    };
+    let mut mix_node = MixNode::with_config(vec![1, 2, 3, 4], config);
 
     // Add messages
     for i in 0..5 {
@@ -332,6 +343,8 @@ async fn test_traffic_analysis_resistance() {
     let config = TrafficObfuscationConfig {
         enable_size_normalization: true,
         enable_dummy_traffic: true,
+        // Generate a dummy on every tick so the stats assert is deterministic
+        dummy_traffic_ratio: 1.0,
         enable_traffic_shaping: true,
         enable_mix_batching: true,
         enable_protocol_obfuscation: true,
@@ -349,7 +362,8 @@ async fn test_traffic_analysis_resistance() {
     ];
     let sizes = [100, 500, 1000, 2000, 5000];
 
-    for (i, (&priority, &size)) in priorities.iter().zip(sizes.iter()).enumerate() {
+    for (i, &size) in sizes.iter().enumerate() {
+        let priority = priorities[i % priorities.len()];
         let msg = NetworkMessage {
             id: format!("resist_{}", i),
             source: vec![i as u8],

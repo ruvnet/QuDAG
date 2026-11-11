@@ -170,12 +170,23 @@ async fn test_usage_based_rotation() {
     let mut addr = manager.get_pool_address("usage_pool").await.unwrap();
     addr.shadow_features.pool_id = Some("usage_pool".to_string());
 
-    // Use address 3 times (rotation policies are internal; default policy applies)
+    // Rotation policies are internal; the default policy rotates a pool once an
+    // address reaches 100 uses
     for _ in 0..3 {
         manager.mark_address_used(&mut addr).await;
     }
-
     assert_eq!(addr.metadata.usage_count, 3);
+
+    for _ in 3..100 {
+        manager.mark_address_used(&mut addr).await;
+    }
+    assert_eq!(addr.metadata.usage_count, 100);
+
+    // The pool was rotated: the worn-out address is no longer handed out
+    for _ in 0..20 {
+        let pooled = manager.get_pool_address("usage_pool").await.unwrap();
+        assert_ne!(pooled.view_key, addr.view_key);
+    }
 }
 
 #[tokio::test]

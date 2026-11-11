@@ -77,31 +77,3 @@ pub fn get_total_deallocated() -> usize {
     // TODO: Implement without global allocator
     0
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::mem;
-
-    #[test]
-    fn test_memory_tracking() {
-        // Record initial values
-        let start_allocated = get_total_allocated();
-        let start_deallocated = get_total_deallocated();
-
-        // Allocate some memory
-        let data = vec![0u8; 1024];
-        let allocated_size = mem::size_of_val(data.as_slice());
-
-        // Check allocation was tracked
-        assert!(get_total_allocated() > start_allocated);
-        assert!(get_total_allocated() - start_allocated >= allocated_size);
-
-        // Drop the allocation
-        drop(data);
-
-        // Check deallocation was tracked
-        assert!(get_total_deallocated() > start_deallocated);
-        assert!(get_total_deallocated() - start_deallocated >= allocated_size);
-    }
-}

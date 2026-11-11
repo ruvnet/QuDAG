@@ -1,6 +1,6 @@
 use blake3::Hash;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use qudag_dag::{Edge, Graph, Node};
+use qudag_dag::{Graph, Node, NodeState};
 
 fn create_test_node(data: &[u8], parents: Vec<Hash>) -> Node {
     Node::new(data.to_vec(), parents)
@@ -15,7 +15,7 @@ fn bench_node_creation(c: &mut Criterion) {
 fn bench_node_addition(c: &mut Criterion) {
     let graph = Graph::new();
     let node = create_test_node(&[1], vec![]);
-    let node_hash = *node.hash();
+    let node_hash = node.hash();
     graph.add_node(node).unwrap();
 
     c.bench_function("node_addition", |b| {
@@ -34,7 +34,7 @@ fn bench_cycle_detection(c: &mut Criterion) {
     for i in 0..100 {
         let parents = prev_hash.map(|h| vec![h]).unwrap_or_default();
         let node = create_test_node(&[i as u8], parents);
-        let hash = *node.hash();
+        let hash = node.hash();
         graph.add_node(node).unwrap();
         prev_hash = Some(hash);
     }
@@ -54,12 +54,12 @@ fn bench_large_dag_operations(c: &mut Criterion) {
     group.sample_size(10);
 
     let graph = Graph::new();
-    let mut nodes = Vec::new();
+    let mut nodes: Vec<Node> = Vec::new();
 
     // Create initial DAG with 1000 nodes
     for i in 0..1000 {
         let parents = if i > 0 {
-            vec![*nodes[i - 1].hash()]
+            vec![nodes[i - 1].hash()]
         } else {
             vec![]
         };
@@ -73,7 +73,7 @@ fn bench_large_dag_operations(c: &mut Criterion) {
         b.iter(|| {
             for node in nodes.iter().take(100) {
                 graph
-                    .update_node_state(node.hash(), crate::node::NodeState::Verified)
+                    .update_node_state(&node.hash(), NodeState::Verified)
                     .unwrap_or(());
             }
         });

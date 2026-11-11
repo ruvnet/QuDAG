@@ -1,12 +1,13 @@
-use qudag_crypto::{KeyPair, PublicKey};
-use qudag_dag::QrDag;
-use qudag_network::NetworkManager;
-use qudag_protocol::{Coordinator, ProtocolConfig, ProtocolState};
+use qudag_protocol::{types::ProtocolState, Coordinator, ProtocolConfig};
 
 #[tokio::test]
 async fn test_protocol_initialization() {
     let config = ProtocolConfig::default();
-    let coordinator = Coordinator::new(config).await.unwrap();
+    let mut coordinator = Coordinator::new(config).await.unwrap();
+
+    // Components are initialized when the coordinator starts
+    assert!(!coordinator.is_initialized());
+    coordinator.start().await.unwrap();
     assert!(coordinator.is_initialized());
 }
 
@@ -16,17 +17,18 @@ async fn test_protocol_state_transitions() {
     let mut coordinator = Coordinator::new(config).await.unwrap();
 
     // Test state transitions
-    assert_eq!(coordinator.state(), ProtocolState::Initialized);
+    assert_eq!(coordinator.state().await, ProtocolState::Initial);
     coordinator.start().await.unwrap();
-    assert_eq!(coordinator.state(), ProtocolState::Running);
+    assert_eq!(coordinator.state().await, ProtocolState::Running);
     coordinator.stop().await.unwrap();
-    assert_eq!(coordinator.state(), ProtocolState::Stopped);
+    assert_eq!(coordinator.state().await, ProtocolState::Stopped);
 }
 
 #[tokio::test]
 async fn test_component_integration() {
     let config = ProtocolConfig::default();
-    let coordinator = Coordinator::new(config).await.unwrap();
+    let mut coordinator = Coordinator::new(config).await.unwrap();
+    coordinator.start().await.unwrap();
 
     // Verify all components are properly initialized
     assert!(coordinator.crypto_manager().is_some());
@@ -53,9 +55,9 @@ async fn test_message_propagation() {
 #[tokio::test]
 async fn test_error_handling() {
     let mut config = ProtocolConfig::default();
-    config.network_port = 0; // Invalid port to trigger error
-    let result = Coordinator::new(config).await;
-    assert!(result.is_err());
+    assert!(config.validate().is_ok());
+    config.network.port = 0; // Invalid port to trigger error
+    assert!(config.validate().is_err());
 }
 
 proptest::proptest! {
@@ -67,8 +69,9 @@ proptest::proptest! {
             let mut coordinator = Coordinator::new(config).await.unwrap();
             coordinator.start().await.unwrap();
 
-            let result = coordinator.broadcast_message(message).await;
+            let result = coordinator.broadcast_message(message.clone()).await;
             assert!(result.is_ok());
+            assert!(coordinator.dag_manager().unwrap().contains_message(&message));
         });
     }
 }

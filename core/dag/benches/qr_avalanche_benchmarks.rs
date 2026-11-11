@@ -1,7 +1,7 @@
 //! Performance benchmarks for QR-Avalanche consensus algorithm.
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use qudag_dag::{ConsensusStatus, QRAvalanche, QRAvalancheConfig, VertexId};
+use qudag_dag::{QRAvalanche, QRAvalancheConfig, VertexId};
 use std::time::Duration;
 use tokio::runtime::Runtime;
 
@@ -25,8 +25,6 @@ fn setup_consensus_with_participants(participant_count: usize) -> QRAvalanche {
 
 /// Benchmark vertex processing throughput
 fn bench_vertex_processing_throughput(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
-
     let mut group = c.benchmark_group("vertex_processing_throughput");
 
     for vertex_count in [100, 1000, 5000, 10000].iter() {
@@ -69,7 +67,7 @@ fn bench_consensus_finality_latency(c: &mut Criterion) {
 
                     // Run consensus round to achieve finality
                     let result = consensus.run_consensus_round(&vertex_id).await;
-                    black_box(result);
+                    let _ = black_box(result);
                 });
             },
         );
@@ -92,7 +90,7 @@ fn bench_vote_recording(c: &mut Criterion) {
                     let vertex_id = create_vertex_id(0);
                     consensus.process_vertex(vertex_id.clone()).unwrap();
 
-                    for i in 0..*vote_count {
+                    for i in 0..vote_count {
                         let voter_id = create_vertex_id(i + 1000);
                         let vote = i % 2 == 0; // Alternate between true/false
                         black_box(
@@ -122,7 +120,7 @@ fn bench_fork_resolution(c: &mut Criterion) {
                     let mut consensus = setup_consensus_with_participants(100);
 
                     // Create conflicting vertices
-                    for i in 0..*conflict_count {
+                    for i in 0..conflict_count {
                         let vertex_id = create_vertex_id(i);
                         consensus.process_vertex(vertex_id).unwrap();
                     }
@@ -151,7 +149,7 @@ fn bench_byzantine_detection(c: &mut Criterion) {
                     let mut consensus = setup_consensus_with_participants(100);
 
                     // Simulate some Byzantine behavior
-                    for i in 0..*byzantine_count {
+                    for i in 0..byzantine_count {
                         let vertex_id = create_vertex_id(i);
                         let voter_id = create_vertex_id(i + 500);
                         consensus.process_vertex(vertex_id.clone()).unwrap();
@@ -206,7 +204,7 @@ fn bench_concurrent_consensus(c: &mut Criterion) {
                     // Wait for all to complete
                     for handle in handles {
                         let result = handle.await.unwrap();
-                        black_box(result);
+                        let _ = black_box(result);
                     }
                 });
             },
@@ -266,7 +264,7 @@ fn bench_config_variations(c: &mut Criterion) {
                     consensus.process_vertex(vertex_id.clone()).unwrap();
 
                     let result = consensus.run_consensus_round(&vertex_id).await;
-                    black_box(result);
+                    let _ = black_box(result);
                 });
             },
         );
@@ -345,7 +343,7 @@ fn bench_byzantine_resilience(c: &mut Criterion) {
                     consensus.process_vertex(vertex_id.clone()).unwrap();
 
                     let result = consensus.run_consensus_round(&vertex_id).await;
-                    black_box(result);
+                    let _ = black_box(result);
                 });
             },
         );

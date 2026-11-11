@@ -662,7 +662,10 @@ impl QRAvalanche {
             let mut distance = 0u64;
             for (i, &byte) in vertex_bytes.iter().enumerate() {
                 if i < p_bytes.len() {
-                    distance += (byte as u64).wrapping_sub(p_bytes[i] as u64).pow(2);
+                    // Squared byte distance. `wrapping_sub(..).pow(2)` overflowed (and
+                    // panicked in debug builds) whenever `byte < p_bytes[i]`.
+                    let diff = (byte as u64).abs_diff(p_bytes[i] as u64);
+                    distance += diff * diff;
                 }
             }
             distance

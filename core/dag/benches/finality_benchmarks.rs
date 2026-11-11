@@ -1,20 +1,22 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use qudag_dag::consensus::DagConsensus;
-use qudag_dag::edge::Edge;
-use qudag_dag::graph::Graph;
-use qudag_dag::vertex::Vertex;
+use blake3::Hash;
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use qudag_dag::{ConsensusError, ConsensusStatus, Graph, Node, QRAvalanche, VertexId};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Comprehensive benchmarks for consensus finality
 /// Tests against QuDAG performance requirement: Sub-second consensus finality (99th percentile)
 
+/// A generated DAG: the graph plus its vertices in insertion (topological) order.
+struct SimGraph {
+    graph: Graph,
+    vertices: Vec<Hash>,
+}
+
 struct ConsensusSimulator {
     node_count: usize,
+    byzantine_count: usize,
     rng: StdRng,
 }
 
@@ -22,58 +24,70 @@ impl ConsensusSimulator {
     fn new(node_count: usize) -> Self {
         Self {
             node_count,
+            byzantine_count: 0,
             rng: StdRng::seed_from_u64(42), // Fixed seed for reproducible results
         }
     }
 
-    fn generate_vertices(&mut self, count: usize) -> Vec<Vertex> {
-        let mut vertices = Vec::with_capacity(count);
-        for i in 0..count {
-            let vertex = Vertex::new(
-                i as u64,
-                format!("vertex_{}", i),
-                vec![0u8; 256], // Simulate message payload
-                self.rng.gen_range(0..self.node_count) as u64, // Random node ID
-            );
-            vertices.push(vertex);
-        }
-        vertices
+    fn generate_vertex(&mut self, index: usize, parents: Vec<Hash>) -> Node {
+        let mut payload = vec![0u8; 256]; // Simulate message payload
+        payload[..8].copy_from_slice(&(index as u64).to_le_bytes());
+        let origin = self.rng.gen_range(0..self.node_count) as u64; // Random node ID
+        payload[8..16].copy_from_slice(&origin.to_le_bytes());
+        Node::new(payload, parents)
     }
 
-    fn generate_edges(&mut self, vertices: &[Vertex]) -> Vec<Edge> {
-        let mut edges = Vec::new();
-        for i in 1..vertices.len() {
+    fn create_graph(&mut self, vertex_count: usize) -> SimGraph {
+        let graph = Graph::with_capacity(vertex_count.max(1));
+        let mut vertices: Vec<Hash> = Vec::with_capacity(vertex_count);
+
+        for i in 0..vertex_count {
             // Each vertex references 1-3 previous vertices
-            let ref_count = self.rng.gen_range(1..=3.min(i));
-            for _ in 0..ref_count {
-                let parent_idx = self.rng.gen_range(0..i);
-                let edge = Edge::new(
-                    vertices[parent_idx].id(),
-                    vertices[i].id(),
-                    1.0, // Weight
-                );
-                edges.push(edge);
+            let mut parents = Vec::new();
+            if i > 0 {
+                let ref_count = self.rng.gen_range(1..=3.min(i));
+                for _ in 0..ref_count {
+                    let parent = vertices[self.rng.gen_range(0..i)];
+                    if !parents.contains(&parent) {
+                        parents.push(parent);
+                    }
+                }
+            }
+            let node = self.generate_vertex(i, parents);
+            vertices.push(node.hash());
+            graph.add_node(node).unwrap();
+        }
+
+        SimGraph { graph, vertices }
+    }
+
+    /// Runs one QR-Avalanche round over every vertex of the graph. Each vertex
+    /// is voted on by a sample of participants; Byzantine participants vote
+    /// against it. Returns the number of finalized vertices.
+    fn process_round(
+        &self,
+        consensus: &mut QRAvalanche,
+        sim: &SimGraph,
+    ) -> Result<usize, ConsensusError> {
+        let sample = consensus.config.query_sample_size.min(self.node_count);
+        let mut finalized = 0;
+        for (index, hash) in sim.vertices.iter().enumerate() {
+            let id = VertexId::from_bytes(hash.as_bytes().to_vec());
+            consensus.process_vertex(id.clone())?;
+            for k in 0..sample {
+                let participant = (index + k) % self.node_count;
+                let voter = VertexId::from_bytes((participant as u64).to_le_bytes().to_vec());
+                let honest = participant >= self.byzantine_count;
+                consensus.record_vote(id.clone(), voter, honest)?;
+            }
+            if consensus.vertices.get(&id) == Some(&ConsensusStatus::Final) {
+                finalized += 1;
             }
         }
-        edges
-    }
-
-    fn create_graph(&mut self, vertex_count: usize) -> Graph {
-        let mut graph = Graph::new();
-        let vertices = self.generate_vertices(vertex_count);
-        let edges = self.generate_edges(&vertices);
-
-        // Add vertices to graph
-        for vertex in vertices {
-            graph.add_vertex(vertex);
+        if finalized == 0 && !sim.vertices.is_empty() {
+            return Err(ConsensusError::ConsensusFailure);
         }
-
-        // Add edges to graph
-        for edge in edges {
-            graph.add_edge(edge);
-        }
-
-        graph
+        Ok(finalized)
     }
 }
 
@@ -95,11 +109,11 @@ fn benchmark_consensus_finality(c: &mut Criterion) {
 
                     for _ in 0..iters {
                         let mut simulator = ConsensusSimulator::new(node_count);
-                        let mut consensus = DagConsensus::new();
+                        let mut consensus = QRAvalanche::new();
                         let graph = simulator.create_graph(node_count * 2); // 2 vertices per node
 
                         let start = Instant::now();
-                        let _ = consensus.process_round(&graph);
+                        let _ = simulator.process_round(&mut consensus, &graph);
                         let latency = start.elapsed();
 
                         latencies.push(latency);
@@ -152,14 +166,14 @@ fn benchmark_multi_round_consensus(c: &mut Criterion) {
 
                     for _ in 0..iters {
                         let mut simulator = ConsensusSimulator::new(100); // Fixed 100 nodes
-                        let mut consensus = DagConsensus::new();
+                        let mut consensus = QRAvalanche::new();
 
                         let start = Instant::now();
 
                         // Execute multiple consensus rounds
                         for round in 0..round_count {
                             let graph = simulator.create_graph(50 + round * 10); // Growing graph
-                            let _ = consensus.process_round(&graph);
+                            let _ = simulator.process_round(&mut consensus, &graph);
                         }
 
                         let total_latency = start.elapsed();
@@ -202,22 +216,21 @@ fn benchmark_byzantine_resistance(c: &mut Criterion) {
 
                     for _ in 0..iters {
                         let mut simulator = ConsensusSimulator::new(node_count);
-                        let mut consensus = DagConsensus::new();
+                        let mut consensus = QRAvalanche::new();
                         let mut graph = simulator.create_graph(node_count);
+                        simulator.byzantine_count = byzantine_count;
 
                         // Simulate Byzantine behavior by adding conflicting vertices
                         for i in 0..byzantine_count {
-                            let conflicting_vertex = Vertex::new(
-                                (node_count + i) as u64,
-                                format!("byzantine_vertex_{}", i),
-                                vec![0xFF; 256], // Different payload
-                                i as u64,
-                            );
-                            graph.add_vertex(conflicting_vertex);
+                            let mut payload = vec![0xFF; 256]; // Different payload
+                            payload[..8].copy_from_slice(&((node_count + i) as u64).to_le_bytes());
+                            let conflicting_vertex = Node::new(payload, vec![]);
+                            graph.vertices.push(conflicting_vertex.hash());
+                            graph.graph.add_node(conflicting_vertex).unwrap();
                         }
 
                         let start = Instant::now();
-                        let result = consensus.process_round(&graph);
+                        let result = simulator.process_round(&mut consensus, &graph);
                         let latency = start.elapsed();
 
                         println!(
@@ -256,13 +269,13 @@ fn benchmark_consensus_throughput(c: &mut Criterion) {
 
                     for _ in 0..iters {
                         let mut simulator = ConsensusSimulator::new(100);
-                        let mut consensus = DagConsensus::new();
+                        let mut consensus = QRAvalanche::new();
 
                         // Create graph with many transactions
                         let graph = simulator.create_graph(tx_count);
 
                         let start = Instant::now();
-                        let _ = consensus.process_round(&graph);
+                        let _ = simulator.process_round(&mut consensus, &graph);
                         let latency = start.elapsed();
 
                         let tps = tx_count as f64 / latency.as_secs_f64();
@@ -306,13 +319,13 @@ fn benchmark_dag_growth_handling(c: &mut Criterion) {
 
                     for _ in 0..iters {
                         let mut simulator = ConsensusSimulator::new(100);
-                        let mut consensus = DagConsensus::new();
+                        let mut consensus = QRAvalanche::new();
 
                         // Create large DAG
                         let graph = simulator.create_graph(dag_size);
 
                         let start = Instant::now();
-                        let _ = consensus.process_round(&graph);
+                        let _ = simulator.process_round(&mut consensus, &graph);
                         let latency = start.elapsed();
 
                         let vertices_per_sec = dag_size as f64 / latency.as_secs_f64();
@@ -345,13 +358,13 @@ fn benchmark_consensus_memory_usage(c: &mut Criterion) {
 
             for _ in 0..iters {
                 let mut simulator = ConsensusSimulator::new(100);
-                let mut consensus = DagConsensus::new();
+                let mut consensus = QRAvalanche::new();
 
                 // Create graph with substantial data
                 let graph = simulator.create_graph(10000);
 
                 let start = Instant::now();
-                let _ = consensus.process_round(&graph);
+                let _ = simulator.process_round(&mut consensus, &graph);
                 let latency = start.elapsed();
 
                 // Estimate memory usage
@@ -392,11 +405,11 @@ fn benchmark_consensus_consistency(c: &mut Criterion) {
 
             for _ in 0..iters {
                 let mut simulator = ConsensusSimulator::new(50);
-                let mut consensus = DagConsensus::new();
+                let mut consensus = QRAvalanche::new();
                 let graph = simulator.create_graph(100);
 
                 let start = Instant::now();
-                let result = consensus.process_round(&graph);
+                let result = simulator.process_round(&mut consensus, &graph);
                 let latency = start.elapsed();
 
                 results.push(result);

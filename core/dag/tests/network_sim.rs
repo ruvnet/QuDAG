@@ -1,66 +1,71 @@
+//! Simulated multi-node QR-Avalanche voting over a lossy, delayed network.
+//!
+//! Every simulated node runs its own `QRAvalanche` instance. Nodes vote on a
+//! vertex according to a deterministic validity rule, votes travel to peers
+//! with random latency and packet loss, and a node only feeds its tally into
+//! consensus once it has heard from a quorum (2/3 of the network). The shared
+//! `Graph` state is then advanced from the network-wide outcome.
+
 use blake3::Hash;
-use qudag_dag::{Graph, Node, NodeState, QrAvalanche};
+use qudag_dag::{ConsensusStatus, Graph, Node, NodeState, QRAvalanche, VertexId};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::Mutex;
 use tokio::time::sleep;
 
 const NETWORK_SIZE: usize = 10;
 const LATENCY_MIN: u64 = 10; // 10ms minimum latency
 const LATENCY_MAX: u64 = 100; // 100ms maximum latency
 const PACKET_LOSS_RATE: f64 = 0.05; // 5% packet loss
+const QUORUM: usize = (NETWORK_SIZE * 2) / 3;
+/// Honest nodes reject payloads larger than this.
+const MAX_VALID_PAYLOAD: usize = 512;
 
 struct NetworkSimulator {
     nodes: Vec<SimNode>,
     graph: Arc<Graph>,
+    rng: StdRng,
 }
 
 struct SimNode {
     id: Hash,
-    consensus: Arc<QrAvalanche>,
-    events_rx: mpsc::Receiver<ConsensusEvent>,
-    peers: Vec<Hash>,
+    consensus: Arc<Mutex<QRAvalanche>>,
+    inbox: Arc<Mutex<Vec<(VertexId, bool)>>>,
+    peers: Vec<usize>,
+}
+
+fn to_vertex_id(hash: &Hash) -> VertexId {
+    VertexId::from_bytes(hash.as_bytes().to_vec())
 }
 
 impl NetworkSimulator {
     fn new(size: usize) -> Self {
         let graph = Arc::new(Graph::new());
         let mut nodes = Vec::with_capacity(size);
-        let mut peer_map = HashMap::new();
 
-        // Create nodes
+        // Create nodes, fully connected topology for simplicity
         for i in 0..size {
-            let id = blake3::hash(&[i as u8]);
-            let (consensus, events_rx) = QrAvalanche::new(graph.clone());
-            let consensus = Arc::new(consensus);
-
             nodes.push(SimNode {
-                id,
-                consensus,
-                events_rx,
-                peers: Vec::new(),
+                id: blake3::hash(&[i as u8]),
+                consensus: Arc::new(Mutex::new(QRAvalanche::new())),
+                inbox: Arc::new(Mutex::new(Vec::new())),
+                peers: (0..size).filter(|&j| j != i).collect(),
             });
-
-            peer_map.insert(id, i);
         }
 
-        // Assign peers (fully connected topology for simplicity)
-        for i in 0..size {
-            let mut peers = Vec::new();
-            for j in 0..size {
-                if i != j {
-                    peers.push(blake3::hash(&[j as u8]));
-                }
-            }
-            nodes[i].peers = peers;
+        Self {
+            nodes,
+            graph,
+            rng: StdRng::seed_from_u64(0x5eed),
         }
-
-        Self { nodes, graph }
     }
 
     async fn simulate_consensus(&mut self, test_node: Node) {
-        let node_hash = *test_node.hash();
+        let node_hash = test_node.hash();
+        let vote = test_node.payload().len() <= MAX_VALID_PAYLOAD;
 
         // Add node to graph
         self.graph.add_node(test_node).unwrap();
@@ -68,65 +73,72 @@ impl NetworkSimulator {
             .update_node_state(&node_hash, NodeState::Verified)
             .unwrap();
 
-        // Start consensus on all nodes
+        // Every node votes on the vertex and sends the vote to its peers.
+        let mut deliveries = Vec::new();
         for node in &self.nodes {
-            node.consensus.process_node(node_hash).await.unwrap();
-        }
+            let voter = to_vertex_id(&node.id);
+            node.inbox.lock().await.push((voter.clone(), vote));
 
-        // Simulate network communication
-        let mut vote_tasks = Vec::new();
-
-        for node in &self.nodes {
-            let consensus = node.consensus.clone();
-            let node_id = node.id;
-            let peers = node.peers.clone();
-
-            let task = tokio::spawn(async move {
-                for peer_id in peers {
-                    if rand::random::<f64>() > PACKET_LOSS_RATE {
-                        // Simulate network latency
-                        let latency =
-                            rand::random::<u64>() % (LATENCY_MAX - LATENCY_MIN) + LATENCY_MIN;
-                        sleep(Duration::from_millis(latency)).await;
-
-                        // Random vote (biased towards acceptance)
-                        let accept = rand::random::<f64>() < 0.8;
-                        let _ = consensus.record_vote(node_hash, peer_id, accept).await;
-                    }
+            for &peer in &node.peers {
+                if self.rng.gen::<f64>() < PACKET_LOSS_RATE {
+                    continue;
                 }
-            });
-
-            vote_tasks.push(task);
+                let latency = self.rng.gen_range(LATENCY_MIN..LATENCY_MAX);
+                let inbox = self.nodes[peer].inbox.clone();
+                let voter = voter.clone();
+                deliveries.push(tokio::spawn(async move {
+                    sleep(Duration::from_millis(latency)).await;
+                    inbox.lock().await.push((voter, vote));
+                }));
+            }
         }
 
-        // Wait for all votes to complete
-        for task in vote_tasks {
-            let _ = task.await;
+        for delivery in deliveries {
+            delivery.await.unwrap();
         }
 
-        // Allow time for consensus to finalize
-        sleep(Duration::from_secs(1)).await;
+        // Each node decides once it has heard from a quorum.
+        let vertex_id = to_vertex_id(&node_hash);
+        for node in &self.nodes {
+            let votes = node.inbox.lock().await.clone();
+            if votes.len() < QUORUM {
+                continue;
+            }
+            let mut consensus = node.consensus.lock().await;
+            consensus.process_vertex(vertex_id.clone()).unwrap();
+            for (voter, accept) in votes {
+                consensus
+                    .record_vote(vertex_id.clone(), voter, accept)
+                    .unwrap();
+            }
+        }
     }
 
-    async fn collect_results(&mut self) -> HashMap<Hash, NodeState> {
+    async fn collect_results(&self, node_hash: &Hash) -> HashMap<Hash, ConsensusStatus> {
+        let vertex_id = to_vertex_id(node_hash);
         let mut results = HashMap::new();
 
         for node in &self.nodes {
-            if let Some(node_state) = node
-                .events_rx
-                .try_recv()
-                .ok()
-                .and_then(|event| match event {
-                    ConsensusEvent::NodeFinalized(hash) => Some((hash, NodeState::Final)),
-                    ConsensusEvent::NodeRejected(hash) => Some((hash, NodeState::Rejected)),
-                    _ => None,
-                })
-            {
-                results.insert(node.id, node_state.1);
+            if let Some(status) = node.consensus.lock().await.vertices.get(&vertex_id) {
+                results.insert(node.id, status.clone());
             }
         }
 
         results
+    }
+
+    /// Applies the network-wide outcome to the shared graph.
+    fn apply_outcome(&self, node_hash: &Hash, results: &HashMap<Hash, ConsensusStatus>) {
+        let count = |status: ConsensusStatus| results.values().filter(|s| **s == status).count();
+        if count(ConsensusStatus::Final) >= QUORUM {
+            self.graph
+                .update_node_state(node_hash, NodeState::Final)
+                .unwrap();
+        } else if count(ConsensusStatus::Rejected) >= QUORUM {
+            self.graph
+                .update_node_state(node_hash, NodeState::Rejected)
+                .unwrap();
+        }
     }
 }
 
@@ -136,23 +148,25 @@ async fn test_network_consensus_basic() {
 
     // Create test node
     let test_node = Node::new(vec![1, 2, 3], vec![]);
-    let node_hash = *test_node.hash();
+    let node_hash = test_node.hash();
 
     // Run simulation
     sim.simulate_consensus(test_node).await;
 
     // Check results
-    let results = sim.collect_results().await;
+    let results = sim.collect_results(&node_hash).await;
+    sim.apply_outcome(&node_hash, &results);
 
     // Verify consensus was reached
     let finalized = results
         .values()
-        .filter(|&&state| state == NodeState::Final)
+        .filter(|&state| *state == ConsensusStatus::Final)
         .count();
 
     assert!(
-        finalized >= (NETWORK_SIZE * 2) / 3,
-        "Expected at least 2/3 nodes to reach finality"
+        finalized >= QUORUM,
+        "Expected at least 2/3 nodes to reach finality, got {}",
+        finalized
     );
 
     // Verify final state in graph
@@ -166,23 +180,25 @@ async fn test_network_consensus_with_failures() {
 
     // Create test node with invalid data
     let test_node = Node::new(vec![0; 1024], vec![]); // Large invalid payload
-    let node_hash = *test_node.hash();
+    let node_hash = test_node.hash();
 
     // Run simulation
     sim.simulate_consensus(test_node).await;
 
     // Check results
-    let results = sim.collect_results().await;
+    let results = sim.collect_results(&node_hash).await;
+    sim.apply_outcome(&node_hash, &results);
 
     // Verify rejection
     let rejected = results
         .values()
-        .filter(|&&state| state == NodeState::Rejected)
+        .filter(|&state| *state == ConsensusStatus::Rejected)
         .count();
 
     assert!(
-        rejected >= (NETWORK_SIZE * 2) / 3,
-        "Expected at least 2/3 nodes to reject invalid node"
+        rejected >= QUORUM,
+        "Expected at least 2/3 nodes to reject invalid node, got {}",
+        rejected
     );
 
     // Verify rejected state in graph
@@ -201,22 +217,23 @@ async fn test_network_consensus_partition() {
 
     // Create test node
     let test_node = Node::new(vec![1, 2, 3], vec![]);
-    let node_hash = *test_node.hash();
+    let node_hash = test_node.hash();
 
     // Run simulation
     sim.simulate_consensus(test_node).await;
 
     // Check results
-    let results = sim.collect_results().await;
+    let results = sim.collect_results(&node_hash).await;
+    sim.apply_outcome(&node_hash, &results);
 
     // Verify consensus cannot be reached with network partition
     let finalized = results
         .values()
-        .filter(|&&state| state == NodeState::Final)
+        .filter(|&state| *state == ConsensusStatus::Final)
         .count();
 
     assert!(
-        finalized < (NETWORK_SIZE * 2) / 3,
+        finalized < QUORUM,
         "Expected consensus to fail under network partition"
     );
 

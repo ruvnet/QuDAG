@@ -28,7 +28,8 @@ fn bench_node_initialization(c: &mut Criterion) {
         b.iter(|| {
             rt.block_on(async {
                 let config = ProtocolConfig::default();
-                let coordinator = Coordinator::new(config).await.unwrap();
+                let mut coordinator = Coordinator::new(config).await.unwrap();
+                coordinator.start().await.unwrap();
                 assert!(coordinator.is_initialized());
             });
         })
@@ -45,7 +46,7 @@ fn bench_multi_node_broadcast(c: &mut Criterion) {
                 let mut nodes = Vec::with_capacity(5);
                 for i in 0..5 {
                     let mut config = ProtocolConfig::default();
-                    config.network_port = 8000 + i as u16;
+                    config.network.port = 8000 + i as u16;
                     let node = Coordinator::new(config).await.unwrap();
                     nodes.push(node);
                 }

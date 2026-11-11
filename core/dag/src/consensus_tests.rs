@@ -45,7 +45,10 @@ mod tests {
         assert!(dag.add_vertex(genesis).is_ok());
 
         // Should have confidence status
-        assert_eq!(dag.get_confidence("genesis"), Some(ConsensusStatus::Pending));
+        assert_eq!(
+            dag.get_confidence("genesis"),
+            Some(ConsensusStatus::Pending)
+        );
     }
 
     #[test]

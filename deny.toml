@@ -9,10 +9,32 @@ unmaintained = "workspace"
 # Yanked crates are warnings
 yanked = "warn"
 
-# No advisory exceptions. The hickory-proto (RUSTSEC-2026-0118/0119) and rsa
+# Advisory exceptions. The hickory-proto (RUSTSEC-2026-0118/0119) and rsa
 # (RUSTSEC-2023-0071) exceptions were removed on 2026-11-10: libp2p 0.57 pulls
 # hickory-proto 0.26, and the unused sqlx dependency (the rsa path) was dropped.
-ignore = []
+#
+# Decision 2026-11-11: the entries below are "unmaintained" notices, not
+# vulnerabilities (cargo audit reports 0 vulnerabilities). No maintained
+# drop-in exists, and each replacement changes a wire, storage or key format,
+# so they are tracked as migrations instead of being rewritten in a lockfile
+# PR. The same IDs are mirrored in .cargo/audit.toml. Remove an entry when its
+# migration lands; a new vulnerability in any of these crates still fails CI.
+ignore = [
+  # bincode 1.3.3: serialises DAG vertices, protocol messages and vault
+  # records in qudag-dag/network/protocol/vault-core/exchange-core/mcp.
+  # Migration: move to a versioned envelope over postcard (or bincode-next),
+  # with a reader for the 1.x format, in the next breaking release.
+  { id = "RUSTSEC-2025-0141", reason = "bincode unmaintained; migration to a versioned postcard envelope is tracked" },
+  # pqcrypto-* (PQClean archived upstream) back qudag-crypto's ML-KEM-768,
+  # ML-DSA and HQC. Migration: RustCrypto `ml-kem` (FIPS 203) and `ml-dsa`
+  # (FIPS 204), with known-answer tests against the current keys and
+  # signatures; HQC has no maintained Rust implementation yet, so it stays
+  # behind its feature until one exists or it is dropped.
+  { id = "RUSTSEC-2026-0161", reason = "pqcrypto-mlkem unmaintained; migration to RustCrypto ml-kem is tracked" },
+  { id = "RUSTSEC-2026-0162", reason = "pqcrypto-traits unmaintained; removed with the pqcrypto migration" },
+  { id = "RUSTSEC-2026-0166", reason = "pqcrypto-mldsa unmaintained; migration to RustCrypto ml-dsa is tracked" },
+  { id = "RUSTSEC-2026-0168", reason = "pqcrypto-hqc unmaintained; no maintained HQC crate yet" },
+]
 
 [licenses]
 # Allow common open-source licenses

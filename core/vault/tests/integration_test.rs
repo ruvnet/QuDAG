@@ -1,13 +1,14 @@
 //! Integration tests for QuDAG vault library.
 
 use qudag_vault_core::{Vault, VaultError};
-use tempfile::NamedTempFile;
+use tempfile::TempDir;
 
 #[test]
 fn test_vault_create_and_operations() {
-    // Create a temporary file for the vault
-    let temp_file = NamedTempFile::new().unwrap();
-    let vault_path = temp_file.path();
+    // `Vault::create` refuses to overwrite an existing file, so use a fresh path
+    let temp_dir = TempDir::new().unwrap();
+    let vault_path = temp_dir.path().join("vault.qdag");
+    let vault_path = vault_path.as_path();
 
     // Test vault creation
     let mut vault = Vault::create(vault_path, "test_password").unwrap();
@@ -20,9 +21,10 @@ fn test_vault_create_and_operations() {
         .add_secret("social/github", "myusername", None)
         .unwrap(); // Generated password
 
-    // Test listing secrets
+    // Test listing secrets (the listing includes the implicit "email" and
+    // "social" category nodes derived from the labels)
     let secrets = vault.list_secrets(None).unwrap();
-    assert_eq!(secrets.len(), 2);
+    assert_eq!(secrets.len(), 4);
     assert!(secrets.contains(&"email/work".to_string()));
     assert!(secrets.contains(&"social/github".to_string()));
 
@@ -40,24 +42,22 @@ fn test_vault_create_and_operations() {
 
     let vault = Vault::open(vault_path, "test_password").unwrap();
     let secrets = vault.list_secrets(None).unwrap();
-    assert_eq!(secrets.len(), 2);
+    assert_eq!(secrets.len(), 4);
 
     // Test wrong password
     let result = Vault::open(vault_path, "wrong_password");
-    assert!(matches!(
-        result,
-        Err(VaultError::InvalidPassword) | Err(VaultError::Crypto(_))
-    ));
+    assert!(matches!(result, Err(VaultError::InvalidPassword)));
 }
 
 #[test]
 fn test_vault_export_import() {
-    let temp_file1 = NamedTempFile::new().unwrap();
-    let temp_file2 = NamedTempFile::new().unwrap();
-    let export_file = NamedTempFile::new().unwrap();
+    let temp_dir = TempDir::new().unwrap();
+    let vault1_path = temp_dir.path().join("vault1.qdag");
+    let vault2_path = temp_dir.path().join("vault2.qdag");
+    let export_path = temp_dir.path().join("export.qdag");
 
     // Create first vault and add secrets
-    let mut vault1 = Vault::create(temp_file1.path(), "password1").unwrap();
+    let mut vault1 = Vault::create(&vault1_path, "password1").unwrap();
     vault1
         .add_secret("test/secret1", "user1", Some("pass1"))
         .unwrap();
@@ -66,15 +66,17 @@ fn test_vault_export_import() {
         .unwrap();
 
     // Export vault
-    vault1.export(export_file.path()).unwrap();
+    vault1.export(&export_path).unwrap();
 
     // Create second vault and import
-    let mut vault2 = Vault::create(temp_file2.path(), "password2").unwrap();
-    vault2.import(export_file.path(), "password1").unwrap();
+    let mut vault2 = Vault::create(&vault2_path, "password2").unwrap();
+    vault2.import(&export_path, "password1").unwrap();
 
-    // Verify imported secrets
+    // Verify imported secrets (plus the implicit "test" category node)
     let secrets = vault2.list_secrets(None).unwrap();
-    assert_eq!(secrets.len(), 2);
+    assert_eq!(secrets.len(), 3);
+    assert!(secrets.contains(&"test/secret1".to_string()));
+    assert!(secrets.contains(&"test/secret2".to_string()));
 
     let secret = vault2.get_secret("test/secret1").unwrap();
     assert_eq!(secret.username, "user1");
@@ -84,8 +86,8 @@ fn test_vault_export_import() {
 fn test_vault_password_generation() {
     use qudag_vault_core::utils::CharacterSet;
 
-    let temp_file = NamedTempFile::new().unwrap();
-    let vault = Vault::create(temp_file.path(), "test_password").unwrap();
+    let temp_dir = TempDir::new().unwrap();
+    let vault = Vault::create(temp_dir.path().join("vault.qdag"), "test_password").unwrap();
 
     // Test different character sets
     let pass1 = vault.generate_password(16, CharacterSet::Alphanumeric);

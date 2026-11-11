@@ -292,8 +292,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_queue() {
-        use std::thread;
-
         let (queue, _rx) = MessageQueue::new();
 
         // Create test messages
@@ -321,7 +319,12 @@ mod tests {
         // Test message verification
         let envelope = queue.dequeue().await.unwrap();
         assert!(envelope.verify());
+        assert_eq!(envelope.message.id, "1");
+        assert!(queue.is_empty().await);
+
+        // Enqueue in reverse priority order to exercise priority dequeue
         assert!(queue.enqueue(msg2.clone()).await.is_ok());
+        assert!(queue.enqueue(msg1.clone()).await.is_ok());
         assert_eq!(queue.len().await, 2);
 
         // Test priority dequeue
@@ -345,7 +348,7 @@ mod tests {
         assert_eq!(queue.len().await, 1);
 
         // Wait for message to expire
-        thread::sleep(Duration::from_secs(2));
+        tokio::time::sleep(Duration::from_secs(2)).await;
         queue.purge_expired().await;
         assert_eq!(queue.len().await, 0);
     }

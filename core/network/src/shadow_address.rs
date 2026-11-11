@@ -866,6 +866,11 @@ mod tests {
                 network,
                 expires_at,
                 flags,
+                created_at: 0,
+                last_used: None,
+                ttl: None,
+                usage_count: 0,
+                max_uses: None,
             })
     }
 
@@ -883,6 +888,7 @@ mod tests {
                     spend_key,
                     payment_id,
                     metadata,
+                    shadow_features: test_features(),
                 },
             )
     }
@@ -890,15 +896,32 @@ mod tests {
     // Test helper to create a sample shadow address
     fn create_test_address() -> ShadowAddress {
         ShadowAddress {
-            view_key: vec![1, 2, 3, 4],
-            spend_key: vec![5, 6, 7, 8],
+            // Validation requires 32-byte view and spend keys
+            view_key: vec![1; 32],
+            spend_key: vec![5; 32],
             payment_id: None,
             metadata: ShadowMetadata {
                 version: 1,
                 network: NetworkType::Testnet,
                 expires_at: None,
                 flags: 0,
+                created_at: 0,
+                last_used: None,
+                ttl: None,
+                usage_count: 0,
+                max_uses: None,
             },
+            shadow_features: test_features(),
+        }
+    }
+
+    fn test_features() -> ShadowFeatures {
+        ShadowFeatures {
+            is_temporary: false,
+            derivation_index: None,
+            stealth_prefix: None,
+            mixing_enabled: false,
+            pool_id: None,
         }
     }
 
@@ -963,8 +986,16 @@ mod tests {
             let handler = DefaultShadowAddressHandler::new(addr.metadata.network, seed);
             let valid = handler.validate_address(&addr).unwrap();
 
-            // Our current validation just checks for non-empty keys
-            prop_assert_eq!(valid, !addr.view_key.is_empty() && !addr.spend_key.is_empty());
+            // Validation requires 32-byte keys and an unexpired address (the
+            // strategy leaves usage limits unset and matches the handler network)
+            let unexpired = addr
+                .metadata
+                .expires_at
+                .map_or(true, |expires_at| DefaultShadowAddressHandler::current_timestamp() <= expires_at);
+            prop_assert_eq!(
+                valid,
+                addr.view_key.len() == 32 && addr.spend_key.len() == 32 && unexpired
+            );
         }
 
         #[test]

@@ -272,7 +272,8 @@ impl ConsensusMetrics {
     pub fn record_vertex_processed(&mut self) {
         self.total_vertices_processed += 1;
         let elapsed = self.start_time.elapsed();
-        if elapsed.as_secs() > 0 {
+        // Measure sub-second runs too; a whole-second guard reported 0 throughput.
+        if !elapsed.is_zero() {
             self.current_throughput = self.total_vertices_processed as f64 / elapsed.as_secs_f64();
         }
     }

@@ -1006,6 +1006,26 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_dag_state_byte_keyed_maps_round_trip_through_json() {
+        let vertex = create_test_vertex();
+        let state = DagState {
+            vertices: HashMap::from([(vertex.id.clone(), vertex.clone())]),
+            tips: HashSet::from([vertex.id.clone()]),
+            voting_records: HashMap::new(),
+            last_checkpoint: None,
+        };
+        let json = serde_json::to_string(&state).unwrap();
+        let decoded: DagState = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.vertices[&vertex.id].payload, vertex.payload);
+
+        // Files written before byte-keyed maps were stored as pairs hold `{}`
+        let legacy = r#"{"vertices":{},"tips":[],"voting_records":{},"last_checkpoint":null}"#;
+        let decoded: DagState = serde_json::from_str(legacy).unwrap();
+        assert!(decoded.vertices.is_empty());
+        assert!(decoded.voting_records.is_empty());
+    }
+
     #[tokio::test]
     async fn test_memory_store_vertices() {
         let store = MemoryStateStore::new();

@@ -1,4 +1,4 @@
-use qudag_network::{P2PEvent, P2PNetworkConfig, P2PNode};
+use qudag_network::{P2PEvent, P2PHandle, P2PNetworkConfig, P2PNode};
 use std::time::Duration;
 
 fn loopback_config() -> P2PNetworkConfig {
@@ -7,6 +7,21 @@ fn loopback_config() -> P2PNetworkConfig {
         enable_mdns: false,
         ..Default::default()
     }
+}
+
+/// Waits until `handle` reports a connection to `peer`
+async fn wait_for_peer(handle: &P2PHandle, peer: libp2p::PeerId) {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            match handle.next_event().await {
+                Some(P2PEvent::PeerConnected(p)) if p == peer => break,
+                Some(_) => continue,
+                None => panic!("event channel closed"),
+            }
+        }
+    })
+    .await
+    .expect("peer never connected");
 }
 
 #[tokio::test]
@@ -36,19 +51,11 @@ async fn test_node_connectivity() {
         // Connect node2 to node1
         handle2.dial(addr1).await.unwrap();
 
-        // Wait for the connection event on node1
-        tokio::time::timeout(Duration::from_secs(10), async {
-            loop {
-                match handle1.next_event().await {
-                    Some(P2PEvent::PeerConnected(peer)) if peer == peer2 => break,
-                    Some(_) => continue,
-                    None => panic!("node1 event channel closed"),
-                }
-            }
-        })
-        .await
-        .expect("node1 never saw node2 connect");
+        // Both sides report the connection (each event loop handles it on its own)
+        wait_for_peer(&handle1, peer2).await;
+        wait_for_peer(&handle2, peer1).await;
 
+        assert!(handle1.connected_peers().await.contains(&peer2));
         assert!(handle2.connected_peers().await.contains(&peer1));
     };
 

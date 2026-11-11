@@ -4,22 +4,67 @@
 //! connection management, message processing, routing, and peer discovery
 //! under high concurrency and contention scenarios.
 
-use bytes::Bytes;
 use qudag_network::{
-    connection::{ConnectionManager, SecureConfig, SecureConnection, TransportKeys},
-    message::{Message, MessageHeader, MessageType},
-    p2p::P2PManager,
-    peer::{PeerInfo, PeerManager, PeerStatus},
-    router::{Route, Router, RoutingTable},
-    types::{ConnectionStatus, NetworkError, NetworkMetrics, PeerId},
+    connection::ConnectionManager,
+    message::MessageQueue,
+    router::Router,
+    types::{
+        ConnectionStatus, MessagePriority, NetworkMessage, NetworkMetrics, PeerId, RoutingStrategy,
+    },
+    NetworkConfig, NetworkManager,
 };
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{Barrier, Mutex, RwLock, Semaphore};
+use tokio::sync::{Barrier, Mutex};
 use tokio::time::sleep;
+
+/// A data message carrying `payload`.
+fn data_message(id: String, payload: Vec<u8>) -> NetworkMessage {
+    NetworkMessage {
+        id,
+        source: vec![1; 32],
+        destination: vec![2; 32],
+        payload,
+        priority: MessagePriority::Normal,
+        ttl: Duration::from_secs(60),
+    }
+}
+
+/// A shared message queue whose enqueue notifications are drained by a
+/// background consumer. `MessageQueue::enqueue` awaits a bounded notification
+/// channel, so the receiver must be drained for sustained producers.
+fn shared_message_queue() -> Arc<MessageQueue> {
+    let (queue, mut notifications) = MessageQueue::new();
+    tokio::spawn(async move { while notifications.recv().await.is_some() {} });
+    Arc::new(queue)
+}
+
+/// An initialized peer manager. NAT traversal is disabled so the test does not
+/// probe real STUN/UPnP endpoints.
+async fn peer_manager(max_connections: usize) -> Arc<NetworkManager> {
+    let mut manager = NetworkManager::with_config(NetworkConfig {
+        max_connections,
+        enable_nat_traversal: false,
+        ..NetworkConfig::default()
+    });
+    manager.initialize().await.unwrap();
+    Arc::new(manager)
+}
+
+/// Waits for the manager's background event loop to settle on `expected`
+/// connected peers, returning the last observed count.
+async fn settled_peer_count(manager: &NetworkManager, expected: usize) -> usize {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let count = manager.get_connected_peers().await.len();
+        if count == expected || Instant::now() >= deadline {
+            return count;
+        }
+        sleep(Duration::from_millis(10)).await;
+    }
+}
 
 /// Test concurrent connection management operations
 #[tokio::test]
@@ -140,7 +185,7 @@ async fn test_concurrent_message_processing() {
     const NUM_CONSUMERS: usize = 5;
     const MESSAGES_PER_PRODUCER: usize = 100;
 
-    let message_queue = Arc::new(RwLock::new(Vec::<Message>::new()));
+    let message_queue = shared_message_queue();
     let processed_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let barrier = Arc::new(Barrier::new(NUM_PRODUCERS + NUM_CONSUMERS));
 
@@ -158,13 +203,13 @@ async fn test_concurrent_message_processing() {
 
             for i in 0..MESSAGES_PER_PRODUCER {
                 let message_data = format!("Producer {} message {}", producer_id, i);
-                let message = Message::new(MessageType::Data, message_data.into_bytes());
+                let message = data_message(
+                    format!("producer_{}_{}", producer_id, i),
+                    message_data.into_bytes(),
+                );
 
-                {
-                    let mut queue = queue_clone.write().await;
-                    queue.push(message);
-                    produced += 1;
-                }
+                queue_clone.enqueue(message).await.unwrap();
+                produced += 1;
 
                 // Small delay to create interleaving
                 if i % 20 == 0 {
@@ -192,14 +237,12 @@ async fn test_concurrent_message_processing() {
             let timeout = Duration::from_secs(10);
 
             while start_time.elapsed() < timeout {
-                let message_opt = {
-                    let mut queue = queue_clone.write().await;
-                    queue.pop()
-                };
+                let message_opt = queue_clone.dequeue().await;
 
-                if let Some(message) = message_opt {
+                if let Some(envelope) = message_opt {
                     // Simulate message processing
-                    let _payload = message.payload();
+                    assert!(envelope.verify(), "Dequeued message failed integrity check");
+                    let _payload = &envelope.message.payload;
                     consumed += 1;
                     count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 } else {
@@ -229,7 +272,7 @@ async fn test_concurrent_message_processing() {
     }
 
     let final_processed = processed_count.load(std::sync::atomic::Ordering::SeqCst);
-    let remaining_messages = message_queue.read().await.len();
+    let remaining_messages = message_queue.len().await;
 
     println!(
         "Total produced: {}, consumed: {}, processed counter: {}, remaining: {}",
@@ -258,7 +301,8 @@ async fn test_concurrent_peer_management() {
     const NUM_THREADS: usize = 15;
     const PEERS_PER_THREAD: usize = 20;
 
-    let peer_manager = Arc::new(PeerManager::new());
+    // Peers are managed through NetworkManager (connect / trust / disconnect).
+    let peer_manager = peer_manager(NUM_THREADS * PEERS_PER_THREAD).await;
     let barrier = Arc::new(Barrier::new(NUM_THREADS));
     let mut handles = Vec::new();
 
@@ -276,30 +320,15 @@ async fn test_concurrent_peer_management() {
 
             // Add peers
             for i in 0..PEERS_PER_THREAD {
-                let peer_id = PeerId::random();
-                let peer_info = PeerInfo {
-                    id: peer_id,
-                    address: SocketAddr::new(
-                        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                        8000 + (thread_id * 100 + i) as u16,
-                    ),
-                    status: PeerStatus::Connecting,
-                    last_seen: Instant::now(),
-                    reputation: 100,
-                };
+                let address = format!("127.0.0.1:{}", 8000 + thread_id * 100 + i);
 
-                if manager_clone.add_peer(peer_info).await.is_ok() {
+                if let Ok(peer_id) = manager_clone.connect_peer(&address).await {
                     added_peers += 1;
                     peer_list.push(peer_id);
 
-                    // Update status
-                    if manager_clone
-                        .update_peer_status(peer_id, PeerStatus::Connected)
-                        .await
-                        .is_ok()
-                    {
-                        status_updates += 1;
-                    }
+                    // Update status: promote the peer to trusted
+                    manager_clone.add_trusted_peer(peer_id).await;
+                    status_updates += 1;
                 }
 
                 // Yield occasionally
@@ -311,7 +340,7 @@ async fn test_concurrent_peer_management() {
             // Remove some peers
             let remove_count = peer_list.len() / 3;
             for peer_id in &peer_list[..remove_count] {
-                if manager_clone.remove_peer(peer_id).await.is_ok() {
+                if manager_clone.disconnect_peer(peer_id).await.is_ok() {
                     removed_peers += 1;
                 }
             }
@@ -338,8 +367,9 @@ async fn test_concurrent_peer_management() {
         total_removed += removed;
     }
 
-    let final_peer_count = peer_manager.peer_count().await;
     let expected_peers = total_added - total_removed;
+    // Peer connect/disconnect events are applied by the manager's event loop.
+    let final_peer_count = settled_peer_count(&peer_manager, expected_peers).await;
 
     println!(
         "Total: {} added, {} removed, {} status updates",
@@ -354,6 +384,11 @@ async fn test_concurrent_peer_management() {
         final_peer_count, expected_peers,
         "Final peer count should match expectations"
     );
+    assert_eq!(
+        peer_manager.get_network_stats().await.trusted_peers,
+        total_status_updates,
+        "Every status update should be recorded"
+    );
     assert!(total_added > 0, "Should add some peers");
 }
 
@@ -363,7 +398,10 @@ async fn test_concurrent_routing_operations() {
     const NUM_THREADS: usize = 12;
     const ROUTES_PER_THREAD: usize = 50;
 
-    let router = Arc::new(Router::new());
+    // Router keeps a peer set (add_peer) with per-peer hop info; it has no
+    // explicit route table and no peer removal, so the final count is every
+    // peer added.
+    let router = Arc::new(Router::new().await.unwrap());
     let barrier = Arc::new(Barrier::new(NUM_THREADS));
     let mut handles = Vec::new();
 
@@ -376,29 +414,25 @@ async fn test_concurrent_routing_operations() {
 
             let mut added_routes = 0;
             let mut found_routes = 0;
-            let mut removed_routes = 0;
-            let mut route_list = Vec::new();
 
             // Add routes
             for i in 0..ROUTES_PER_THREAD {
                 let destination = PeerId::random();
-                let next_hop = PeerId::random();
-                let cost = thread_rng().gen_range(1..100);
 
-                let route = Route {
-                    destination,
-                    next_hop,
-                    cost,
-                    timestamp: Instant::now(),
-                };
+                router_clone.add_peer(destination).await;
+                added_routes += 1;
 
-                if router_clone.add_route(route).await.is_ok() {
-                    added_routes += 1;
-                    route_list.push(destination);
-                }
-
-                // Test route lookup
-                if let Some(_route) = router_clone.find_route(&destination).await {
+                // Test route lookup: the peer is known and directly routable
+                let message = data_message(format!("route_{}_{}", thread_id, i), vec![0; 16]);
+                let direct = router_clone
+                    .route(
+                        &message,
+                        RoutingStrategy::Direct(destination.to_bytes().to_vec()),
+                    )
+                    .await;
+                if router_clone.get_hop_info(&destination).await.is_ok()
+                    && direct.ok() == Some(vec![destination])
+                {
                     found_routes += 1;
                 }
 
@@ -408,15 +442,7 @@ async fn test_concurrent_routing_operations() {
                 }
             }
 
-            // Remove some routes
-            let remove_count = route_list.len() / 2;
-            for destination in &route_list[..remove_count] {
-                if router_clone.remove_route(destination).await.is_ok() {
-                    removed_routes += 1;
-                }
-            }
-
-            (thread_id, added_routes, found_routes, removed_routes)
+            (thread_id, added_routes, found_routes)
         });
 
         handles.push(handle);
@@ -425,25 +451,30 @@ async fn test_concurrent_routing_operations() {
     // Collect results
     let mut total_added = 0;
     let mut total_found = 0;
-    let mut total_removed = 0;
 
     for handle in handles {
-        let (thread_id, added, found, removed) = handle.await.unwrap();
+        let (thread_id, added, found) = handle.await.unwrap();
         println!(
-            "Thread {}: {} routes added, {} found, {} removed",
-            thread_id, added, found, removed
+            "Thread {}: {} routes added, {} found",
+            thread_id, added, found
         );
         total_added += added;
         total_found += found;
-        total_removed += removed;
     }
 
-    let final_route_count = router.route_count().await;
-    let expected_routes = total_added - total_removed;
+    let final_route_count = router
+        .route(
+            &data_message("count".into(), vec![]),
+            RoutingStrategy::Flood,
+        )
+        .await
+        .unwrap()
+        .len();
+    let expected_routes = total_added;
 
     println!(
-        "Total: {} added, {} found, {} removed, final count: {}",
-        total_added, total_found, total_removed, final_route_count
+        "Total: {} added, {} found, final count: {}",
+        total_added, total_found, final_route_count
     );
 
     assert_eq!(
@@ -576,9 +607,9 @@ async fn test_network_high_concurrency_stress() {
     const STRESS_DURATION_SECS: u64 = 10;
 
     let connection_manager = Arc::new(ConnectionManager::new(500));
-    let peer_manager = Arc::new(PeerManager::new());
-    let router = Arc::new(Router::new());
-    let message_queue = Arc::new(RwLock::new(Vec::<Message>::new()));
+    let peer_manager = peer_manager(1_000_000).await;
+    let router = Arc::new(Router::new().await.unwrap());
+    let message_queue = shared_message_queue();
 
     let start_time = Instant::now();
     let end_time = start_time + Duration::from_secs(STRESS_DURATION_SECS);
@@ -625,23 +656,15 @@ async fn test_network_high_concurrency_stress() {
 
             while Instant::now() < end_time {
                 // Produce messages
-                let message = Message::new(
-                    MessageType::Data,
+                let message = data_message(
+                    format!("stress_{}_{}", thread_id, operations),
                     format!("stress_message_{}", operations).into_bytes(),
                 );
 
-                {
-                    let mut queue = queue_clone.write().await;
-                    queue.push(message);
-                }
+                queue_clone.enqueue(message).await.unwrap();
 
                 // Consume messages
-                {
-                    let mut queue = queue_clone.write().await;
-                    if !queue.is_empty() {
-                        queue.remove(0);
-                    }
-                }
+                let _ = queue_clone.dequeue().await;
 
                 operations += 2; // One produce, one consume
 
@@ -667,19 +690,9 @@ async fn test_network_high_concurrency_stress() {
             while Instant::now() < end_time {
                 if operations % 3 == 0 {
                     // Add peer
-                    let peer_id = PeerId::random();
-                    let peer_info = PeerInfo {
-                        id: peer_id,
-                        address: SocketAddr::new(
-                            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                            8000 + thread_rng().gen_range(0..1000),
-                        ),
-                        status: PeerStatus::Connected,
-                        last_seen: Instant::now(),
-                        reputation: 100,
-                    };
+                    let address = format!("127.0.0.1:{}", 8000 + thread_rng().gen_range(0..1000));
 
-                    if manager_clone.add_peer(peer_info).await.is_ok() {
+                    if let Ok(peer_id) = manager_clone.connect_peer(&address).await {
                         peers.push(peer_id);
                     }
                 } else if !peers.is_empty() {
@@ -688,13 +701,9 @@ async fn test_network_high_concurrency_stress() {
                     let peer_id = peers[index];
 
                     if operations % 2 == 0 {
-                        let _ = manager_clone
-                            .update_peer_status(peer_id, PeerStatus::Disconnected)
-                            .await;
-                    } else {
-                        if manager_clone.remove_peer(&peer_id).await.is_ok() {
-                            peers.remove(index);
-                        }
+                        manager_clone.add_trusted_peer(peer_id).await;
+                    } else if manager_clone.disconnect_peer(&peer_id).await.is_ok() {
+                        peers.remove(index);
                     }
                 }
 
@@ -739,9 +748,18 @@ async fn test_network_high_concurrency_stress() {
         "  Final connections: {}",
         connection_manager.connection_count()
     );
-    println!("  Final peers: {}", peer_manager.peer_count().await);
-    println!("  Final routes: {}", router.route_count().await);
-    println!("  Remaining messages: {}", message_queue.read().await.len());
+    let final_peers = peer_manager.get_connected_peers().await.len();
+    let final_routes = router
+        .route(
+            &data_message("count".into(), vec![]),
+            RoutingStrategy::Flood,
+        )
+        .await
+        .unwrap()
+        .len();
+    println!("  Final peers: {}", final_peers);
+    println!("  Final routes: {}", final_routes);
+    println!("  Remaining messages: {}", message_queue.len().await);
 
     // Performance assertions
     assert!(total_operations > 0, "Should complete some operations");
@@ -752,8 +770,8 @@ async fn test_network_high_concurrency_stress() {
 
     // State consistency assertions
     assert!(connection_manager.connection_count() >= 0);
-    assert!(peer_manager.peer_count().await >= 0);
-    assert!(router.route_count().await >= 0);
+    assert!(final_peers >= 0);
+    assert!(final_routes >= 0);
 }
 
 /// Test thread-safe data structure consistency
@@ -828,7 +846,7 @@ async fn test_thread_safe_data_structures() {
                 }
             }
 
-            (format!("Writer_{}", writer_id), operations)
+            (format!("Writer_{}", writer_id), operations, None)
         });
 
         handles.push(handle);
@@ -857,14 +875,15 @@ async fn test_thread_safe_data_structures() {
                 let count_after = manager_clone.connection_count();
                 let metrics_after = manager_clone.get_metrics();
 
-                // Verify metrics consistency
-                if metrics_after.active_connections == count_after {
+                // Verify metrics consistency: `connections` tracks every entry
+                // (connection_count); `active_connections` counts healthy ones only.
+                if metrics_after.connections == count_after {
                     consistency_checks += 1;
                 } else {
                     check_clone.store(false, std::sync::atomic::Ordering::SeqCst);
                     eprintln!(
-                        "Reader {}: Metrics inconsistency - active: {}, count: {}",
-                        reader_id, metrics_after.active_connections, count_after
+                        "Reader {}: Metrics inconsistency - tracked: {}, count: {}",
+                        reader_id, metrics_after.connections, count_after
                     );
                 }
 
@@ -878,7 +897,7 @@ async fn test_thread_safe_data_structures() {
             (
                 format!("Reader_{}", reader_id),
                 operations,
-                consistency_checks,
+                Some(consistency_checks),
             )
         });
 
@@ -892,7 +911,7 @@ async fn test_thread_safe_data_structures() {
     for handle in handles {
         let result = handle.await.unwrap();
         match result {
-            (name, ops, checks) => {
+            (name, ops, Some(checks)) => {
                 println!(
                     "{}: {} operations, {} consistency checks",
                     name, ops, checks
@@ -900,7 +919,7 @@ async fn test_thread_safe_data_structures() {
                 total_operations += ops;
                 total_consistency_checks += checks;
             }
-            (name, ops) => {
+            (name, ops, None) => {
                 println!("{}: {} operations", name, ops);
                 total_operations += ops;
             }

@@ -1,16 +1,20 @@
 use qudag_network::{
     ConnectionManager, ConnectionStatus, MessagePriority, NetworkError, NetworkMessage, PeerId,
-    Router, RoutingStrategy, SecureConfig, SecureConnection, TransportKeys,
+    Router, RoutingStrategy,
 };
-use quinn::{Endpoint, ServerConfig};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 use tokio::time::timeout;
 
 /// Test malformed message handling
 #[tokio::test]
 async fn test_malformed_message_handling() {
-    let router = Router::new();
+    let router = Router::new().await.unwrap();
+
+    // Anonymous routing needs at least `hops` known peers besides source and
+    // destination; register some so the malformed fields are what is exercised.
+    for _ in 0..5 {
+        router.add_peer(PeerId::random()).await;
+    }
 
     // Test with invalid source ID format
     let invalid_msg = NetworkMessage {
@@ -75,10 +79,9 @@ async fn test_network_timeouts() {
 
     // Test status update timeout
     let start = std::time::Instant::now();
-    let result = timeout(
-        Duration::from_millis(100),
-        manager.update_status(peer_id, ConnectionStatus::Connected),
-    )
+    let result = timeout(Duration::from_millis(100), async {
+        manager.update_status(peer_id, ConnectionStatus::Connected)
+    })
     .await;
     let elapsed = start.elapsed();
 
@@ -98,20 +101,30 @@ async fn test_connection_pool_overflow() {
         peers.push(peer_id);
 
         let result = manager.connect(peer_id).await;
-        assert!(result.is_ok()); // Should not fail, just apply limits
+        // The manager enforces its limit by rejecting connects beyond
+        // max_connections instead of silently accepting them.
+        if i < 3 {
+            assert!(result.is_ok());
+        } else {
+            assert!(
+                matches!(result, Err(NetworkError::ConnectionError(_))),
+                "connect beyond the limit should be rejected, got {:?}",
+                result
+            );
+        }
 
         // Check that pool doesn't exceed max size
-        let count = manager.connection_count().await;
+        let count = manager.connection_count();
         assert!(count <= 3, "Pool size {} exceeds limit", count);
     }
 
     // Test pool cleanup under pressure
     for peer in peers.iter().take(5) {
-        manager.disconnect(peer).await;
+        manager.disconnect(peer);
     }
 
     // Verify pool was cleaned up
-    let final_count = manager.connection_count().await;
+    let final_count = manager.connection_count();
     assert!(final_count <= 3);
 }
 
@@ -127,22 +140,27 @@ async fn test_rapid_connection_cycles() {
         assert!(result.is_ok());
 
         if i % 2 == 0 {
-            manager
-                .update_status(peer_id, ConnectionStatus::Connected)
-                .await;
-            manager.disconnect(&peer_id).await;
+            manager.update_status(peer_id, ConnectionStatus::Connected);
+            manager.disconnect(&peer_id);
         }
     }
 
-    // Verify final state is consistent
-    let final_status = manager.get_status(&peer_id).await;
-    assert!(final_status.is_none() || matches!(final_status, Some(ConnectionStatus::Disconnected)));
+    // Verify final state is consistent. The last iteration (i = 99) is odd, so
+    // it connects without disconnecting: the peer ends up connected exactly once.
+    let final_status = manager.get_status(&peer_id);
+    assert_eq!(final_status, Some(ConnectionStatus::Connected));
+    assert_eq!(manager.connection_count(), 1);
+
+    // A final disconnect leaves no connection behind
+    manager.disconnect(&peer_id);
+    assert!(manager.get_status(&peer_id).is_none());
+    assert_eq!(manager.connection_count(), 0);
 }
 
 /// Test routing with insufficient peers
 #[tokio::test]
 async fn test_insufficient_peers_routing() {
-    let router = Router::new();
+    let router = Router::new().await.unwrap();
 
     // Add only one peer
     let peer1 = PeerId::random();
@@ -170,13 +188,14 @@ async fn test_insufficient_peers_routing() {
             // If it succeeds, should be limited by available peers
             assert!(route.len() <= 1);
         }
+        Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
 
 /// Test zero-length message handling
 #[tokio::test]
 async fn test_zero_length_messages() {
-    let router = Router::new();
+    let router = Router::new().await.unwrap();
     let peer_id = PeerId::random();
     router.add_peer(peer_id).await;
 
@@ -198,7 +217,7 @@ async fn test_zero_length_messages() {
 /// Test concurrent routing operations
 #[tokio::test]
 async fn test_concurrent_routing() {
-    let router = Router::new();
+    let router = Router::new().await.unwrap();
 
     // Add test peers
     for _ in 0..10 {
@@ -263,24 +282,24 @@ async fn test_memory_pressure() {
     }
 
     // Update metrics to track memory usage
-    manager.update_metrics(1000.0, 50).await;
+    manager.update_metrics(1000.0, 50);
 
-    let metrics = manager.get_metrics().await;
+    let metrics = manager.get_metrics();
     assert!(metrics.connections <= 1000);
 
     // Cleanup - disconnect all peers
     for peer in &peers {
-        manager.disconnect(peer).await;
+        manager.disconnect(peer);
     }
 
-    let final_count = manager.connection_count().await;
+    let final_count = manager.connection_count();
     assert_eq!(final_count, 0);
 }
 
 /// Test invalid routing strategies
 #[tokio::test]
 async fn test_invalid_routing_strategies() {
-    let router = Router::new();
+    let router = Router::new().await.unwrap();
     let peer_id = PeerId::random();
     router.add_peer(peer_id).await;
 
@@ -317,39 +336,33 @@ async fn test_network_partition_recovery() {
         let peer_id = PeerId::random();
         peers.push(peer_id);
         manager.connect(peer_id).await.unwrap();
-        manager
-            .update_status(peer_id, ConnectionStatus::Connected)
-            .await;
+        manager.update_status(peer_id, ConnectionStatus::Connected);
     }
 
     // Simulate network partition - disconnect half
     for peer in peers.iter().take(2) {
-        manager
-            .update_status(*peer, ConnectionStatus::Failed("Network partition".into()))
-            .await;
-        manager.disconnect(peer).await;
+        manager.update_status(*peer, ConnectionStatus::Failed("Network partition".into()));
+        manager.disconnect(peer);
     }
 
     // Verify remaining connections
-    let remaining_count = manager.connection_count().await;
+    let remaining_count = manager.connection_count();
     assert!(remaining_count >= 3);
 
     // Simulate partition recovery - reconnect
     for peer in peers.iter().take(2) {
         manager.connect(*peer).await.unwrap();
-        manager
-            .update_status(*peer, ConnectionStatus::Connected)
-            .await;
+        manager.update_status(*peer, ConnectionStatus::Connected);
     }
 
-    let final_count = manager.connection_count().await;
+    let final_count = manager.connection_count();
     assert!(final_count >= 5);
 }
 
 /// Test hop information consistency
 #[tokio::test]
 async fn test_hop_info_consistency() {
-    let router = Router::new();
+    let router = Router::new().await.unwrap();
 
     // Add peers and create route
     let peers: Vec<_> = (0..5).map(|_| PeerId::random()).collect();
@@ -372,24 +385,35 @@ async fn test_hop_info_consistency() {
         .await
         .unwrap();
 
-    // Verify hop information consistency
-    for (i, peer_id) in route.iter().enumerate() {
+    // Since dfc91b5 anonymous routes are ML-KEM onion circuits whose hops are
+    // directory node ids, not entries of the router's hop table. Check what the
+    // circuit guarantees: the requested hop count, without source/destination.
+    assert_eq!(route.len(), 3);
+    assert!(!route.contains(&peers[0]));
+    assert!(!route.contains(&peers[4]));
+
+    // Verify hop information consistency for every peer the router knows: each
+    // has hop info and can decrypt every layer position of the route.
+    for (p, peer_id) in peers.iter().enumerate() {
         let hop_info = router.get_hop_info(peer_id).await;
-        assert!(hop_info.is_ok(), "Missing hop info for peer {}", i);
+        assert!(hop_info.is_ok(), "Missing hop info for peer {}", p);
 
         let info = hop_info.unwrap();
-        assert!(
-            info.can_decrypt_layer(i),
-            "Peer {} cannot decrypt its own layer",
-            i
-        );
+        for i in 0..route.len() {
+            assert!(
+                info.can_decrypt_layer(i),
+                "Peer {} cannot decrypt layer {}",
+                p,
+                i
+            );
+        }
     }
 }
 
 /// Test extreme message sizes
 #[tokio::test]
 async fn test_extreme_message_sizes() {
-    let router = Router::new();
+    let router = Router::new().await.unwrap();
     let peer_id = PeerId::random();
     router.add_peer(peer_id).await;
 
@@ -430,32 +454,27 @@ async fn test_connection_status_transitions() {
     let manager = ConnectionManager::new(10);
     let peer_id = PeerId::random();
 
-    // Test valid status transitions
+    // Test valid status transitions. connect() completes the (simulated)
+    // handshake before returning, so the peer is already Connected.
     manager.connect(peer_id).await.unwrap();
-    let status = manager.get_status(&peer_id).await;
-    assert_eq!(status, Some(ConnectionStatus::Connecting));
-
-    manager
-        .update_status(peer_id, ConnectionStatus::Connected)
-        .await;
-    let status = manager.get_status(&peer_id).await;
+    let status = manager.get_status(&peer_id);
     assert_eq!(status, Some(ConnectionStatus::Connected));
 
-    manager
-        .update_status(peer_id, ConnectionStatus::Disconnecting)
-        .await;
-    let status = manager.get_status(&peer_id).await;
+    manager.update_status(peer_id, ConnectionStatus::Connected);
+    let status = manager.get_status(&peer_id);
+    assert_eq!(status, Some(ConnectionStatus::Connected));
+
+    manager.update_status(peer_id, ConnectionStatus::Disconnecting);
+    let status = manager.get_status(&peer_id);
     assert_eq!(status, Some(ConnectionStatus::Disconnecting));
 
-    manager.disconnect(&peer_id).await;
-    let status = manager.get_status(&peer_id).await;
+    manager.disconnect(&peer_id);
+    let status = manager.get_status(&peer_id);
     assert!(status.is_none());
 
     // Test failure transition
     manager.connect(peer_id).await.unwrap();
-    manager
-        .update_status(peer_id, ConnectionStatus::Failed("Test failure".into()))
-        .await;
-    let status = manager.get_status(&peer_id).await;
+    manager.update_status(peer_id, ConnectionStatus::Failed("Test failure".into()));
+    let status = manager.get_status(&peer_id);
     assert!(matches!(status, Some(ConnectionStatus::Failed(_))));
 }

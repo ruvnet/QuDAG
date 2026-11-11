@@ -63,7 +63,7 @@ zstd = "0.13"
 
 [dev-dependencies]
 proptest.workspace = true
-criterion.workspace = true
+criterion = { workspace = true, features = ["async_tokio"] }
 tokio-test.workspace = true
 tracing-subscriber = "0.3"
 mockito = "1"

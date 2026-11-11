@@ -210,8 +210,8 @@ fn benchmark_config_creation(c: &mut Criterion) {
                 enable_relay: black_box(true),
                 enable_ipv6: black_box(true),
                 stun_servers: vec![
-                    StunServer::new("stun1.l.google.com:19302".parse().unwrap(), 1),
-                    StunServer::new("stun2.l.google.com:19302".parse().unwrap(), 2),
+                    StunServer::new("192.0.2.1:19302".parse().unwrap(), 1),
+                    StunServer::new("192.0.2.2:19302".parse().unwrap(), 2),
                 ],
                 turn_servers: vec![],
                 max_relay_connections: black_box(50),

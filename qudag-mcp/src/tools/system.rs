@@ -13,6 +13,12 @@ pub struct SystemTool {
     description: String,
 }
 
+impl Default for SystemTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SystemTool {
     /// Create a new system tool
     pub fn new() -> Self {

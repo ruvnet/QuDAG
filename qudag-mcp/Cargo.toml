@@ -57,3 +57,8 @@ gethostname = "0.4"
 proptest.workspace = true
 tokio-test = "0.4"
 tempfile = "3.8"
+criterion = { workspace = true, features = ["async_tokio"] }
+
+[[bench]]
+name = "performance"
+harness = false

@@ -415,7 +415,6 @@ impl TransportFactory {
 /// Mock HTTP server transport for server mode
 pub struct HttpServerTransport {
     connected: bool,
-    message_queue: std::collections::VecDeque<MCPMessage>,
 }
 
 impl Default for HttpServerTransport {
@@ -426,10 +425,7 @@ impl Default for HttpServerTransport {
 
 impl HttpServerTransport {
     pub fn new() -> Self {
-        Self {
-            connected: true,
-            message_queue: std::collections::VecDeque::new(),
-        }
+        Self { connected: true }
     }
 }
 

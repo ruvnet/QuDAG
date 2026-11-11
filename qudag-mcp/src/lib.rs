@@ -15,17 +15,17 @@
 //!
 //! ## Quick Start
 //!
-//! ```rust
-//! use qudag_mcp::{McpServer, Config, Transport};
+//! ```rust,no_run
+//! use qudag_mcp::{QuDAGMCPServer, ServerConfig, TransportConfig};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let config = Config::builder()
-//!         .transport(Transport::Http { port: 8080 })
-//!         .vault_path("/path/to/vault")
-//!         .build()?;
-//!     
-//!     let server = McpServer::new(config).await?;
+//!     // Serve MCP over stdio (JSON-RPC 2.0, one message per line)
+//!     let config = ServerConfig::new()
+//!         .with_server_info("my-qudag-mcp", "1.0.0")
+//!         .with_transport(TransportConfig::Stdio);
+//!
+//!     let mut server = QuDAGMCPServer::new(config).await?;
 //!     server.run().await?;
 //!     Ok(())
 //! }
@@ -51,10 +51,10 @@ pub mod server;
 pub mod transport;
 pub mod types;
 
-// Internal modules
-mod protocol;
-mod resources;
-mod tools;
+// Protocol, resource and tool modules (their types appear in public signatures)
+pub mod protocol;
+pub mod resources;
+pub mod tools;
 
 // Public re-exports
 pub use config::{

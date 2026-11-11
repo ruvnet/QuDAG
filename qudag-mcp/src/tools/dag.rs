@@ -12,6 +12,12 @@ pub struct DagTool {
     description: String,
 }
 
+impl Default for DagTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DagTool {
     /// Create a new DAG tool
     pub fn new() -> Self {

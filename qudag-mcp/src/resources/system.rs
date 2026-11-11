@@ -17,6 +17,12 @@ pub struct SystemStatusResource {
     description: Option<String>,
 }
 
+impl Default for SystemStatusResource {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SystemStatusResource {
     /// Create a new system status resource
     pub fn new() -> Self {

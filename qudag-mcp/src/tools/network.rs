@@ -12,6 +12,12 @@ pub struct NetworkTool {
     description: String,
 }
 
+impl Default for NetworkTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NetworkTool {
     /// Create a new network tool
     pub fn new() -> Self {

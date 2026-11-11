@@ -3,7 +3,8 @@
 //! This example demonstrates how to create and run a basic MCP server
 //! that exposes QuDAG's DAG, crypto, network, and vault capabilities.
 
-use qudag_mcp::*;
+use qudag_mcp::{resources, tools, transport};
+use qudag_mcp::{QuDAGMCPServer, ResourceURI, ServerConfig, ToolName, ToolResultContent};
 use std::io::{self, Write};
 
 #[tokio::main]
@@ -38,9 +39,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // List available tools
     println!("\n🔧 Available Tools:");
     let tool_registry = tools::ToolRegistry::new();
-    let tools = tool_registry.list_tools();
+    let tools = tool_registry.list_tools().await?;
     for tool in tools {
-        println!("  - {}: {}", tool.name.as_str(), tool.description);
+        println!("  - {}: {}", tool.name, tool.description);
     }
 
     // List available resources
@@ -55,27 +56,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Demonstrate tool execution
     println!("\n🎯 Demonstrating Tool Execution:");
 
-    // Execute DAG tips tool
+    // Execute DAG tips operation
     let tips_result = tool_registry
-        .call_tool(&ToolName::new("dag_get_tips"), None)
+        .call_tool(
+            &ToolName::new("dag"),
+            Some(serde_json::json!({"operation": "tips"})),
+        )
         .await?;
 
     if let ToolResultContent::Text { text } = &tips_result.content[0] {
         let tips_data: serde_json::Value = serde_json::from_str(text)?;
         println!(
             "  DAG Tips: {} tips found",
-            tips_data["count"].as_u64().unwrap_or(0)
+            tips_data["tips"].as_array().map_or(0, |tips| tips.len())
         );
     }
 
     // Execute crypto key generation
     let keygen_args = serde_json::json!({
-        "algorithm": "ml-kem",
-        "security_level": 3
+        "operation": "generateKeypair",
+        "algorithm": "ml-kem-768"
     });
 
     let keygen_result = tool_registry
-        .call_tool(&ToolName::new("crypto_generate_keypair"), Some(keygen_args))
+        .call_tool(&ToolName::new("crypto"), Some(keygen_args))
         .await?;
 
     if let ToolResultContent::Text { text } = &keygen_result.content[0] {
@@ -89,29 +93,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Demonstrate resource access
     println!("\n📊 Demonstrating Resource Access:");
 
-    // Read DAG statistics
-    let dag_stats_uri = ResourceURI::dag("stats/summary");
+    // Read DAG state
+    let dag_stats_uri = ResourceURI::new("dag://state");
     let dag_stats = resource_registry.read_resource(&dag_stats_uri).await?;
 
     if let Some(text) = &dag_stats[0].text {
         let stats_data: serde_json::Value = serde_json::from_str(text)?;
         println!(
             "  DAG Stats: {} total vertices",
-            stats_data["total_vertices"].as_u64().unwrap_or(0)
+            stats_data["dag_info"]["vertex_count"].as_u64().unwrap_or(0)
         );
     }
 
-    // Read crypto algorithms
-    let crypto_uri = ResourceURI::crypto("algorithms/supported");
-    let crypto_data = resource_registry.read_resource(&crypto_uri).await?;
+    // Read network peers
+    let peers_uri = ResourceURI::new("network://peers");
+    let peers_data = resource_registry.read_resource(&peers_uri).await?;
 
-    if let Some(text) = &crypto_data[0].text {
-        let crypto_info: serde_json::Value = serde_json::from_str(text)?;
-        if let Some(algorithms) = crypto_info["algorithms"].as_array() {
-            println!(
-                "  Crypto Algorithms: {} quantum-resistant algorithms supported",
-                algorithms.len()
-            );
+    if let Some(text) = &peers_data[0].text {
+        let network_info: serde_json::Value = serde_json::from_str(text)?;
+        if let Some(peers) = network_info["peers"].as_array() {
+            println!("  Network: {} peers known", peers.len());
         }
     }
 

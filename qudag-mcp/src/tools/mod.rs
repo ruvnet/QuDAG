@@ -118,7 +118,7 @@ impl Default for ToolRegistry {
 
 /// Trait for MCP tools
 #[async_trait]
-pub trait McpTool {
+pub trait McpTool: Send + Sync {
     /// Get the tool name
     fn name(&self) -> &str;
 

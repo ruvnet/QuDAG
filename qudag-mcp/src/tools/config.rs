@@ -12,6 +12,12 @@ pub struct ConfigTool {
     description: String,
 }
 
+impl Default for ConfigTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConfigTool {
     /// Create a new config tool
     pub fn new() -> Self {

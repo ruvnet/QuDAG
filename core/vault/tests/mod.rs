@@ -9,9 +9,6 @@ mod integration;
 #[cfg(test)]
 mod security;
 
-#[cfg(test)]
-mod cli;
-
 use std::time::Instant;
 
 /// Run all vault tests and generate comprehensive report

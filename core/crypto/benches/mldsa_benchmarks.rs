@@ -2,6 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use qudag_crypto::ml_dsa::MlDsa;
 use rand::thread_rng;
 use std::alloc::{GlobalAlloc, Layout, System};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
 #[global_allocator]
@@ -9,28 +10,33 @@ static ALLOCATOR: MemoryTracker = MemoryTracker;
 
 struct MemoryTracker;
 
-static mut MEMORY_USAGE: usize = 0;
+// Bytes currently allocated, and the value at the last reset. Atomics (not a
+// `static mut`) because criterion allocates from several threads, and a reset
+// records a baseline instead of zeroing, so frees of earlier allocations cannot
+// underflow the counter.
+static MEMORY_USAGE: AtomicUsize = AtomicUsize::new(0);
+static MEMORY_BASELINE: AtomicUsize = AtomicUsize::new(0);
 
 unsafe impl GlobalAlloc for MemoryTracker {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        MEMORY_USAGE += layout.size();
+        MEMORY_USAGE.fetch_add(layout.size(), Ordering::Relaxed);
         System.alloc(layout)
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        MEMORY_USAGE -= layout.size();
+        MEMORY_USAGE.fetch_sub(layout.size(), Ordering::Relaxed);
         System.dealloc(ptr, layout)
     }
 }
 
 fn reset_memory_usage() {
-    unsafe {
-        MEMORY_USAGE = 0;
-    }
+    MEMORY_BASELINE.store(MEMORY_USAGE.load(Ordering::Relaxed), Ordering::Relaxed);
 }
 
 fn get_memory_usage() -> usize {
-    unsafe { MEMORY_USAGE }
+    MEMORY_USAGE
+        .load(Ordering::Relaxed)
+        .saturating_sub(MEMORY_BASELINE.load(Ordering::Relaxed))
 }
 
 fn benchmark_sign_verify(c: &mut Criterion) {

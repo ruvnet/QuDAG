@@ -664,30 +664,3 @@ mod tests {
         assert!(!MockPeerManager::validate_address("example.com:99999"));
     }
 }
-
-/// Performance benchmarks for peer operations
-#[cfg(all(test, not(debug_assertions)))]
-mod bench {
-    use super::*;
-    use criterion::{black_box, Criterion};
-
-    fn bench_peer_add(c: &mut Criterion) {
-        c.bench_function("peer_add", |b| {
-            b.iter(|| {
-                let mut cmd = Command::cargo_bin("qudag").unwrap();
-                cmd.args(&["peer", "add", black_box("192.168.1.100:8000")])
-                    .output()
-                    .unwrap();
-            });
-        });
-    }
-
-    fn bench_peer_list(c: &mut Criterion) {
-        c.bench_function("peer_list", |b| {
-            b.iter(|| {
-                let mut cmd = Command::cargo_bin("qudag").unwrap();
-                cmd.args(&["peer", "list"]).output().unwrap();
-            });
-        });
-    }
-}

@@ -60,7 +60,9 @@ pub use address_stubs as address;
 #[cfg(feature = "vault")]
 pub mod vault;
 
-#[cfg(feature = "wee_alloc")]
+// wee_alloc is a wasm32-only allocator: installing it on a native target (for example
+// with `--all-features`) crashes the process on startup.
+#[cfg(all(feature = "wee_alloc", target_arch = "wasm32"))]
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 

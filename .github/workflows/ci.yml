@@ -80,12 +80,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ matrix.rust }}-cargo-build-
             
+      # bash on every OS: the default Windows shell (pwsh) only reports the exit code of
+      # the LAST command, which hid failures of earlier commands in the same step.
       - name: Run tests
-        run: |
-          cargo test --workspace --all-features
-          cargo test --workspace --all-features --release
+        shell: bash
+        run: cargo test --workspace --all-features --no-fail-fast
         env:
           RUST_MIN_STACK: 8388608  # 8MB stack for quantum crypto operations
+
+      - name: Run tests (release)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: cargo test --workspace --all-features --release --no-fail-fast
+        env:
+          RUST_MIN_STACK: 8388608
           
       - name: Run doc tests
         run: cargo test --doc --workspace

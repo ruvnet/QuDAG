@@ -162,6 +162,12 @@ mod tests {
         let semaphore = Arc::new(Semaphore::new(10)); // Max 10 concurrent validations
         let mut handles = vec![];
 
+        // A 5ms sleep takes ~15ms on Windows (coarse timer), so calibrate the unit
+        // of work on this platform instead of assuming 5ms.
+        let calibrate = Instant::now();
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        let unit = calibrate.elapsed().max(Duration::from_millis(5));
+
         let start = Instant::now();
 
         // Spawn 100 validation tasks
@@ -184,8 +190,14 @@ mod tests {
 
         let elapsed = start.elapsed();
 
-        // Should take ~50ms (100 tasks / 10 concurrent * 5ms each)
-        assert!(elapsed < Duration::from_millis(100));
+        // 100 tasks / 10 concurrent = ~10 sequential units. Serial execution would take
+        // 100 units, so allowing 30 still proves the semaphore admits 10 at a time.
+        assert!(
+            elapsed < unit * 30,
+            "100 tasks took {:?} with a unit of {:?}",
+            elapsed,
+            unit
+        );
         assert_eq!(results.len(), 100);
 
         println!("Concurrent validation:");

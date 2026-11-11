@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="140" viewBox="0 0 640 140" role="img" aria-label="ML-KEM round trip: Alice encapsulates to Bob's public key, Bob decapsulates the ciphertext, both hold the same 32-byte secret">
+  <style>
+    text{font:14px ui-monospace,Menlo,Consolas,monospace;fill:#1f2937}
+    .box{fill:#eef2ff;stroke:#4f46e5;stroke-width:2;rx:10}
+    .pkt{fill:#4f46e5}
+    .key{fill:#059669;opacity:0;animation:show 4s infinite}
+    @keyframes move{0%{transform:translateX(0)}50%,100%{transform:translateX(330px)}}
+    @keyframes show{0%,55%{opacity:0}65%,95%{opacity:1}100%{opacity:0}}
+    .m{animation:move 4s infinite ease-in-out}
+  </style>
+  <rect class="box" x="20" y="30" width="160" height="70"/>
+  <text x="38" y="60">Alice</text><text x="38" y="84">encapsulate(pk)</text>
+  <rect class="box" x="460" y="30" width="160" height="70"/>
+  <text x="478" y="60">Bob</text><text x="478" y="84">decapsulate(sk,ct)</text>
+  <g class="m"><rect class="pkt" x="195" y="52" width="70" height="26" rx="6"/><text x="203" y="70" style="fill:#fff">ct 1088B</text></g>
+  <g class="key"><text x="40" y="128">shared secret 32B</text><text x="470" y="128">shared secret 32B  ==</text></g>
+</svg>

@@ -1,0 +1,62 @@
+{
+  "name": "@qudag/napi-core",
+  "version": "0.1.1",
+  "description": "Post-quantum ML-KEM-768 key exchange, ML-DSA signatures, HQC keygen and a QuDAG DAG as Rust N-API bindings for Node.js (Linux x64/arm64, glibc 2.34+).",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "napi": {
+    "name": "qudag-napi-core",
+    "triples": {
+      "defaults": false,
+      "additional": [
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "test": "node --test __test__/crypto.test.mjs"
+  },
+  "optionalDependencies": {
+    "@qudag/napi-core-linux-x64-gnu": "0.1.1",
+    "@qudag/napi-core-linux-arm64-gnu": "0.1.1"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "2.18.4"
+  },
+  "engines": {
+    "node": ">= 18"
+  },
+  "homepage": "https://ruv.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ruvnet/QuDAG.git",
+    "directory": "packages/napi-core"
+  },
+  "bugs": {
+    "url": "https://github.com/ruvnet/QuDAG/issues"
+  },
+  "keywords": [
+    "post-quantum",
+    "ml-kem",
+    "ml-dsa",
+    "kyber",
+    "dilithium",
+    "hqc",
+    "key-encapsulation",
+    "digital-signature",
+    "dag",
+    "qudag",
+    "napi",
+    "rust"
+  ],
+  "author": "rUv <ruv@ruv.net>",
+  "license": "MIT OR Apache-2.0"
+}

@@ -199,8 +199,9 @@ impl CircuitBreaker {
                 // Check if timeout has passed
                 let elapsed = self.state_changed_at.read().elapsed();
                 if elapsed >= self.config.timeout {
-                    // Transition to half-open
+                    // Transition to half-open; this request is the first probe
                     self.transition_to_half_open();
+                    self.half_open_requests.fetch_add(1, Ordering::Release);
                     true
                 } else {
                     // Increment rejected count
@@ -585,6 +586,7 @@ impl Clone for CircuitBreakerManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::time::sleep;
 
     #[tokio::test]
     async fn test_circuit_breaker_closed() {
@@ -628,6 +630,7 @@ mod tests {
     async fn test_circuit_breaker_half_open() {
         let config = CircuitBreakerConfig {
             failure_threshold: 2,
+            min_requests: 1,
             timeout: Duration::from_millis(100),
             ..Default::default()
         };
@@ -652,6 +655,7 @@ mod tests {
         let config = CircuitBreakerConfig {
             failure_threshold: 2,
             success_threshold: 2,
+            min_requests: 1,
             timeout: Duration::from_millis(50),
             ..Default::default()
         };
@@ -661,6 +665,7 @@ mod tests {
         for _ in 0..2 {
             breaker.record_outcome(false);
         }
+        assert_eq!(breaker.state(), CircuitState::Open);
 
         // Wait for timeout
         sleep(Duration::from_millis(100)).await;
@@ -694,7 +699,8 @@ mod tests {
         // Check states
         assert_eq!(manager.get_state(peer1), CircuitState::Closed);
 
-        // Check global stats
+        // Check global stats (refreshed by the periodic maintenance pass)
+        manager.update_global_stats();
         let global_stats = manager.get_global_stats();
         assert_eq!(global_stats.total_breakers, 2);
     }

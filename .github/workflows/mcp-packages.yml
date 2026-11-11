@@ -1,0 +1,60 @@
+name: mcp-packages
+
+# Builds and tests @qudag/mcp-stdio and @qudag/mcp-sse, then packs each one,
+# installs the tarball into an empty project and loads every export from it,
+# so a release can never ship without its build output. Never publishes.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/mcp-stdio/**'
+      - 'packages/mcp-sse/**'
+      - '.github/workflows/mcp-packages.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/mcp-stdio/**'
+      - 'packages/mcp-sse/**'
+      - '.github/workflows/mcp-packages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.package }} (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [mcp-stdio, mcp-sse]
+        node: ['18', '22']
+    defaults:
+      run:
+        working-directory: packages/${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install
+        run: npm ci --no-fund
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+      - name: Build and test
+        run: npm test
+      - name: Pack, install the tarball in an empty project, load every export
+        run: |
+          set -euo pipefail
+          pkgdir="$RUNNER_TEMP/pkg" consumer="$RUNNER_TEMP/consumer"
+          mkdir -p "$pkgdir" "$consumer"
+          npm pack --pack-destination "$pkgdir"
+          tar tzf "$pkgdir"/*.tgz | tee "$RUNNER_TEMP/files.txt"
+          main=$(node -p "require('./package.json').main.replace(/^\.\//, '')")
+          grep -qx "package/$main" "$RUNNER_TEMP/files.txt" || { echo "::error::tarball is missing $main"; exit 1; }
+          cd "$consumer"
+          npm init -y >/dev/null
+          npm install --no-fund "$pkgdir"/*.tgz
+          node "$GITHUB_WORKSPACE/packages/${{ matrix.package }}/tests/pack-load.mjs" "$consumer"

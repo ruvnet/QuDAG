@@ -1,0 +1,59 @@
+{
+  "name": "@qudag/mcp-stdio",
+  "version": "0.1.1",
+  "description": "QuDAG MCP server over stdio: ML-KEM-768 key exchange and ML-DSA-65 signing via @qudag/napi-core, plus simulated quantum-circuit and DAG tools.",
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "bin": {
+    "qudag-mcp-stdio": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepack": "npm run build",
+    "test": "npm run build && node --test tests/e2e.test.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "qudag",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "stdio",
+    "claude",
+    "post-quantum",
+    "ml-kem",
+    "ml-dsa",
+    "key-encapsulation",
+    "digital-signature",
+    "dag"
+  ],
+  "author": "rUv <ruv@ruv.net>",
+  "license": "MIT",
+  "homepage": "https://ruv.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ruvnet/QuDAG.git",
+    "directory": "packages/mcp-stdio"
+  },
+  "bugs": {
+    "url": "https://github.com/ruvnet/QuDAG/issues"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@qudag/napi-core": "0.1.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "README.md",
+    "LICENSE"
+  ]
+}

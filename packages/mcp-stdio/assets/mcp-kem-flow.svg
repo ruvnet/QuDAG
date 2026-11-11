@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="150" viewBox="0 0 680 150" role="img" aria-label="An MCP client calls quantum_key_exchange three times: generate a key pair, encapsulate to the public key, decapsulate by key_id. Both sides end with the same 32-byte secret.">
+  <style>
+    text{font:13px ui-monospace,Menlo,Consolas,monospace;fill:#1f2937}
+    .box{fill:#ecfeff;stroke:#0e7490;stroke-width:2}
+    .pkt{fill:#0e7490}
+    .s1{opacity:0;animation:s1 6s infinite}
+    .s2{opacity:0;animation:s2 6s infinite}
+    .s3{opacity:0;animation:s3 6s infinite}
+    .ok{opacity:0;animation:ok 6s infinite;fill:#047857}
+    @keyframes s1{0%,2%{opacity:0}8%,30%{opacity:1}36%,100%{opacity:0}}
+    @keyframes s2{0%,34%{opacity:0}40%,62%{opacity:1}68%,100%{opacity:0}}
+    @keyframes s3{0%,66%{opacity:0}72%,94%{opacity:1}100%{opacity:0}}
+    @keyframes ok{0%,74%{opacity:0}80%,96%{opacity:1}100%{opacity:0}}
+  </style>
+  <rect class="box" x="16" y="24" width="190" height="72" rx="10"/>
+  <text x="32" y="52">MCP client</text><text x="32" y="76">Claude / any agent</text>
+  <rect class="box" x="474" y="24" width="190" height="72" rx="10"/>
+  <text x="490" y="52">qudag-mcp-stdio</text><text x="490" y="76">@qudag/napi-core</text>
+  <g class="s1"><rect class="pkt" x="226" y="46" width="228" height="26" rx="6"/><text x="236" y="64" style="fill:#fff">1 initiator -&gt; pk, key_id</text></g>
+  <g class="s2"><rect class="pkt" x="226" y="46" width="228" height="26" rx="6"/><text x="236" y="64" style="fill:#fff">2 peer_public_key -&gt; ct, ss</text></g>
+  <g class="s3"><rect class="pkt" x="226" y="46" width="228" height="26" rx="6"/><text x="236" y="64" style="fill:#fff">3 responder -&gt; ss</text></g>
+  <text class="ok" x="150" y="130">ML-KEM-768: both shared secrets are the same 32 bytes</text>
+</svg>

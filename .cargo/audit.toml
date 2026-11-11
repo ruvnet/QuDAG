@@ -1,0 +1,17 @@
+# cargo audit configuration (read by `cargo audit` in CI and v2.yml).
+# These are "unmaintained" notices with no vulnerability; the decision and
+# migration notes are in deny.toml (2026-11-11). Vulnerabilities and other
+# warnings (unsound, yanked) still fail `cargo audit --deny warnings`.
+[advisories]
+ignore = [
+  "RUSTSEC-2025-0141", # bincode: versioned postcard envelope migration
+  "RUSTSEC-2026-0161", # pqcrypto-mlkem: RustCrypto ml-kem migration
+  "RUSTSEC-2026-0162", # pqcrypto-traits: goes with the pqcrypto migration
+  "RUSTSEC-2026-0163", # pqcrypto-internals: goes with the pqcrypto migration
+  "RUSTSEC-2026-0166", # pqcrypto-mldsa: RustCrypto ml-dsa migration
+  "RUSTSEC-2026-0168", # pqcrypto-hqc: no maintained HQC crate yet
+  "RUSTSEC-2025-0057", # fxhash, via sled 0.34 in qudag-vault-core: vault store migration off sled
+  "RUSTSEC-2024-0384", # instant, via sled 0.34 (parking_lot 0.11): same sled migration
+  "RUSTSEC-2024-0436", # paste, proc-macro via libp2p if-watch/netlink: upstream
+  "RUSTSEC-2022-0054", # wee_alloc, optional `wee_alloc` feature of qudag-wasm: drop the feature in the next breaking release
+]

@@ -1,4 +1,4 @@
-use qudag_network::onion::{MLKEMOnionRouter, OnionError, OnionLayer, OnionRouter};
+use qudag_network::onion::{MLKEMOnionRouter, OnionError, OnionLayer};
 
 #[test]
 fn test_onion_layer_creation() {
@@ -15,30 +15,36 @@ fn test_onion_layer_creation() {
 
 #[test]
 fn test_onion_layer_validation() {
-    // Valid layer
-    let layer = OnionLayer::new(vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]);
+    // Valid layer (layers must carry an ML-KEM ciphertext)
+    let mut layer = OnionLayer::new(vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]);
+    layer.kem_ciphertext = vec![0xAA; 32];
     assert!(layer.validate().is_ok());
 
-    // Empty next hop
-    let layer = OnionLayer::new(vec![], vec![4, 5, 6], vec![7, 8, 9]);
+    // Missing KEM ciphertext
+    let layer = OnionLayer::new(vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]);
     assert!(matches!(
         layer.validate(),
         Err(OnionError::InvalidFormat(_))
     ));
 
+    // Empty next hop marks the innermost (final destination) layer
+    let mut layer = OnionLayer::new(vec![], vec![4, 5, 6], vec![7, 8, 9]);
+    layer.kem_ciphertext = vec![0xAA; 32];
+    assert!(layer.validate().is_ok());
+
     // Empty payload
-    let layer = OnionLayer::new(vec![1, 2, 3], vec![], vec![7, 8, 9]);
+    let mut layer = OnionLayer::new(vec![1, 2, 3], vec![], vec![7, 8, 9]);
+    layer.kem_ciphertext = vec![0xAA; 32];
     assert!(matches!(
         layer.validate(),
         Err(OnionError::InvalidFormat(_))
     ));
 }
 
-#[test]
-fn test_onion_router_creation() {
-    let secret_key = vec![1, 2, 3, 4];
-    let router = MLKEMOnionRouter::new(secret_key);
-
-    // Future test cases will be implemented once ML-KEM
-    // encryption/decryption is available
+#[tokio::test]
+async fn test_onion_router_creation() {
+    // The router generates its own ML-KEM keypair
+    MLKEMOnionRouter::new()
+        .await
+        .expect("failed to create ML-KEM onion router");
 }

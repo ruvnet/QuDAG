@@ -1,13 +1,13 @@
 //! Comprehensive tests for traffic obfuscation functionality
 
 use qudag_network::{
-    message::{MessageQueue, NetworkMessage},
+    message::MessageQueue,
     onion::{MixMessage, MixMessageType, MixNode},
     traffic_obfuscation::{
         ObfuscationPattern, TrafficObfuscationConfig, TrafficObfuscator, DEFAULT_MESSAGE_SIZE,
         STANDARD_MESSAGE_SIZES,
     },
-    types::MessagePriority,
+    types::{MessagePriority, NetworkMessage},
 };
 use std::time::Duration;
 use tokio::time::{sleep, timeout};

@@ -1069,10 +1069,7 @@ impl P2PNode {
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let topic = IdentTopic::new(topic);
         // In libp2p 0.55+ unsubscribe returns bool, not Result
-        let _was_subscribed = self.swarm
-            .behaviour_mut()
-            .gossipsub
-            .unsubscribe(&topic);
+        let _was_subscribed = self.swarm.behaviour_mut().gossipsub.unsubscribe(&topic);
         info!("Unsubscribed from topic: {}", topic);
         Ok(())
     }
@@ -1255,11 +1252,26 @@ type Message = Vec<u8>;
 mod tests {
     use super::*;
 
+    /// Runs `client` while the node event loop serves its commands; handle
+    /// requests are only answered while `P2PNode::run` is polled.
+    async fn with_running_node<T>(
+        node: &mut P2PNode,
+        client: impl std::future::Future<Output = T>,
+    ) -> T {
+        tokio::select! {
+            result = node.run() => panic!(
+                "P2P node stopped early: {:?}",
+                result.err().map(|e| e.to_string())
+            ),
+            output = client => output,
+        }
+    }
+
     #[tokio::test]
     async fn test_node_creation() {
         let config = NetworkConfig::default();
-        let (_node, handle) = P2PNode::new(config).await.unwrap();
-        let peer_id = handle.local_peer_id().await;
+        let (mut node, handle) = P2PNode::new(config).await.unwrap();
+        let peer_id = with_running_node(&mut node, handle.local_peer_id()).await;
         assert!(!peer_id.to_string().is_empty());
     }
 
@@ -1284,22 +1296,31 @@ mod tests {
         let (mut node, handle) = P2PNode::new(config).await.unwrap();
         node.start().await.unwrap();
 
-        // Give it a moment to bind
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
-        let listeners = handle.listeners().await;
+        let listeners = with_running_node(&mut node, async {
+            // Give it a moment to bind
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            handle.listeners().await
+        })
+        .await;
         assert!(!listeners.is_empty());
     }
 
     #[tokio::test]
     async fn test_pubsub() {
         let config = NetworkConfig::default();
-        let (_node, handle) = P2PNode::new(config).await.unwrap();
+        let (mut node, handle) = P2PNode::new(config).await.unwrap();
 
         let topic = "test-topic";
-        handle.subscribe(topic).await.unwrap();
-
         let test_data = vec![1, 2, 3, 4, 5];
-        handle.publish(topic, test_data).await.unwrap();
+        with_running_node(&mut node, async {
+            handle.subscribe(topic).await.unwrap();
+
+            // gossipsub refuses to publish while no peer is subscribed to the topic
+            let err = handle.publish(topic, test_data).await.unwrap_err();
+            assert!(err.to_string().contains("NoPeersSubscribedToTopic"));
+
+            handle.unsubscribe(topic).await.unwrap();
+        })
+        .await;
     }
 }

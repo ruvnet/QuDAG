@@ -1887,7 +1887,7 @@ mod tests {
         // Test connection limit
         assert!(manager.connect(peer1).await.is_ok());
         assert!(manager.connect(peer2).await.is_ok());
-        assert!(manager.connect(peer3).await.is_ok()); // Should be ignored due to limit
+        assert!(manager.connect(peer3).await.is_err()); // Rejected: max connections reached
 
         assert_eq!(manager.connection_count(), 2);
 

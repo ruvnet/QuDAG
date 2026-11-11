@@ -1,0 +1,114 @@
+name: napi-core
+
+# Builds @qudag/napi-core for Linux x64 and arm64 inside ubuntu:22.04 (glibc
+# floor 2.34), runs the real round-trip tests against each binary, gates the
+# glibc floor and arm64 LDAPR count, and uploads the .node files as artifacts.
+# Publishing is done from the artifacts by the owner; this workflow never
+# publishes.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/napi-core/**'
+      - 'core/crypto/**'
+      - 'core/dag/**'
+      - '.github/workflows/napi-core.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/napi-core/**'
+      - 'core/crypto/**'
+      - 'core/dag/**'
+      - '.github/workflows/napi-core.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    container: ubuntu:22.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x64-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            platform: linux-arm64-gnu
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Bootstrap ubuntu:22.04 build container
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git curl ca-certificates build-essential pkg-config libssl-dev cmake clang libclang-dev file xz-utils
+          git config --global --add safe.directory '*'
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Node.js 20
+        run: |
+          case "${{ matrix.target }}" in x86_64*) A=x64;; aarch64*) A=arm64;; esac
+          V=v20.18.1
+          curl -fsSL "https://nodejs.org/dist/$V/node-$V-linux-$A.tar.xz" -o /tmp/node.tar.xz
+          mkdir -p /opt/node && tar -xJf /tmp/node.tar.xz -C /opt/node --strip-components=1
+          echo /opt/node/bin >> "$GITHUB_PATH"
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Build
+        working-directory: packages/napi-core
+        run: |
+          node --version && rustc --version
+          npm ci --no-audit --no-fund
+          npx napi build --platform --release --target ${{ matrix.target }}
+          ls -l *.node
+
+      - name: Test (real native round trips)
+        working-directory: packages/napi-core
+        run: npm test
+
+      - name: glibc floor and arm64 LDAPR gate
+        working-directory: packages/napi-core
+        run: |
+          BIN="qudag-napi-core.${{ matrix.platform }}.node"
+          file "$BIN"
+          case "${{ matrix.target }}" in
+            x86_64*) file "$BIN" | grep -q 'x86-64' ;;
+            aarch64*) file "$BIN" | grep -q 'ARM aarch64' ;;
+          esac
+          MAX=$(objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sort -V | tail -1)
+          echo "max glibc symbol: $MAX"
+          if [ -z "$MAX" ]; then echo "::error::no GLIBC_ symbols found in $BIN"; exit 1; fi
+          if [ "$(printf '%s\n' "$MAX" GLIBC_2.34 | sort -V | tail -1)" != GLIBC_2.34 ]; then
+            echo "::error::$BIN needs $MAX; the floor is GLIBC_2.34"; exit 1
+          fi
+          if [ "${{ matrix.target }}" = aarch64-unknown-linux-gnu ]; then
+            N=$(objdump -d "$BIN" | grep -c ldapr || true)
+            echo "ldapr instructions: $N"
+            if [ "$N" != 0 ]; then echo "::error::$BIN contains $N LDAPR instructions; must be 0"; exit 1; fi
+          fi
+
+      - name: Cargo audit
+        if: matrix.platform == 'linux-x64-gnu'
+        working-directory: packages/napi-core
+        run: |
+          cargo install cargo-audit --locked --version 0.22.1
+          cargo audit
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: napi-core-${{ matrix.platform }}
+          path: packages/napi-core/qudag-napi-core.${{ matrix.platform }}.node
+          if-no-files-found: error

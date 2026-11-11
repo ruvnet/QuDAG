@@ -1,0 +1,43 @@
+{
+  "name": "@qudag/napi-core-linux-arm64-gnu",
+  "version": "0.1.1",
+  "description": "linux-arm64-gnu native binary for @qudag/napi-core (post-quantum ML-KEM/ML-DSA N-API bindings).",
+  "main": "qudag-napi-core.linux-arm64-gnu.node",
+  "files": [
+    "qudag-napi-core.linux-arm64-gnu.node",
+    "README.md"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "engines": {
+    "node": ">= 18"
+  },
+  "homepage": "https://ruv.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ruvnet/QuDAG.git",
+    "directory": "packages/napi-core/npm/linux-arm64-gnu"
+  },
+  "bugs": {
+    "url": "https://github.com/ruvnet/QuDAG/issues"
+  },
+  "keywords": [
+    "post-quantum",
+    "ml-kem",
+    "ml-dsa",
+    "qudag",
+    "napi",
+    "native",
+    "arm64",
+    "linux"
+  ],
+  "author": "rUv <ruv@ruv.net>",
+  "license": "MIT OR Apache-2.0"
+}

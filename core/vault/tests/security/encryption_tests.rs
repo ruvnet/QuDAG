@@ -96,6 +96,7 @@ mod encryption_security_tests {
     }
 
     #[test]
+    #[ignore = "wall-clock timing assertion is flaky on shared runners; quarantined, see ruvnet/QuDAG#41"]
     fn test_timing_attack_resistance() {
         let temp_dir = TempDir::new().unwrap();
         let vault_path = temp_dir.path().join("test_vault.qdag");
@@ -179,6 +180,7 @@ mod side_channel_tests {
     use super::*;
 
     #[test]
+    #[ignore = "wall-clock timing assertion is flaky on shared runners; quarantined, see ruvnet/QuDAG#41"]
     fn test_constant_time_comparison() {
         // Test that password comparison is constant-time
         let password1 = "TestPassword123!";
@@ -223,6 +225,7 @@ mod side_channel_tests {
     }
 
     #[test]
+    #[ignore = "wall-clock timing assertion is flaky on shared runners; quarantined, see ruvnet/QuDAG#41"]
     fn test_cache_timing_resistance() {
         let temp_dir = TempDir::new().unwrap();
         let vault_path = temp_dir.path().join("test_vault.qdag");

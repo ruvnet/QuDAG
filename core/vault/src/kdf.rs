@@ -35,7 +35,7 @@ impl Password {
 }
 
 /// Key derivation context containing salt and parameters.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct KdfContext {
     /// Salt for the KDF.
     pub salt: String,

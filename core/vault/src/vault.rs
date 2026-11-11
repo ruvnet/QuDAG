@@ -26,6 +26,17 @@ pub struct Vault {
     dag: VaultDag,
     /// Vault metadata.
     metadata: VaultMetadata,
+    /// Key material stored alongside the encrypted DAG. It does not change after
+    /// create/open, so it is kept here instead of re-reading the whole vault file
+    /// on every save (which made each write cost grow with the vault size).
+    header: VaultFileHeader,
+}
+
+/// The parts of the vault file that are written unchanged on every save.
+struct VaultFileHeader {
+    encrypted_vault_key: Vec<u8>,
+    kdf_context: KdfContext,
+    keypair: Option<VaultKeyPair>,
 }
 
 /// Metadata about the vault.
@@ -104,10 +115,15 @@ impl Vault {
             crypto,
             dag,
             metadata,
+            header: VaultFileHeader {
+                encrypted_vault_key,
+                kdf_context,
+                keypair: Some(keypair),
+            },
         };
 
         // Save the vault
-        vault.save_internal(encrypted_vault_key, kdf_context, Some(keypair))?;
+        vault.save()?;
 
         info!("Vault created successfully");
         Ok(vault)
@@ -161,6 +177,11 @@ impl Vault {
             crypto,
             dag,
             metadata: vault_file.metadata,
+            header: VaultFileHeader {
+                encrypted_vault_key: vault_file.encrypted_vault_key,
+                kdf_context: vault_file.kdf_context,
+                keypair: vault_file.keypair,
+            },
         })
     }
 
@@ -303,24 +324,11 @@ impl Vault {
 
     /// Save the vault to disk.
     fn save(&self) -> VaultResult<()> {
-        // Re-read the file to get current KDF context and keypair
-        let data = std::fs::read(&self.path)?;
-        let current_file: VaultFile = serde_json::from_slice(&data)?;
-
-        self.save_internal(
-            current_file.encrypted_vault_key,
-            current_file.kdf_context,
-            current_file.keypair,
-        )
+        self.save_internal()
     }
 
     /// Internal save method.
-    fn save_internal(
-        &self,
-        encrypted_vault_key: Vec<u8>,
-        kdf_context: KdfContext,
-        keypair: Option<VaultKeyPair>,
-    ) -> VaultResult<()> {
+    fn save_internal(&self) -> VaultResult<()> {
         // Serialize and encrypt the DAG
         let serialized_dag = self.dag.serialize()?;
         let dag_data = bincode::serialize(&serialized_dag)?;
@@ -329,15 +337,15 @@ impl Vault {
         // Create vault file
         let vault_file = VaultFile {
             version: VAULT_VERSION,
-            kdf_context,
-            encrypted_vault_key,
-            keypair,
+            kdf_context: self.header.kdf_context.clone(),
+            encrypted_vault_key: self.header.encrypted_vault_key.clone(),
+            keypair: self.header.keypair.clone(),
             encrypted_dag,
             metadata: self.metadata.clone(),
         };
 
         // Serialize to JSON
-        let data = serde_json::to_vec_pretty(&vault_file)?;
+        let data = serde_json::to_vec(&vault_file)?;
 
         // Write atomically (write to temp file then rename)
         let temp_path = self.path.with_extension("tmp");

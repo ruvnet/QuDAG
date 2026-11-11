@@ -542,22 +542,20 @@ impl MixNode {
     }
 
     /// Add a message to the mix node buffer
+    ///
+    /// Messages stay buffered until the owner calls [`MixNode::flush_batch`]
+    /// (see [`MixNode::should_flush`]); flushing here would discard the batch.
     pub async fn add_message(&mut self, mut message: MixMessage) -> Result<(), OnionError> {
         // Normalize message size for traffic analysis resistance
         message.normalized_size = self.normalize_message_size(&message);
 
         self.message_buffer.push(message);
 
-        // Check if we should flush the batch
-        if self.should_flush() {
-            self.flush_batch().await?;
-        }
-
         Ok(())
     }
 
-    /// Check if batch should be flushed
-    fn should_flush(&self) -> bool {
+    /// Check if the batch is full or its timeout has elapsed
+    pub fn should_flush(&self) -> bool {
         self.message_buffer.len() >= self.config.batch_size
             || self.last_flush.elapsed().unwrap_or(Duration::ZERO) >= self.config.batch_timeout
     }

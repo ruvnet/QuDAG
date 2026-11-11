@@ -246,7 +246,9 @@ impl TrafficObfuscator {
             .map_err(|e| NetworkError::Internal(format!("Serialization failed: {}", e)))?;
 
         if config.enable_protocol_obfuscation {
-            Ok(self.protocol_obfuscator.obfuscate(serialized).await?)
+            let obfuscated = self.protocol_obfuscator.obfuscate(serialized).await?;
+            self.stats.write().await.protocol_obfuscations += 1;
+            Ok(obfuscated)
         } else {
             Ok(serialized)
         }
@@ -291,6 +293,7 @@ impl TrafficObfuscator {
 
             if config.enable_protocol_obfuscation {
                 obfuscated_messages.push(self.protocol_obfuscator.obfuscate(serialized).await?);
+                self.stats.write().await.protocol_obfuscations += 1;
             } else {
                 obfuscated_messages.push(serialized);
             }

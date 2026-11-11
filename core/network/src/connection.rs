@@ -241,10 +241,11 @@ impl SecureConnection {
         self.channels.batch_buffer.put_u32(encrypted_len);
         self.channels.batch_buffer.extend_from_slice(&encrypted);
 
-        // Update metrics
+        // Update metrics. The queue size tracks the framed bytes held in the batch
+        // buffer, which is what `flush_batch` subtracts again.
         self.channels
             .queue_size
-            .fetch_add(msg_size, Ordering::Release);
+            .fetch_add(4 + encrypted.len(), Ordering::Release);
         self.channels.message_count.fetch_add(1, Ordering::Relaxed);
         self.channels
             .bytes_processed
@@ -1810,7 +1811,6 @@ pub struct ConnectionStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::{IpAddr, Ipv4Addr};
     use std::time::Instant;
     use tokio::time::Duration;
 
@@ -1822,16 +1822,47 @@ mod tests {
         }
     }
 
+    /// Starts a loopback QUIC server with a self-signed certificate for the
+    /// `qudag` server name and returns a client endpoint that trusts it, plus
+    /// the server address and endpoint (kept alive by the caller).
+    fn loopback_quic() -> (Endpoint, SocketAddr, Endpoint) {
+        let cert = rcgen::generate_simple_self_signed(vec!["qudag".to_string()]).unwrap();
+        let cert_der = cert.cert.der().clone();
+        let key = rustls::pki_types::PrivateKeyDer::Pkcs8(cert.key_pair.serialize_der().into());
+
+        let server_config = quinn::ServerConfig::with_single_cert(vec![cert_der.clone()], key)
+            .expect("server config");
+        let server = Endpoint::server(server_config, "127.0.0.1:0".parse().unwrap())
+            .expect("server endpoint");
+        let server_addr = server.local_addr().unwrap();
+
+        let acceptor = server.clone();
+        tokio::spawn(async move {
+            while let Some(incoming) = acceptor.accept().await {
+                tokio::spawn(async move {
+                    if let Ok(conn) = incoming.await {
+                        // Hold the connection open until the client goes away.
+                        let _ = conn.closed().await;
+                    }
+                });
+            }
+        });
+
+        let mut roots = rustls::RootCertStore::empty();
+        roots.add(cert_der).unwrap();
+        let client_config =
+            quinn::ClientConfig::with_root_certificates(Arc::new(roots)).expect("client config");
+        let mut client = Endpoint::client("127.0.0.1:0".parse().unwrap()).expect("client endpoint");
+        client.set_default_client_config(client_config);
+
+        (client, server_addr, server)
+    }
+
     #[tokio::test]
     async fn test_secure_connection() {
         let test_config = setup_test_config();
-        let test_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8000);
-
-        // Set up QUIC endpoint
-        let server_config = ServerConfig::default();
-        let endpoint = Endpoint::server(server_config, "127.0.0.1:0".parse().unwrap())
-            .unwrap()
-            .0;
+        // Set up a loopback QUIC server and a client endpoint that trusts it
+        let (endpoint, test_addr, _server) = loopback_quic();
 
         // Create secure connection
         let mut connection = SecureConnection::new(&endpoint, test_addr, test_config)
@@ -1928,17 +1959,14 @@ mod tests {
     #[tokio::test]
     async fn bench_circuit_setup() {
         let test_config = setup_test_config();
-        let test_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8000);
-        let server_config = ServerConfig::default();
-        let endpoint = Endpoint::server(server_config, "127.0.0.1:0".parse().unwrap())
-            .unwrap()
-            .0;
+        let (endpoint, test_addr, _server) = loopback_quic();
 
         let mut setup_times = Vec::new();
         for _ in 0..100 {
             let start = Instant::now();
-            let _connection =
-                SecureConnection::new(&endpoint, test_addr, test_config.clone()).await;
+            let _connection = SecureConnection::new(&endpoint, test_addr, test_config.clone())
+                .await
+                .expect("circuit setup");
             setup_times.push(start.elapsed());
         }
 
@@ -1977,11 +2005,7 @@ mod tests {
     #[tokio::test]
     async fn bench_message_throughput() {
         let test_config = setup_test_config();
-        let test_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8000);
-        let server_config = ServerConfig::default();
-        let endpoint = Endpoint::server(server_config, "127.0.0.1:0".parse().unwrap())
-            .unwrap()
-            .0;
+        let (endpoint, test_addr, _server) = loopback_quic();
 
         let mut connection = SecureConnection::new(&endpoint, test_addr, test_config)
             .await

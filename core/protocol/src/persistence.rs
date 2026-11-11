@@ -273,10 +273,10 @@ pub trait StateStore: Send + Sync {
     async fn recover_state(&self) -> Result<Option<PersistedDagState>>;
 
     /// Create backup of the entire state
-    async fn create_backup(&self, backup_path: &PathBuf) -> Result<()>;
+    async fn create_backup(&self, backup_path: &Path) -> Result<()>;
 
     /// Restore from backup
-    async fn restore_backup(&self, backup_path: &PathBuf) -> Result<()>;
+    async fn restore_backup(&self, backup_path: &Path) -> Result<()>;
 }
 
 /// File-based storage implementation using JSON files
@@ -576,7 +576,7 @@ impl StateStore for FileStateStore {
         Ok(state)
     }
 
-    async fn create_backup(&self, backup_path: &PathBuf) -> Result<()> {
+    async fn create_backup(&self, backup_path: &Path) -> Result<()> {
         // Create backup directory if it doesn't exist
         fs::create_dir_all(backup_path).await.map_err(|e| {
             PersistenceError::DirectoryCreation(format!("Failed to create backup dir: {}", e))
@@ -595,7 +595,7 @@ impl StateStore for FileStateStore {
         Ok(())
     }
 
-    async fn restore_backup(&self, backup_path: &PathBuf) -> Result<()> {
+    async fn restore_backup(&self, backup_path: &Path) -> Result<()> {
         let backup_data_dir = backup_path.join("data");
 
         if !backup_data_dir.exists() {
@@ -755,13 +755,13 @@ impl StateStore for MemoryStateStore {
         Ok(None)
     }
 
-    async fn create_backup(&self, _backup_path: &PathBuf) -> Result<()> {
+    async fn create_backup(&self, _backup_path: &Path) -> Result<()> {
         // Memory store doesn't support backups
         warn!("Backup creation called on memory store (no-op)");
         Ok(())
     }
 
-    async fn restore_backup(&self, _backup_path: &PathBuf) -> Result<()> {
+    async fn restore_backup(&self, _backup_path: &Path) -> Result<()> {
         // Memory store doesn't support backups
         warn!("Backup restoration called on memory store (no-op)");
         Ok(())

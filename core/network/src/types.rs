@@ -51,7 +51,8 @@ impl NetworkAddress {
 
     /// Get the socket address as a string
     pub fn to_socket_addr(&self) -> String {
-        format!("{}:{}", self.ip, self.port)
+        // SocketAddr brackets IPv6 hosts ("[::1]:8080")
+        std::net::SocketAddr::new(self.ip, self.port).to_string()
     }
 }
 

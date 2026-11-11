@@ -147,7 +147,7 @@ jobs:
           cargo test onion_routing -- --nocapture
           cargo test nat_traversal -- --nocapture
           cargo test traffic_obfuscation -- --nocapture
-          cargo test dark_addressing -- --nocapture
+          cargo test dark_ -- --nocapture
 
   # Build the release binary on every platform the Release workflow ships.
   # Mirrors release.yml: native arm64 runner (aws-lc-sys does not build under `cross`).

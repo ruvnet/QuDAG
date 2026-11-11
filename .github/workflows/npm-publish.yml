@@ -1,14 +1,8 @@
 name: NPM Publish
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'qudag-wasm/**'
-      - 'core/crypto/**'
-      - 'core/dag/**'
-      - 'core/network/**'
+  # Manual only (#36): a push-triggered publish would release @qudag/wasm*
+  # automatically on any core change. Publishing is an owner decision.
   workflow_dispatch:
     inputs:
       version:
@@ -75,7 +69,7 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
         
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
@@ -123,7 +117,7 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
         
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'

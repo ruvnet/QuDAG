@@ -1,57 +1,29 @@
-import { readFile } from 'fs/promises';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+// Node.js smoke test for the `wasm-pack build --target nodejs` output.
+// Usage: node test-nodejs.mjs [pkg-dir]   (default: ./pkg-nodejs)
+// Exits non-zero on any failure.
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const here = dirname(fileURLToPath(import.meta.url));
+const pkgDir = resolve(process.argv[2] ?? join(here, 'pkg-nodejs'));
+const require = createRequire(import.meta.url);
+const { QuDAGClient, getInitStatus, Encoding } = require(join(pkgDir, 'qudag_wasm.js'));
 
-// Read the WASM binary
-const wasmPath = join(__dirname, 'pkg-final', 'qudag_wasm_bg.wasm');
-const wasmBytes = await readFile(wasmPath);
+const status = getInitStatus();
+assert.equal(status.is_initialized(), true);
+assert.match(status.version(), /^\d+\.\d+\.\d+/);
+assert.ok(Array.isArray(status.features()));
+console.log(`qudag-wasm ${status.version()} features: ${status.features().join(', ')}`);
 
-// Initialize the WASM module
-const wasmModule = await WebAssembly.instantiate(wasmBytes, {
-    './qudag_wasm_bg.js': await import(join(__dirname, 'pkg-final', 'qudag_wasm.js'))
-});
+const client = new QuDAGClient();
+assert.ok(client.getConfig(), 'client config');
+assert.ok(Array.isArray(client.getFeatures()));
+assert.equal(QuDAGClient.getVersion(), status.version());
+assert.equal(typeof QuDAGClient.hasFeature('crypto'), 'boolean');
 
-console.log('QuDAG WASM Node.js Test');
-console.log('========================');
+assert.equal(Encoding.bytesToHex(Encoding.hexToBytes('00ff10')), '00ff10');
+assert.equal(Encoding.bytesToString(Encoding.stringToBytes('qudag')), 'qudag');
 
-try {
-    // Import QuDAG WASM functions
-    const { 
-        QuDAGClient, 
-        get_init_status,
-        Blake3Hash
-    } = await import('./pkg-final/qudag_wasm.js');
-
-    console.log('✅ WASM module imported successfully');
-
-    // Test initialization status
-    const status = get_init_status();
-    console.log(`✅ Module Version: ${status.version()}`);
-    console.log(`✅ Features: ${status.features().join(', ')}`);
-
-    // Test client creation
-    const client = new QuDAGClient();
-    console.log('✅ QuDAG client created');
-    
-    const config = client.getConfig();
-    console.log(`✅ Config - Port: ${config.network_port}, Max Peers: ${config.max_peers}`);
-
-    // Test BLAKE3 hashing
-    const testMessage = "Hello from Node.js QuDAG WASM!";
-    const hash = Blake3Hash.hash(testMessage);
-    console.log(`✅ BLAKE3 Hash: ${hash}`);
-
-    // Test feature detection
-    console.log(`✅ Has crypto: ${QuDAGClient.hasFeature('crypto')}`);
-    console.log(`✅ Has DAG: ${QuDAGClient.hasFeature('dag')}`);
-    console.log(`✅ Has network: ${QuDAGClient.hasFeature('network')}`);
-
-    console.log('\n🎉 All Node.js tests passed!');
-
-} catch (error) {
-    console.error('❌ Test failed:', error.message);
-    console.error(error.stack);
-}
+console.log('All Node.js tests passed.');

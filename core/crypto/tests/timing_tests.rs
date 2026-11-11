@@ -1,6 +1,8 @@
-use qudag_crypto::ml_kem::*;
+use qudag_crypto::kem::Ciphertext;
+use qudag_crypto::ml_kem::MlKem768;
 use rand::RngCore;
 use std::time::{Duration, Instant};
+use subtle::ConstantTimeEq;
 
 /// Measures execution time of a function
 fn measure_time<F, T>(f: F) -> (T, Duration)
@@ -20,17 +22,13 @@ fn test_constant_time_keypair_generation() {
 
     // Generate multiple keypairs and measure times
     for _ in 0..100 {
-        let (_, duration) = measure_time(|| generate_keypair(&mut rng));
+        let (_, duration) = measure_time(|| MlKem768::keygen_with_rng(&mut rng));
         times.push(duration);
     }
 
     // Calculate statistics
     let mean = times.iter().sum::<Duration>() / times.len() as u32;
-    let max_deviation = times
-        .iter()
-        .map(|&t| if t > mean { t - mean } else { mean - t })
-        .max()
-        .unwrap();
+    let max_deviation = times.iter().map(|&t| t.abs_diff(mean)).max().unwrap();
 
     // Verify timing consistency (within 1ms)
     assert!(max_deviation < Duration::from_millis(1));
@@ -38,22 +36,17 @@ fn test_constant_time_keypair_generation() {
 
 #[test]
 fn test_constant_time_encapsulation() {
-    let mut rng = rand::thread_rng();
-    let keypair = generate_keypair(&mut rng).unwrap();
+    let (public_key, _secret_key) = MlKem768::keygen().unwrap();
     let mut times = Vec::with_capacity(100);
 
     // Measure multiple encapsulations
     for _ in 0..100 {
-        let (_, duration) = measure_time(|| encapsulate(&keypair.public_key));
+        let (_, duration) = measure_time(|| MlKem768::encapsulate(&public_key));
         times.push(duration);
     }
 
     let mean = times.iter().sum::<Duration>() / times.len() as u32;
-    let max_deviation = times
-        .iter()
-        .map(|&t| if t > mean { t - mean } else { mean - t })
-        .max()
-        .unwrap();
+    let max_deviation = times.iter().map(|&t| t.abs_diff(mean)).max().unwrap();
 
     assert!(max_deviation < Duration::from_millis(1));
 }
@@ -61,34 +54,31 @@ fn test_constant_time_encapsulation() {
 #[test]
 fn test_constant_time_decapsulation() {
     let mut rng = rand::thread_rng();
-    let keypair = generate_keypair(&mut rng).unwrap();
-    let (_, ct) = encapsulate(&keypair.public_key).unwrap();
+    let (public_key, secret_key) = MlKem768::keygen().unwrap();
+    let (ct, _) = MlKem768::encapsulate(&public_key).unwrap();
 
     let mut valid_times = Vec::with_capacity(50);
     let mut invalid_times = Vec::with_capacity(50);
 
     // Measure valid decapsulations
     for _ in 0..50 {
-        let (_, duration) = measure_time(|| decapsulate(&keypair.secret_key, &ct));
+        let (_, duration) = measure_time(|| MlKem768::decapsulate(&secret_key, &ct));
         valid_times.push(duration);
     }
 
     // Measure invalid decapsulations
-    let mut invalid_ct = vec![0u8; ct.len()];
+    let mut invalid_ct = vec![0u8; ct.as_bytes().len()];
     for _ in 0..50 {
         rng.fill_bytes(&mut invalid_ct);
-        let (_, duration) = measure_time(|| decapsulate(&keypair.secret_key, &invalid_ct));
+        let invalid = Ciphertext::from_bytes(&invalid_ct).unwrap();
+        let (_, duration) = measure_time(|| MlKem768::decapsulate(&secret_key, &invalid));
         invalid_times.push(duration);
     }
 
     // Calculate statistics
     let valid_mean = valid_times.iter().sum::<Duration>() / valid_times.len() as u32;
     let invalid_mean = invalid_times.iter().sum::<Duration>() / invalid_times.len() as u32;
-    let timing_diff = if valid_mean > invalid_mean {
-        valid_mean - invalid_mean
-    } else {
-        invalid_mean - valid_mean
-    };
+    let timing_diff = valid_mean.abs_diff(invalid_mean);
 
     // Verify constant-time behavior
     assert!(timing_diff < Duration::from_millis(1));
@@ -105,23 +95,19 @@ fn test_constant_time_comparison() {
     rng.fill_bytes(&mut data1);
     data2.copy_from_slice(&data1);
     for _ in 0..50 {
-        let (_, duration) = measure_time(|| constant_time_compare(&data1, &data2));
+        let (_, duration) = measure_time(|| data1.ct_eq(&data2));
         times.push(duration);
     }
 
     // Compare different data
     rng.fill_bytes(&mut data2);
     for _ in 0..50 {
-        let (_, duration) = measure_time(|| constant_time_compare(&data1, &data2));
+        let (_, duration) = measure_time(|| data1.ct_eq(&data2));
         times.push(duration);
     }
 
     let mean = times.iter().sum::<Duration>() / times.len() as u32;
-    let max_deviation = times
-        .iter()
-        .map(|&t| if t > mean { t - mean } else { mean - t })
-        .max()
-        .unwrap();
+    let max_deviation = times.iter().map(|&t| t.abs_diff(mean)).max().unwrap();
 
     assert!(max_deviation < Duration::from_millis(1));
 }

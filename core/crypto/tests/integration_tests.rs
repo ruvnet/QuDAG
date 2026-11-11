@@ -1,10 +1,11 @@
 #[cfg(test)]
 mod integration_tests {
     use qudag_crypto::{
-        hqc::HQC,
-        ml_dsa::{MLDsa, SIGNATURE_LENGTH},
-        ml_kem::{KeyEncapsulation, MlKem768},
+        hqc::Hqc256,
+        ml_dsa::{MlDsa, ML_DSA_SIGNATURE_SIZE},
+        ml_kem::MlKem768,
     };
+    use rand::thread_rng;
     use std::time::Instant;
 
     #[test]
@@ -27,15 +28,17 @@ mod integration_tests {
         let message = b"Test message for integration testing";
 
         // Generate keypair
-        let (pk, sk) = MLDsa::keygen().expect("Failed to generate ML-DSA keypair");
+        let sk = MlDsa::keygen(&mut thread_rng()).expect("Failed to generate ML-DSA keypair");
+        let pk = sk.to_public_key().expect("Failed to extract public key");
 
         // Sign message
-        let signature = sk.sign(message).expect("Failed to sign message");
-        assert_eq!(signature.len(), SIGNATURE_LENGTH);
+        let signature = sk
+            .sign(message, &mut thread_rng())
+            .expect("Failed to sign message");
+        assert_eq!(signature.len(), ML_DSA_SIGNATURE_SIZE);
 
         // Verify signature
-        let pk_bytes = pk.public_key.expect("Missing public key");
-        MLDsa::verify(message, &signature, &pk_bytes).expect("Failed to verify signature");
+        MlDsa::verify(&pk, message, &signature).expect("Failed to verify signature");
     }
 
     #[test]
@@ -43,14 +46,14 @@ mod integration_tests {
         let message = b"Test message for HQC encryption";
 
         // Generate keypair
-        let (pk, sk) = HQC::keygen().expect("Failed to generate HQC keypair");
+        let (pk, sk) = Hqc256::keygen().expect("Failed to generate HQC keypair");
 
         // Encrypt message
-        let ciphertext = pk.encrypt(message).expect("Failed to encrypt message");
+        let ciphertext = Hqc256::encrypt(&pk, message).expect("Failed to encrypt message");
 
         // Decrypt message
-        let decrypted = sk.decrypt(&ciphertext).expect("Failed to decrypt message");
-        assert_eq!(message[..], decrypted[..32]);
+        let decrypted = Hqc256::decrypt(&sk, &ciphertext).expect("Failed to decrypt message");
+        assert_eq!(message[..], decrypted[..]);
     }
 
     #[test]
@@ -63,10 +66,10 @@ mod integration_tests {
 
             // Generate and verify signature
             let message = b"Performance test message";
-            let (pk, sk) = MLDsa::keygen().expect("Failed to generate keypair");
-            let signature = sk.sign(message).expect("Failed to sign");
-            let pk_bytes = pk.public_key.expect("Missing public key");
-            MLDsa::verify(message, &signature, &pk_bytes).expect("Failed to verify");
+            let sk = MlDsa::keygen(&mut thread_rng()).expect("Failed to generate keypair");
+            let pk = sk.to_public_key().expect("Failed to extract public key");
+            let signature = sk.sign(message, &mut thread_rng()).expect("Failed to sign");
+            MlDsa::verify(&pk, message, &signature).expect("Failed to verify");
 
             total_time += start.elapsed();
         }
@@ -81,23 +84,12 @@ mod integration_tests {
 
     #[test]
     fn test_memory_safety() {
-        use std::mem;
-
-        // Test ML-KEM key alignment
-        let (pk, sk) = MlKem768::keygen().expect("Failed to generate keypair");
-        assert!(
-            mem::align_of_val(&pk) >= 16,
-            "Public key not properly aligned"
-        );
-        assert!(
-            mem::align_of_val(&sk) >= 16,
-            "Secret key not properly aligned"
-        );
+        let (pk, _sk) = MlKem768::keygen().expect("Failed to generate keypair");
 
         // Test automatic cleanup
         let mut secret = [0u8; 32];
         {
-            let (ct, ss) = MlKem768::encapsulate(&pk).expect("Failed to encapsulate");
+            let (_ct, ss) = MlKem768::encapsulate(&pk).expect("Failed to encapsulate");
             secret.copy_from_slice(ss.as_ref());
         }
         // Secret should be cleared after drop

@@ -1,5 +1,5 @@
 use proptest::prelude::*;
-use qudag_crypto::ml_dsa::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey};
+use qudag_crypto::ml_dsa::{MlDsaError, MlDsaKeyPair, MlDsaPublicKey, ML_DSA_SIGNATURE_SIZE};
 use rand::{thread_rng, RngCore};
 
 #[test]
@@ -30,7 +30,7 @@ fn test_mldsa_invalid_signature() {
     let keypair = MlDsaKeyPair::generate(&mut rng).expect("Key generation should succeed");
     let public_key = MlDsaPublicKey::from_bytes(keypair.public_key()).expect("Valid public key");
 
-    let mut invalid_signature = vec![0u8; 2372]; // ML-DSA-65 signature size
+    let mut invalid_signature = vec![0u8; ML_DSA_SIGNATURE_SIZE];
     thread_rng().fill_bytes(&mut invalid_signature);
 
     let verification = public_key.verify(message, &invalid_signature);
@@ -57,7 +57,7 @@ proptest! {
     fn test_mldsa_random_inputs(
         message in prop::collection::vec(any::<u8>(), 1..1000),
         pk_bytes in prop::collection::vec(0u8..255, 1952), // ML-DSA-65 public key size
-        sig_bytes in prop::collection::vec(0u8..255, 2372) // ML-DSA-65 signature size
+        sig_bytes in prop::collection::vec(0u8..255, ML_DSA_SIGNATURE_SIZE) // ML-DSA-65 signature size
     ) {
         // Ensure we can handle random/malformed inputs without panicking
         if let Ok(pk) = MlDsaPublicKey::from_bytes(&pk_bytes) {

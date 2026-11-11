@@ -1,5 +1,4 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use qudag_crypto::kem::KeyEncapsulation;
 use qudag_crypto::ml_kem::MlKem768;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};

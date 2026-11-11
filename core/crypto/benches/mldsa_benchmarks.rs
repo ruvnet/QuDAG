@@ -1,5 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use qudag_crypto::ml_dsa::{MLDsa, SIGNATURE_LENGTH};
+use qudag_crypto::ml_dsa::MlDsa;
+use rand::thread_rng;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::time::Instant;
 
@@ -37,29 +38,33 @@ fn benchmark_sign_verify(c: &mut Criterion) {
 
     group.bench_function("keygen", |b| {
         b.iter(|| {
-            black_box(MLDsa::keygen().expect("Key generation failed"));
+            black_box(MlDsa::keygen(&mut thread_rng()).expect("Key generation failed"));
         });
     });
 
-    let (pk, sk) = MLDsa::keygen().expect("Key generation failed");
+    let sk = MlDsa::keygen(&mut thread_rng()).expect("Key generation failed");
+    let pk = sk.to_public_key().expect("Public key extraction failed");
     let message = b"Test message for benchmarking";
 
     group.bench_function("sign", |b| {
         b.iter(|| {
-            black_box(sk.sign(black_box(message)).expect("Signing failed"));
+            black_box(
+                sk.sign(black_box(message), &mut thread_rng())
+                    .expect("Signing failed"),
+            );
         });
     });
 
-    let signature = sk.sign(message).expect("Signing failed");
-    let pk_bytes = pk.public_key.expect("Missing public key");
+    let signature = sk.sign(message, &mut thread_rng()).expect("Signing failed");
+    let pk_bytes = pk;
 
     group.bench_function("verify", |b| {
         b.iter(|| {
             black_box(
-                MLDsa::verify(
+                MlDsa::verify(
+                    black_box(&pk_bytes),
                     black_box(message),
                     black_box(&signature),
-                    black_box(&pk_bytes),
                 )
                 .expect("Verification failed"),
             );
@@ -82,23 +87,26 @@ fn benchmark_batch_verify(c: &mut Criterion) {
         let mut public_keys = Vec::new();
 
         for i in 0..*size {
-            let (pk, sk) = MLDsa::keygen().expect("Key generation failed");
+            let sk = MlDsa::keygen(&mut thread_rng()).expect("Key generation failed");
+            let pk = sk.to_public_key().expect("Public key extraction failed");
             let message = format!("Test message {}", i).into_bytes();
-            let signature = sk.sign(&message).expect("Signing failed");
+            let signature = sk
+                .sign(&message, &mut thread_rng())
+                .expect("Signing failed");
 
             signatures.push(signature);
             messages.push(message);
-            public_keys.push(pk.public_key.expect("Missing public key"));
+            public_keys.push(pk);
         }
 
         group.bench_with_input(BenchmarkId::new("batch_verify", size), size, |b, _| {
             b.iter(|| {
                 for i in 0..*size {
                     black_box(
-                        MLDsa::verify(
+                        MlDsa::verify(
+                            black_box(&public_keys[i]),
                             black_box(&messages[i]),
                             black_box(&signatures[i]),
-                            black_box(&public_keys[i]),
                         )
                         .expect("Verification failed"),
                     );
@@ -113,10 +121,11 @@ fn benchmark_timing_consistency(c: &mut Criterion) {
     let mut group = c.benchmark_group("ML-DSA Timing Analysis");
     group.sample_size(1000); // Increased samples for timing analysis
 
-    let (pk, sk) = MLDsa::keygen().expect("Key generation failed");
+    let sk = MlDsa::keygen(&mut thread_rng()).expect("Key generation failed");
+    let pk = sk.to_public_key().expect("Public key extraction failed");
     let message = b"Test message for timing analysis";
-    let signature = sk.sign(message).expect("Signing failed");
-    let pk_bytes = pk.public_key.expect("Missing public key");
+    let signature = sk.sign(message, &mut thread_rng()).expect("Signing failed");
+    let pk_bytes = pk;
 
     // Measure sign timing variance
     group.bench_function("sign_timing", |b| {
@@ -126,7 +135,7 @@ fn benchmark_timing_consistency(c: &mut Criterion) {
 
             for _ in 0..iters {
                 let start = Instant::now();
-                black_box(sk.sign(black_box(message))).expect("Signing failed");
+                black_box(sk.sign(black_box(message), &mut thread_rng())).expect("Signing failed");
                 let duration = start.elapsed();
                 timings.push(duration);
                 total_duration += duration;
@@ -144,10 +153,10 @@ fn benchmark_timing_consistency(c: &mut Criterion) {
 
             for _ in 0..iters {
                 let start = Instant::now();
-                black_box(MLDsa::verify(
+                black_box(MlDsa::verify(
+                    black_box(&pk_bytes),
                     black_box(message),
                     black_box(&signature),
-                    black_box(&pk_bytes),
                 ))
                 .expect("Verification failed");
                 let duration = start.elapsed();
@@ -168,13 +177,14 @@ fn benchmark_memory_usage(c: &mut Criterion) {
     group.bench_function("sign_memory", |b| {
         b.iter_custom(|iters| {
             let mut total_duration = std::time::Duration::new(0, 0);
-            let (pk, sk) = MLDsa::keygen().expect("Key generation failed");
+            let sk = MlDsa::keygen(&mut thread_rng()).expect("Key generation failed");
+            let pk = sk.to_public_key().expect("Public key extraction failed");
             let message = b"Test message for memory analysis";
 
             for _ in 0..iters {
                 reset_memory_usage();
                 let start = Instant::now();
-                black_box(sk.sign(black_box(message))).expect("Signing failed");
+                black_box(sk.sign(black_box(message), &mut thread_rng())).expect("Signing failed");
                 let duration = start.elapsed();
                 let mem_used = get_memory_usage();
                 println!("Sign Memory Usage: {} bytes", mem_used);
@@ -188,18 +198,19 @@ fn benchmark_memory_usage(c: &mut Criterion) {
     group.bench_function("verify_memory", |b| {
         b.iter_custom(|iters| {
             let mut total_duration = std::time::Duration::new(0, 0);
-            let (pk, sk) = MLDsa::keygen().expect("Key generation failed");
+            let sk = MlDsa::keygen(&mut thread_rng()).expect("Key generation failed");
+            let pk = sk.to_public_key().expect("Public key extraction failed");
             let message = b"Test message for memory analysis";
-            let signature = sk.sign(message).expect("Signing failed");
-            let pk_bytes = pk.public_key.expect("Missing public key");
+            let signature = sk.sign(message, &mut thread_rng()).expect("Signing failed");
+            let pk_bytes = pk;
 
             for _ in 0..iters {
                 reset_memory_usage();
                 let start = Instant::now();
-                black_box(MLDsa::verify(
+                black_box(MlDsa::verify(
+                    black_box(&pk_bytes),
                     black_box(message),
                     black_box(&signature),
-                    black_box(&pk_bytes),
                 ))
                 .expect("Verification failed");
                 let duration = start.elapsed();
@@ -228,11 +239,12 @@ fn benchmark_throughput(c: &mut Criterion) {
                 b.iter_custom(|_| {
                     let start = Instant::now();
                     let mut count = 0;
-                    let (_, sk) = MLDsa::keygen().expect("Key generation failed");
+                    let sk = MlDsa::keygen(&mut thread_rng()).expect("Key generation failed");
                     let message = b"Test message for throughput";
 
                     while start.elapsed().as_secs() < duration {
-                        black_box(sk.sign(black_box(message))).expect("Signing failed");
+                        black_box(sk.sign(black_box(message), &mut thread_rng()))
+                            .expect("Signing failed");
                         count += 1;
                     }
 
@@ -252,16 +264,17 @@ fn benchmark_throughput(c: &mut Criterion) {
                 b.iter_custom(|_| {
                     let start = Instant::now();
                     let mut count = 0;
-                    let (pk, sk) = MLDsa::keygen().expect("Key generation failed");
+                    let sk = MlDsa::keygen(&mut thread_rng()).expect("Key generation failed");
+                    let pk = sk.to_public_key().expect("Public key extraction failed");
                     let message = b"Test message for throughput";
-                    let signature = sk.sign(message).expect("Signing failed");
-                    let pk_bytes = pk.public_key.expect("Missing public key");
+                    let signature = sk.sign(message, &mut thread_rng()).expect("Signing failed");
+                    let pk_bytes = pk;
 
                     while start.elapsed().as_secs() < duration {
-                        black_box(MLDsa::verify(
+                        black_box(MlDsa::verify(
+                            black_box(&pk_bytes),
                             black_box(message),
                             black_box(&signature),
-                            black_box(&pk_bytes),
                         ))
                         .expect("Verification failed");
                         count += 1;

@@ -18,6 +18,12 @@ pub struct WasmVault {
     config: Arc<Mutex<VaultConfig>>,
 }
 
+impl Default for WasmVault {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[wasm_bindgen]
 impl WasmVault {
     /// Create a new vault
@@ -139,7 +145,7 @@ impl WasmVault {
 
         let filtered_entries: Vec<SafeVaultEntry> = entries
             .values()
-            .filter(|e| category.as_ref().map_or(true, |c| &e.category == c))
+            .filter(|e| category.as_ref().is_none_or(|c| &e.category == c))
             .map(|e| SafeVaultEntry {
                 id: e.id.clone(),
                 label: e.label.clone(),
@@ -173,7 +179,7 @@ impl WasmVault {
         include_symbols: bool,
         include_numbers: bool,
     ) -> Result<String, JsError> {
-        if length < 8 || length > 128 {
+        if !(8..=128).contains(&length) {
             return Err(JsError::new("Password length must be between 8 and 128"));
         }
 
@@ -296,7 +302,7 @@ mod base64 {
 
     pub fn decode(encoded: &str) -> Result<std::vec::Vec<u8>, &'static str> {
         // Simple mock implementation
-        if encoded.len() % 2 != 0 {
+        if !encoded.len().is_multiple_of(2) {
             return Err("Invalid encoding");
         }
 

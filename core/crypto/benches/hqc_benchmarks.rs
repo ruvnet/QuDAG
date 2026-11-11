@@ -135,42 +135,10 @@ fn benchmark_hqc_compatibility(c: &mut Criterion) {
     });
 }
 
-fn benchmark_hqc_polynomial_ops(c: &mut Criterion) {
-    let hqc = Hqc::new(SecurityParameter::Hqc128);
-    let byte_len = (hqc.params.n + 7) / 8;
-
-    let a = vec![0xAA; byte_len];
-    let b = vec![0x55; byte_len];
-    let c_vec = vec![0xFF; byte_len];
-
-    c.bench_function("hqc128_poly_mult_add", |b| {
-        b.iter(|| {
-            black_box(
-                hqc.poly_mult_add(black_box(&a), black_box(&b), black_box(&c_vec))
-                    .expect("Polynomial operation failed"),
-            );
-        });
-    });
-
-    c.bench_function("hqc128_bytes_to_bits", |b| {
-        b.iter(|| {
-            black_box(hqc.bytes_to_bits(black_box(&a)));
-        });
-    });
-
-    let bits = hqc.bytes_to_bits(&a);
-    c.bench_function("hqc128_bits_to_bytes", |b| {
-        b.iter(|| {
-            black_box(hqc.bits_to_bytes(black_box(&bits)));
-        });
-    });
-}
-
 criterion_group!(
     benches,
     benchmark_hqc_keygen,
     benchmark_hqc_encryption,
-    benchmark_hqc_compatibility,
-    benchmark_hqc_polynomial_ops
+    benchmark_hqc_compatibility
 );
 criterion_main!(benches);

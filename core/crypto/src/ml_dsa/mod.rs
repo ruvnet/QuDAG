@@ -41,8 +41,10 @@
 //!     public_key.verify(message, &signature)?;
 //!     
 //!     // Batch verification
-//!     let messages = vec![message.as_slice(), b"another message"];
-//!     let signatures = vec![signature.as_slice(), signature.as_slice()];
+//!     let other_message = b"another message";
+//!     let other_signature = keypair.sign(other_message, &mut rng)?;
+//!     let messages = vec![message.as_slice(), other_message.as_slice()];
+//!     let signatures = vec![signature.as_slice(), other_signature.as_slice()];
 //!     let public_keys = vec![&public_key, &public_key];
 //!     MlDsaPublicKey::batch_verify(&messages, &signatures, &public_keys)?;
 //!     
@@ -232,9 +234,9 @@ impl MlDsaPublicKey {
 
     /// Verify an ML-DSA signature against a message
     pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), MlDsaError> {
-        // ML-DSA signatures can vary in size due to rejection sampling
-        // Check for reasonable bounds instead of exact size
-        if signature.len() < 2000 || signature.len() > ML_DSA_SIGNATURE_SIZE {
+        // ML-DSA-65 signatures have a fixed encoded size (FIPS 204); reject any
+        // other length up front instead of handing it to the verifier.
+        if signature.len() != ML_DSA_SIGNATURE_SIZE {
             return Err(MlDsaError::InvalidSignatureLength {
                 expected: ML_DSA_SIGNATURE_SIZE,
                 found: signature.len(),
@@ -542,7 +544,8 @@ fn matrix_vector_multiply(
 
             let mut product = [0i32; ML_DSA_N];
             for k in 0..ML_DSA_N {
-                product[k] = (i64::from(a_ntt[k]) * i64::from(s1_ntt[j][k])).rem_euclid(i64::from(ML_DSA_Q)) as i32;
+                product[k] = (i64::from(a_ntt[k]) * i64::from(s1_ntt[j][k]))
+                    .rem_euclid(i64::from(ML_DSA_Q)) as i32;
             }
 
             // Add to result
@@ -569,7 +572,9 @@ fn matrix_vector_multiply(
 fn modular_pow(mut base: i64, mut exponent: usize) -> i64 {
     let mut result = 1;
     while exponent > 0 {
-        if exponent & 1 != 0 { result = result * base % i64::from(ML_DSA_Q); }
+        if exponent & 1 != 0 {
+            result = result * base % i64::from(ML_DSA_Q);
+        }
         base = base * base % i64::from(ML_DSA_Q);
         exponent >>= 1;
     }

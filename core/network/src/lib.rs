@@ -78,6 +78,28 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, error, info, warn};
 
+/// Peer identity for an address passed to `NetworkManager::connect_peer`:
+/// the `/p2p/<id>` component of a multiaddr when present, otherwise a stable
+/// id derived from the address (SHA-256), so the same address always maps to
+/// the same peer and reputation/blacklisting applies across reconnects.
+fn peer_id_for_address(address: &str) -> LibP2PPeerId {
+    use sha2::{Digest, Sha256};
+
+    if let Ok(multiaddr) = address.parse::<libp2p::Multiaddr>() {
+        if let Some(libp2p::multiaddr::Protocol::P2p(peer_id)) = multiaddr
+            .iter()
+            .find(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_)))
+        {
+            return peer_id;
+        }
+    }
+
+    let digest = Sha256::digest(address.as_bytes());
+    let multihash = libp2p::multihash::Multihash::<64>::wrap(0x12, &digest)
+        .expect("a SHA-256 digest fits in a 64-byte multihash");
+    LibP2PPeerId::from_multihash(multihash).expect("SHA-256 multihashes are valid peer ids")
+}
+
 /// Comprehensive network manager for P2P operations
 pub struct NetworkManager {
     /// Local peer ID
@@ -209,6 +231,13 @@ impl ReputationManager {
                 peer_id, new_score
             );
         }
+    }
+
+    /// Blacklist a peer explicitly, whatever its current score
+    pub fn blacklist(&mut self, peer_id: LibP2PPeerId) {
+        self.trusted.remove(&peer_id);
+        self.scores.insert(peer_id, -100.0);
+        self.blacklist.insert(peer_id, std::time::Instant::now());
     }
 
     /// Check if peer is blacklisted
@@ -354,8 +383,8 @@ impl NetworkManager {
     }
 
     /// Connect to a peer
-    pub async fn connect_peer(&self, _peer_address: &str) -> Result<LibP2PPeerId, NetworkError> {
-        let peer_id = LibP2PPeerId::random(); // In real implementation, derive from address
+    pub async fn connect_peer(&self, peer_address: &str) -> Result<LibP2PPeerId, NetworkError> {
+        let peer_id = peer_id_for_address(peer_address);
 
         // Check if peer is blacklisted
         if self
@@ -489,10 +518,7 @@ impl NetworkManager {
 
     /// Blacklist a peer
     pub async fn blacklist_peer(&self, peer_id: LibP2PPeerId) {
-        self.reputation_manager
-            .write()
-            .await
-            .update_reputation(peer_id, -100.0);
+        self.reputation_manager.write().await.blacklist(peer_id);
 
         // Disconnect if currently connected
         let _ = self.disconnect_peer(&peer_id).await;

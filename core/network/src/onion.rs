@@ -92,10 +92,10 @@ impl OnionLayer {
     }
 
     /// Validates layer format and timing constraints
+    ///
+    /// An empty `next_hop` marks the innermost layer (final destination), as
+    /// produced by `encrypt_layers` and expected by `decrypt_layer`.
     pub fn validate(&self) -> Result<(), OnionError> {
-        if self.next_hop.is_empty() {
-            return Err(OnionError::InvalidFormat("empty next hop key".into()));
-        }
         if self.payload.is_empty() {
             return Err(OnionError::InvalidFormat("empty payload".into()));
         }
@@ -193,6 +193,12 @@ impl MLKEMOnionRouter {
             circuit_manager,
             directory_client,
         })
+    }
+
+    /// Directory this router resolves hop public keys from. Routes passed to
+    /// `encrypt_layers` must be node ids from this directory.
+    pub fn directory_client(&self) -> Arc<DirectoryClient> {
+        Arc::clone(&self.directory_client)
     }
 
     /// Creates a new ML-KEM onion router with custom layer size
@@ -1151,6 +1157,11 @@ impl CircuitManager {
             .max_by(|a, b| a.quality_score.total_cmp(&b.quality_score))
     }
 
+    /// Get a circuit by id
+    pub fn get_circuit(&self, circuit_id: u64) -> Option<&Circuit> {
+        self.circuits.get(&circuit_id)
+    }
+
     /// Update circuit metrics
     pub fn update_circuit_metrics(&mut self, circuit_id: u64, bytes_sent: u64, success: bool) {
         if let Some(circuit) = self.circuits.get_mut(&circuit_id) {
@@ -1322,52 +1333,51 @@ impl DirectoryClient {
             return Err(OnionError::RouteError("Not enough active nodes".into()));
         }
 
-        // Select nodes with bandwidth weighting
+        // Select nodes with bandwidth weighting. Hops are identified by node id,
+        // which is what get_public_key / measure_bandwidth look up.
         let mut selected = Vec::new();
-        let mut available = active_nodes.clone();
+        let mut available = active_nodes;
 
         for i in 0..count {
-            // For entry guard, prefer nodes with guard flag
-            if i == 0 {
-                let guards: Vec<_> = available
+            // Entry hop prefers guard nodes and the exit hop requires an exit
+            // node; the remaining pool stays intact for the other hops.
+            let mut candidates: Vec<usize> = (0..available.len()).collect();
+            if i == 0 && count > 1 {
+                let guards: Vec<usize> = candidates
                     .iter()
-                    .filter(|n| n.flags.guard)
                     .copied()
+                    .filter(|&idx| available[idx].flags.guard)
                     .collect();
-
                 if !guards.is_empty() {
-                    available = guards;
+                    candidates = guards;
                 }
             }
-
-            // For exit node, require exit flag
             if i == count - 1 {
-                available.retain(|n| n.flags.exit);
-                if available.is_empty() {
+                candidates.retain(|&idx| available[idx].flags.exit);
+                if candidates.is_empty() {
                     return Err(OnionError::RouteError("No exit nodes available".into()));
                 }
             }
 
-            // Select node weighted by bandwidth. If all nodes report zero
+            // Select node weighted by bandwidth. If all candidates report zero
             // bandwidth, fall back to uniform random selection to avoid a
             // panic in gen_range(0..0).
-            let total_bandwidth: u64 = available.iter().map(|n| n.bandwidth).sum();
-            if total_bandwidth == 0 {
-                // Uniform fallback: pick a random index
-                let idx = thread_rng().gen_range(0..available.len());
-                selected.push(available[idx].public_key.as_bytes().to_vec());
-                available.remove(idx);
+            let total_bandwidth: u64 = candidates.iter().map(|&idx| available[idx].bandwidth).sum();
+            let chosen = if total_bandwidth == 0 {
+                candidates[thread_rng().gen_range(0..candidates.len())]
             } else {
                 let mut target = thread_rng().gen_range(0..total_bandwidth);
-                for (idx, node) in available.iter().enumerate() {
-                    if target < node.bandwidth {
-                        selected.push(node.public_key.as_bytes().to_vec());
-                        available.remove(idx);
+                let mut chosen = candidates[candidates.len() - 1];
+                for &idx in &candidates {
+                    if target < available[idx].bandwidth {
+                        chosen = idx;
                         break;
                     }
-                    target -= node.bandwidth;
+                    target -= available[idx].bandwidth;
                 }
-            }
+                chosen
+            };
+            selected.push(available.remove(chosen).id.clone());
         }
 
         Ok(selected)

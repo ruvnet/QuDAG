@@ -483,12 +483,8 @@ fn macos_resident_size() -> Option<usize> {
     use std::mem;
 
     extern "C" {
-        fn task_info(
-            task: u32,
-            flavor: u32,
-            task_info: *mut i32,
-            task_info_count: *mut u32,
-        ) -> i32;
+        fn task_info(task: u32, flavor: u32, task_info: *mut i32, task_info_count: *mut u32)
+            -> i32;
         fn mach_task_self() -> u32;
     }
 

@@ -1436,8 +1436,8 @@ impl CommandRouter {
         if !updated.is_empty() {
             println!("  Updated: {}", updated.join(", "));
         }
-        if generate && new_password.is_some() {
-            println!("  Generated password: {}", new_password.unwrap());
+        if let (true, Some(password)) = (generate, &new_password) {
+            println!("  Generated password: {}", password);
         }
 
         Ok(())

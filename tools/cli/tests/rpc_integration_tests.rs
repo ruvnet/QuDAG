@@ -15,12 +15,9 @@ async fn test_peer_management_integration() -> Result<()> {
     // Start a test RPC server
     let (mut server, mut command_rx) = RpcServer::new_tcp(8900);
 
-    // Start the server in background
-    let server_handle = tokio::spawn(async move {
-        if let Err(e) = server.start().await {
-            eprintln!("Server error: {}", e);
-        }
-    });
+    // `start` spawns the listener task and returns; the server must stay alive
+    // (dropping it signals shutdown), so keep it in scope until the end.
+    server.start().await?;
 
     // Handle commands in background
     let command_handle = tokio::spawn(async move {
@@ -69,7 +66,7 @@ async fn test_peer_management_integration() -> Result<()> {
 
     // Test peer list command (should work even with no peers)
     let result = router.handle_peer_list(Some(8900)).await;
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "{:?}", result);
 
     // Test adding a peer
     let result = router
@@ -79,11 +76,11 @@ async fn test_peer_management_integration() -> Result<()> {
 
     // Test network stats
     let result = router.handle_network_stats(Some(8900), false).await;
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "{:?}", result);
 
     // Clean up
-    drop(server_handle);
-    drop(command_handle);
+    server.stop().await?;
+    command_handle.abort();
 
     Ok(())
 }
@@ -136,8 +133,9 @@ async fn test_node_running_check() {
 
 #[tokio::test]
 async fn test_rpc_timeout_handling() -> Result<()> {
-    let client =
-        RpcClient::new_tcp("127.0.0.1".to_string(), 9997).with_timeout(Duration::from_millis(10)); // Very short timeout
+    let client = RpcClient::new_tcp("127.0.0.1".to_string(), 9997)
+        .with_timeout(Duration::from_millis(10)) // Very short timeout
+        .with_retry(1, Duration::ZERO); // Single attempt: measure the timeout, not retry backoff
 
     let start = std::time::Instant::now();
     let result = client.get_status().await;

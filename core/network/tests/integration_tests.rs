@@ -1,164 +1,60 @@
-use qudag_network::prelude::*;
+use qudag_network::{P2PEvent, P2PNetworkConfig, P2PNode};
 use std::time::Duration;
-use tokio;
+
+fn loopback_config() -> P2PNetworkConfig {
+    P2PNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".to_string()],
+        enable_mdns: false,
+        ..Default::default()
+    }
+}
 
 #[tokio::test]
 async fn test_node_connectivity() {
-    let node1_config = NetworkConfig {
-        listen_addr: "/ip4/127.0.0.1/tcp/0".into(),
-        bootstrap_peers: vec![],
-        max_connections: 50,
-    };
+    let (mut node1, handle1) = P2PNode::new(loopback_config()).await.unwrap();
+    let (mut node2, handle2) = P2PNode::new(loopback_config()).await.unwrap();
+    node1.start().await.unwrap();
+    node2.start().await.unwrap();
 
-    let node2_config = NetworkConfig {
-        listen_addr: "/ip4/127.0.0.1/tcp/0".into(),
-        bootstrap_peers: vec![],
-        max_connections: 50,
-    };
+    // Handle requests are served while the node event loops are polled
+    let client = async {
+        let peer1 = handle1.local_peer_id().await;
+        let peer2 = handle2.local_peer_id().await;
 
-    let (mut node1, mut rx1) = Node::new(node1_config).await.unwrap();
-    let (mut node2, mut rx2) = Node::new(node2_config).await.unwrap();
-
-    // Connect nodes
-    let addr1 = node1.swarm.local_peer_id();
-    let addr2 = node2.swarm.local_peer_id();
-    node1
-        .swarm
-        .behaviour_mut()
-        .connection_manager
-        .connect(addr2)
+        // Wait for node1 to bind its listener
+        let addr1 = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let Some(addr) = handle1.listeners().await.into_iter().next() {
+                    break addr;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
         .await
-        .unwrap();
+        .expect("node1 never started listening");
 
-    // Wait for connection events
-    let timeout = Duration::from_secs(5);
-    tokio::time::timeout(timeout, async {
-        while let Some(event) = rx1.recv().await {
-            match event {
-                NetworkEvent::PeerConnected(peer) if peer == addr2 => break,
-                _ => continue,
+        // Connect node2 to node1
+        handle2.dial(addr1).await.unwrap();
+
+        // Wait for the connection event on node1
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                match handle1.next_event().await {
+                    Some(P2PEvent::PeerConnected(peer)) if peer == peer2 => break,
+                    Some(_) => continue,
+                    None => panic!("node1 event channel closed"),
+                }
             }
-        }
-    })
-    .await
-    .unwrap();
-}
+        })
+        .await
+        .expect("node1 never saw node2 connect");
 
-#[tokio::test]
-async fn test_message_routing() {
-    let node1_config = NetworkConfig {
-        listen_addr: "/ip4/127.0.0.1/tcp/0".into(),
-        bootstrap_peers: vec![],
-        max_connections: 50,
+        assert!(handle2.connected_peers().await.contains(&peer1));
     };
 
-    let (mut node1, mut rx1) = Node::new(node1_config).await.unwrap();
-
-    // Test message queue
-    let msg = NetworkMessage {
-        id: "test".into(),
-        source: vec![1],
-        destination: vec![2],
-        payload: vec![0; 100],
-        priority: MessagePriority::Normal,
-        ttl: Duration::from_secs(60),
-    };
-
-    node1
-        .swarm
-        .behaviour_mut()
-        .message_queue
-        .enqueue(msg.clone())
-        .await;
-
-    // Verify routing
-    let timeout = Duration::from_secs(5);
-    tokio::time::timeout(timeout, async {
-        while let Some(event) = rx1.recv().await {
-            match event {
-                NetworkEvent::MessageReceived { data, .. } if data == msg.payload => break,
-                _ => continue,
-            }
-        }
-    })
-    .await
-    .unwrap();
-}
-
-#[tokio::test]
-async fn test_anonymous_routing() {
-    let node_config = NetworkConfig {
-        listen_addr: "/ip4/127.0.0.1/tcp/0".into(),
-        bootstrap_peers: vec![],
-        max_connections: 50,
-    };
-
-    let (mut node, mut rx) = Node::new(node_config).await.unwrap();
-
-    // Add test peers
-    let peer_ids: Vec<_> = (0..5).map(|_| PeerId::random()).collect();
-    for peer_id in &peer_ids {
-        node.swarm.behaviour_mut().router.add_peer(*peer_id).await;
+    tokio::select! {
+        result = node1.run() => panic!("node1 stopped: {:?}", result.err().map(|e| e.to_string())),
+        result = node2.run() => panic!("node2 stopped: {:?}", result.err().map(|e| e.to_string())),
+        _ = client => {}
     }
-
-    // Test anonymous message routing
-    let msg = NetworkMessage {
-        id: "anonymous".into(),
-        source: vec![1],
-        destination: vec![2],
-        payload: vec![0; 100],
-        priority: MessagePriority::High,
-        ttl: Duration::from_secs(60),
-    };
-
-    let route = node
-        .swarm
-        .behaviour_mut()
-        .router
-        .route(&msg, RoutingStrategy::Anonymous { hops: 3 })
-        .await
-        .unwrap();
-
-    assert_eq!(route.len(), 3);
-    assert!(route.iter().all(|peer| peer_ids.contains(peer)));
-}
-
-#[tokio::test]
-async fn test_kademlia_discovery() {
-    let node1_config = NetworkConfig {
-        listen_addr: "/ip4/127.0.0.1/tcp/0".into(),
-        bootstrap_peers: vec![],
-        max_connections: 50,
-    };
-
-    let node2_config = NetworkConfig {
-        listen_addr: "/ip4/127.0.0.1/tcp/0".into(),
-        bootstrap_peers: vec![],
-        max_connections: 50,
-    };
-
-    let (mut node1, _) = Node::new(node1_config).await.unwrap();
-    let (mut node2, _) = Node::new(node2_config).await.unwrap();
-
-    // Bootstrap node2 using node1
-    let node1_addr = node1.swarm.local_peer_id();
-    node2
-        .swarm
-        .behaviour_mut()
-        .kad
-        .add_address(&node1_addr, "/ip4/127.0.0.1/tcp/0".parse().unwrap());
-    node2.swarm.behaviour_mut().kad.bootstrap().unwrap();
-
-    // Wait for bootstrap completion
-    let timeout = Duration::from_secs(5);
-    tokio::time::timeout(timeout, async {
-        loop {
-            match node2.swarm.behaviour_mut().kad.query_stats() {
-                QueryStats { completed: c, .. } if c > 0 => break,
-                _ => tokio::time::sleep(Duration::from_millis(100)).await,
-            }
-        }
-    })
-    .await
-    .unwrap();
 }

@@ -758,7 +758,11 @@ impl KademliaDHT {
     /// Handle closest peers result
     async fn handle_closest_peers(&mut self, result: GetClosestPeersOk, duration: Duration) {
         // In libp2p 0.55+ peers is Vec<PeerInfo>; extract peer IDs for existing logic
-        let peer_ids: Vec<LibP2PPeerId> = result.peers.into_iter().map(|p: KadPeerInfo| p.peer_id).collect();
+        let peer_ids: Vec<LibP2PPeerId> = result
+            .peers
+            .into_iter()
+            .map(|p: KadPeerInfo| p.peer_id)
+            .collect();
         debug!("Found {} closest peers in {:?}", peer_ids.len(), duration);
 
         // Update network size estimate

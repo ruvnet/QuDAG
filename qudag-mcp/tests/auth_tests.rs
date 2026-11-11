@@ -106,7 +106,14 @@ async fn test_vault_integration_security() {
     assert!(encryption["algorithm"].is_string());
     assert_eq!(encryption["quantum_resistant"], true);
 
-    // Ensure no secret material is exposed in the entry listing
+    // Ensure no secret material is exposed anywhere in the resource
+    // (aggregate keys such as "password_strength" are statistics, not secrets)
+    let text = data.to_string();
+    assert!(!text.contains("private_key"));
+    assert!(!text.contains("secret"));
+    assert!(!text.contains("\"password\":"));
+
+    // ...and no entry carries a secret-valued field
     let entries = data["entries"].as_array().unwrap();
     assert!(!entries.is_empty());
     for entry in entries {

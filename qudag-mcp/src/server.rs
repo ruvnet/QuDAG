@@ -789,6 +789,7 @@ mod tests {
         assert!(response.result.is_some());
         let result = response.result.unwrap();
         assert!(result["tools"].is_array());
+        assert!(!result["tools"].as_array().unwrap().is_empty());
     }
 
     #[tokio::test]

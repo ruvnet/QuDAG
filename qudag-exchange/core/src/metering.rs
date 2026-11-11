@@ -170,7 +170,7 @@ impl ResourceMeter {
                 base_cost: rUv::new(1),
                 per_unit_cost: rUv::new(1), // 1 rUv per KB
                 min_fee: rUv::new(1),
-                max_units: 1024, // 1MB max (units are KB)
+                max_units: 1024 * 1024, // 1MB max
             },
         );
 
@@ -400,8 +400,8 @@ mod tests {
     fn test_cost_limits() {
         let meter = ResourceMeter::new();
 
-        // Exceed storage limit
-        let result = meter.calculate_cost(OperationType::StoreData, 2000);
+        // Exceed storage limit (max_units is 1024 * 1024)
+        let result = meter.calculate_cost(OperationType::StoreData, 1024 * 1024 + 1);
         assert!(result.is_err());
 
         // Within limits

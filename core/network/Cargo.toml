@@ -57,6 +57,7 @@ hkdf = "0.12"
 
 # Other dependencies
 qudag-crypto = { version = "0.6.0", path = "../crypto" }
+ml-kem = { version = "0.3.2", features = ["zeroize", "getrandom"] }
 
 # Compression for message chunking
 zstd = "0.13"

@@ -4115,6 +4115,7 @@ dependencies = [
  "libp2p",
  "lru",
  "metrics",
+ "ml-kem",
  "mockito",
  "parking_lot 0.12.5",
  "proptest",

@@ -6,10 +6,31 @@
 //! - ChaCha20-Poly1305 for symmetric encryption
 
 use crate::types::NetworkError;
+use ml_kem::{Decapsulate, Encapsulate, KeyExport};
 use rand::{rngs::OsRng, RngCore};
 use std::fmt::Debug;
 use tracing::{debug, info};
-use zeroize::ZeroizeOnDrop;
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+
+/// Runs `$body` with `$kem` bound to the ml-kem parameter-set module for `$level`
+macro_rules! with_ml_kem {
+    ($level:expr, $kem:ident => $body:expr) => {
+        match $level {
+            MlKemSecurityLevel::Level512 => {
+                use ml_kem::ml_kem_512 as $kem;
+                $body
+            }
+            MlKemSecurityLevel::Level768 => {
+                use ml_kem::ml_kem_768 as $kem;
+                $body
+            }
+            MlKemSecurityLevel::Level1024 => {
+                use ml_kem::ml_kem_1024 as $kem;
+                $body
+            }
+        }
+    };
+}
 
 /// ML-KEM (Kyber) security levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -142,20 +163,26 @@ impl MlKem {
     }
 
     /// Generate a new keypair
+    ///
+    /// The secret key is stored as the 64-byte ML-KEM seed (FIPS 203 `d || z`)
+    /// from which the decapsulation key is re-derived.
     pub fn generate_keypair(&mut self) -> Result<(MlKemPublicKey, MlKemSecretKey), NetworkError> {
         info!(
             "Generating ML-KEM keypair with security level: {:?}",
             self.security_level
         );
 
-        let (public_key_size, secret_key_size) = self.get_key_sizes();
+        let mut seed = Zeroizing::new(ml_kem::Seed::default());
+        self.rng
+            .try_fill_bytes(seed.as_mut_slice())
+            .map_err(|e| NetworkError::EncryptionError(format!("RNG failure: {}", e)))?;
 
-        // Generate random key material (in production, this would use actual ML-KEM)
-        let mut public_key_data = vec![0u8; public_key_size];
-        let mut secret_key_data = vec![0u8; secret_key_size];
-
-        self.rng.fill_bytes(&mut public_key_data);
-        self.rng.fill_bytes(&mut secret_key_data);
+        let public_key_data = with_ml_kem!(self.security_level, kem => {
+            kem::DecapsulationKey::from_seed(*seed)
+                .encapsulation_key()
+                .to_bytes()
+                .to_vec()
+        });
 
         let public_key = MlKemPublicKey {
             key_data: public_key_data,
@@ -163,7 +190,7 @@ impl MlKem {
         };
 
         let secret_key = MlKemSecretKey {
-            key_data: secret_key_data,
+            key_data: seed.to_vec(),
             security_level: self.security_level,
         };
 
@@ -184,14 +211,17 @@ impl MlKem {
 
         debug!("Encapsulating shared secret with ML-KEM");
 
-        let (ciphertext_size, shared_secret_size) = self.get_encapsulation_sizes();
-
-        // Generate random ciphertext and shared secret (in production, use actual ML-KEM)
-        let mut ciphertext_data = vec![0u8; ciphertext_size];
-        let mut shared_secret_data = vec![0u8; shared_secret_size];
-
-        self.rng.fill_bytes(&mut ciphertext_data);
-        self.rng.fill_bytes(&mut shared_secret_data);
+        let invalid_key = || NetworkError::EncryptionError("Invalid ML-KEM public key".into());
+        let (ciphertext_data, mut shared_key) = with_ml_kem!(self.security_level, kem => {
+            let encoded = ml_kem::Key::<kem::EncapsulationKey>::try_from(
+                public_key.key_data.as_slice(),
+            )
+            .map_err(|_| invalid_key())?;
+            let encapsulation_key =
+                kem::EncapsulationKey::new(&encoded).map_err(|_| invalid_key())?;
+            let (ciphertext, shared_key) = encapsulation_key.encapsulate();
+            (ciphertext.to_vec(), shared_key)
+        });
 
         let ciphertext = MlKemCiphertext {
             ciphertext: ciphertext_data,
@@ -199,8 +229,9 @@ impl MlKem {
         };
 
         let shared_secret = SharedSecret {
-            secret: shared_secret_data,
+            secret: shared_key.to_vec(),
         };
+        shared_key.zeroize();
 
         debug!("ML-KEM encapsulation completed successfully");
         Ok((ciphertext, shared_secret))
@@ -222,54 +253,25 @@ impl MlKem {
 
         debug!("Decapsulating shared secret with ML-KEM");
 
-        let shared_secret_size = self.get_shared_secret_size();
-
-        // In production, this would perform actual ML-KEM decapsulation
-        // For now, we'll generate a deterministic secret based on ciphertext
-        let mut shared_secret_data = vec![0u8; shared_secret_size];
-
-        // Use a simple hash of the ciphertext as the shared secret (NOT secure, just for demo)
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = DefaultHasher::new();
-        ciphertext.ciphertext.hash(&mut hasher);
-        let hash = hasher.finish();
-
-        // Fill the shared secret with repeated hash values
-        for (i, byte) in shared_secret_data.iter_mut().enumerate() {
-            *byte = ((hash >> (8 * (i % 8))) & 0xFF) as u8;
-        }
+        let seed = Zeroizing::new(
+            ml_kem::Seed::try_from(secret_key.key_data.as_slice())
+                .map_err(|_| NetworkError::EncryptionError("Invalid ML-KEM secret key".into()))?,
+        );
+        let invalid_ciphertext =
+            || NetworkError::EncryptionError("Invalid ML-KEM ciphertext length".into());
+        let mut shared_key = with_ml_kem!(self.security_level, kem => {
+            let encapsulated = kem::Ciphertext::try_from(ciphertext.ciphertext.as_slice())
+                .map_err(|_| invalid_ciphertext())?;
+            kem::DecapsulationKey::from_seed(*seed).decapsulate(&encapsulated)
+        });
 
         let shared_secret = SharedSecret {
-            secret: shared_secret_data,
+            secret: shared_key.to_vec(),
         };
+        shared_key.zeroize();
 
         debug!("ML-KEM decapsulation completed successfully");
         Ok(shared_secret)
-    }
-
-    /// Get key sizes for the current security level
-    fn get_key_sizes(&self) -> (usize, usize) {
-        match self.security_level {
-            MlKemSecurityLevel::Level512 => (800, 1632), // Approximate sizes for ML-KEM-512
-            MlKemSecurityLevel::Level768 => (1184, 2400), // Approximate sizes for ML-KEM-768
-            MlKemSecurityLevel::Level1024 => (1568, 3168), // Approximate sizes for ML-KEM-1024
-        }
-    }
-
-    /// Get encapsulation sizes for the current security level
-    fn get_encapsulation_sizes(&self) -> (usize, usize) {
-        match self.security_level {
-            MlKemSecurityLevel::Level512 => (768, 32), // Ciphertext and shared secret sizes
-            MlKemSecurityLevel::Level768 => (1088, 32),
-            MlKemSecurityLevel::Level1024 => (1568, 32),
-        }
-    }
-
-    /// Get shared secret size for the current security level
-    fn get_shared_secret_size(&self) -> usize {
-        32 // All ML-KEM variants produce 32-byte shared secrets
     }
 }
 
@@ -442,9 +444,9 @@ mod tests {
         // Decapsulate
         let shared_secret2 = ml_kem.decapsulate(&secret_key, &ciphertext).unwrap();
 
-        // In a real implementation, these should be equal
-        // For our mock implementation, we'll just check they have the same length
-        assert_eq!(shared_secret1.secret.len(), shared_secret2.secret.len());
+        // Both sides derive the same 32-byte secret
+        assert_eq!(shared_secret1.secret.len(), 32);
+        assert_eq!(shared_secret1.secret, shared_secret2.secret);
     }
 
     #[test]
@@ -462,8 +464,8 @@ mod tests {
         // Responder completes exchange
         let responder_secret = responder.complete_exchange(&ciphertext).unwrap();
 
-        // Check that secrets have the same length
-        assert_eq!(initiator_secret.secret.len(), responder_secret.secret.len());
+        // Both sides agree on the shared secret
+        assert_eq!(initiator_secret.secret, responder_secret.secret);
     }
 
     #[test]

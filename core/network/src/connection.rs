@@ -1912,7 +1912,8 @@ mod tests {
 
     #[tokio::test]
     async fn bench_route_computation() {
-        let manager = ConnectionManager::new(100);
+        // Room for every peer: connects beyond max_connections are rejected
+        let manager = ConnectionManager::new(1000);
         let _rng = rand::thread_rng();
         let mut latencies = Vec::new();
 
@@ -1934,9 +1935,10 @@ mod tests {
 
     #[tokio::test]
     async fn bench_cache_efficiency() {
+        // Room for every peer: connects beyond max_connections are rejected
         let manager = ConnectionManager::new(1000);
         let mut hit_count = 0;
-        let iterations = 10000;
+        let iterations = 1000;
 
         for _ in 0..iterations {
             let peer = PeerId::random();

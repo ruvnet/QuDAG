@@ -369,10 +369,15 @@ proptest! {
 
         let ciphertext = Hqc256::encrypt(&pk, &plaintext).unwrap();
 
-        // Property: Small errors in ciphertext must never panic; decryption
-        // either fails or returns some plaintext of the original length.
+        // Property: small errors in the KEM ciphertext or the encrypted message must
+        // never panic; decryption either fails or returns a plaintext of the original
+        // length. The wire format starts with a 4-byte little-endian message length,
+        // and a flip inside that header legitimately changes the output length (3 -> 2),
+        // so the flips are applied after the header.
+        const HEADER_LEN: usize = 4;
         let mut corrupted_ct = ciphertext.clone();
-        for &pos in &error_positions {
+        for &offset in &error_positions {
+            let pos = HEADER_LEN + offset;
             if pos < corrupted_ct.len() {
                 corrupted_ct[pos] ^= 1; // Single bit flip
             }

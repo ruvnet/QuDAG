@@ -99,6 +99,12 @@ jobs:
     needs: [check-version, test-wasm]
     if: needs.check-version.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
+    # id-token: keyless GCP auth (workload identity federation); contents: write is
+    # for the release step below. The WIF provider only accepts this workflow on main
+    # or tags, from push/workflow_dispatch events.
+    permissions:
+      contents: write
+      id-token: write
     strategy:
       matrix:
         target:
@@ -143,7 +149,7 @@ jobs:
             pkg.name = '${{ matrix.target.package }}';
             pkg.repository = {
               type: 'git',
-              url: 'https://github.com/qudag/qudag.git'
+              url: 'git+https://github.com/ruvnet/QuDAG.git'
             };
             pkg.keywords = [
               'qudag',
@@ -156,10 +162,10 @@ jobs:
               'ml-kem',
               'post-quantum'
             ];
-            pkg.license = 'MIT';
-            pkg.homepage = 'https://github.com/qudag/qudag#readme';
+            pkg.license = 'MIT OR Apache-2.0';
+            pkg.homepage = 'https://ruv.io';
             pkg.bugs = {
-              url: 'https://github.com/qudag/qudag/issues'
+              url: 'https://github.com/ruvnet/QuDAG/issues'
             };
             require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));
           "
@@ -177,9 +183,27 @@ jobs:
           examples/
           EOF
           
+      - name: Authenticate to Google Cloud (workload identity federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/186366152200/locations/global/workloadIdentityPools/github-ruvnet-ci/providers/qudag
+          service_account: ci-qudag@cognitum-20260110.iam.gserviceaccount.com
+
+      - name: Read the npm token from Secret Manager
+        id: gsm
+        uses: google-github-actions/get-secretmanager-secrets@v2
+        with:
+          secrets: |-
+            npm:cognitum-20260110/NPM_TOKEN
+
+      - name: Verify npm authentication
+        env:
+          NODE_AUTH_TOKEN: ${{ steps.gsm.outputs.npm }}
+        run: npm whoami --registry https://registry.npmjs.org
+
       - name: Publish to NPM
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ steps.gsm.outputs.npm }}
         run: |
           cd qudag-wasm/pkg-${{ matrix.target.name }}
           

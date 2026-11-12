@@ -1,11 +1,15 @@
 use proptest::prelude::*;
-use qudag_dag::{Confidence, ConsensusConfig, ConsensusError, DAGConsensus, Vertex};
+use qudag_dag::{ConsensusConfig, ConsensusStatus, DAGConsensus, DagError, Vertex, VertexId};
 use std::time::Duration;
+
+fn vid(id: &str) -> VertexId {
+    VertexId::from_bytes(id.as_bytes().to_vec())
+}
 
 fn create_test_vertex(id: &str, parents: Vec<&str>) -> Vertex {
     Vertex {
-        id: id.to_string(),
-        parents: parents.into_iter().map(String::from).collect(),
+        id: vid(id),
+        parents: parents.into_iter().map(vid).collect(),
         timestamp: 0,
         signature: vec![],
         payload: vec![],
@@ -55,8 +59,14 @@ fn test_agreement() {
     dag2.add_vertex(vertex_a).unwrap();
     dag2.add_vertex(vertex_b).unwrap();
 
-    // Both DAGs should reach the same final state
+    // Both DAGs should reach the same state (Pending: since v2 local
+    // admission does not establish finality) and the same order.
     assert_eq!(dag1.get_confidence("B"), dag2.get_confidence("B"));
+    assert_eq!(dag1.get_confidence("B"), Some(ConsensusStatus::Pending));
+    assert_eq!(
+        dag1.get_total_order().unwrap(),
+        dag2.get_total_order().unwrap()
+    );
 }
 
 // Test Validity Property
@@ -72,15 +82,20 @@ fn test_validity() {
     let invalid_vertex = create_test_vertex("invalid", vec!["nonexistent"]);
     assert!(matches!(
         dag.add_vertex(invalid_vertex),
-        Err(ConsensusError::InvalidVertex(_))
+        Err(DagError::ConsensusError(msg)) if msg.contains("Invalid vertex")
     ));
 
-    // Try to add vertex that creates a cycle
-    let cycle_vertex = create_test_vertex("A", vec!["A"]);
+    // Try to add vertex that creates a cycle (references itself)
+    let cycle_vertex = create_test_vertex("B", vec!["B"]);
     assert!(matches!(
         dag.add_vertex(cycle_vertex),
-        Err(ConsensusError::ValidationError(_))
+        Err(DagError::ConsensusError(msg)) if msg.contains("Validation error")
     ));
+
+    // Rejected vertices are not admitted
+    assert_eq!(dag.get_confidence("invalid"), None);
+    assert_eq!(dag.get_confidence("B"), None);
+    assert_eq!(dag.get_total_order().unwrap(), vec!["A"]);
 }
 
 // Property-based test for safety properties
@@ -101,12 +116,12 @@ proptest! {
             // Randomly select parents from existing vertices
             for j in 0..i {
                 if rand::random::<f64>() < parent_probability {
-                    parents.push(format!("V{}", j));
+                    parents.push(vid(&format!("V{}", j)));
                 }
             }
 
             let vertex = Vertex {
-                id: id.clone(),
+                id: vid(&id),
                 parents,
                 timestamp: i as u64,
                 signature: vec![],
@@ -118,7 +133,12 @@ proptest! {
         }
 
         // Verify total order properties
-        let order = dag.get_total_order().unwrap();
+        let order: Vec<VertexId> = dag
+            .get_total_order()
+            .unwrap()
+            .iter()
+            .map(|id| vid(id))
+            .collect();
         prop_assert!(order.len() == vertex_count);
 
         // Verify that parents come before children

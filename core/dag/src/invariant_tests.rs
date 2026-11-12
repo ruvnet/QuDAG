@@ -146,8 +146,14 @@ mod tests {
         assert!(dag.add_vertex(branch2).is_ok());
 
         // Both locally admitted branches should remain pending
-        assert_eq!(dag.get_confidence("branch1"), Some(ConsensusStatus::Pending));
-        assert_eq!(dag.get_confidence("branch2"), Some(ConsensusStatus::Pending));
+        assert_eq!(
+            dag.get_confidence("branch1"),
+            Some(ConsensusStatus::Pending)
+        );
+        assert_eq!(
+            dag.get_confidence("branch2"),
+            Some(ConsensusStatus::Pending)
+        );
 
         // Merge should work
         let merge = create_test_vertex("merge", vec!["branch1", "branch2"]);
@@ -173,8 +179,14 @@ mod tests {
         assert!(result.is_err());
 
         // Honest vertices should maintain their pending admission
-        assert_eq!(dag.get_confidence("honest1"), Some(ConsensusStatus::Pending));
-        assert_eq!(dag.get_confidence("honest2"), Some(ConsensusStatus::Pending));
+        assert_eq!(
+            dag.get_confidence("honest1"),
+            Some(ConsensusStatus::Pending)
+        );
+        assert_eq!(
+            dag.get_confidence("honest2"),
+            Some(ConsensusStatus::Pending)
+        );
     }
 
     /// Property-based test for DAG invariants

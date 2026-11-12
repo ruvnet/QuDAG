@@ -41,6 +41,23 @@ qudag-crypto = { version = "0.6.0", path = "../crypto" }
 
 [dev-dependencies]
 proptest.workspace = true
+criterion = { workspace = true, features = ["async_tokio"] }
+
+[[bench]]
+name = "consensus_benchmarks"
+harness = false
+
+[[bench]]
+name = "dag_benchmarks"
+harness = false
+
+[[bench]]
+name = "finality_benchmarks"
+harness = false
+
+[[bench]]
+name = "qr_avalanche_benchmarks"
+harness = false
 
 [features]
 default = []

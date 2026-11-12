@@ -13,6 +13,12 @@ pub struct VaultTool {
     description: String,
 }
 
+impl Default for VaultTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VaultTool {
     /// Create a new vault tool
     pub fn new() -> Self {

@@ -1,6 +1,11 @@
 use subtle::ConstantTimeEq;
 use zeroize::Zeroize;
 
+/// Constant-time slice equality (length mismatch returns false).
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    a.ct_eq(b).into()
+}
+
 #[test]
 fn test_constant_time_equality() {
     let a = vec![1u8, 2u8, 3u8];
@@ -10,12 +15,11 @@ fn test_constant_time_equality() {
     assert!(constant_time_eq(&a, &b));
     assert!(!constant_time_eq(&a, &c));
     // Note: constant_time_eq handles different lengths safely
+    assert!(!constant_time_eq(&a, &a[..2]));
 }
 
 #[test]
 fn test_constant_time_zeroization() {
-    use zeroize::Zeroize;
-
     let mut sensitive_data = vec![1u8, 2u8, 3u8];
     sensitive_data.zeroize();
 
@@ -51,7 +55,7 @@ fn test_timing_resistance() {
     let public_key = keypair
         .to_public_key()
         .expect("Public key conversion failed");
-    let _ = public_key
+    public_key
         .verify(message, &signature)
         .expect("Verification failed");
 }

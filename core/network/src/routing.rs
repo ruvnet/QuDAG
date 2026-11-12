@@ -726,15 +726,8 @@ impl Router {
         let mut min_bandwidth = u64::MAX;
 
         for hop in hops {
-            if let Some(peer) = peers.get(hop) {
-                if let Some(bw) = peer.capabilities.bandwidth_capacity {
-                    min_bandwidth = min_bandwidth.min(bw);
-                } else {
-                    return None;
-                }
-            } else {
-                return None;
-            }
+            let bw = peers.get(hop)?.capabilities.bandwidth_capacity?;
+            min_bandwidth = min_bandwidth.min(bw);
         }
 
         if min_bandwidth == u64::MAX {
@@ -909,7 +902,8 @@ impl Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shadow_address::{NetworkType, ShadowMetadata};
+    use crate::discovery::DiscoveryMethod;
+    use crate::shadow_address::{NetworkType, ShadowFeatures, ShadowMetadata};
     use tokio::sync::mpsc;
 
     // Mock shadow address resolver for testing
@@ -927,6 +921,14 @@ mod tests {
         ) -> Result<bool, ShadowAddressError> {
             Ok(onetime == &[1, 2, 3, 4])
         }
+    }
+
+    /// A statically known peer that has completed one successful connection,
+    /// so the router considers it healthy enough to route through.
+    fn healthy_peer(peer_id: LibP2PPeerId, addr: &str) -> DiscoveredPeer {
+        let mut peer = DiscoveredPeer::new(peer_id, addr.parse().unwrap(), DiscoveryMethod::Static);
+        peer.record_connection_attempt(true, &PeerScoringConfig::default());
+        peer
     }
 
     fn setup_test_router() -> (Router, mpsc::Receiver<Vec<u8>>) {
@@ -952,6 +954,18 @@ mod tests {
                 network: NetworkType::Testnet,
                 expires_at: None,
                 flags: 0,
+                created_at: 0,
+                last_used: None,
+                ttl: None,
+                usage_count: 0,
+                max_uses: None,
+            },
+            shadow_features: ShadowFeatures {
+                is_temporary: false,
+                derivation_index: None,
+                stealth_prefix: None,
+                mixing_enabled: false,
+                pool_id: None,
             },
         }
     }
@@ -960,16 +974,12 @@ mod tests {
     async fn test_add_remove_peer() {
         let (router, _) = setup_test_router();
         let peer1 = LibP2PPeerId::random();
-        let peer2 = DiscoveredPeer::new(
-            LibP2PPeerId::random(),
-            "127.0.0.1:8000".parse().unwrap(),
-            DiscoveryMethod::Static,
-        );
+        let peer2 = healthy_peer(LibP2PPeerId::random(), "127.0.0.1:8000");
 
-        router.add_peer_connection(peer1, peer2.clone()).await;
+        router.add_discovered_peer(peer1, peer2.clone()).await;
         assert!(router.peers.read().await.contains_key(&peer1));
 
-        router.remove_peer_connection(peer1).await;
+        router.remove_discovered_peer(peer1).await;
         assert!(!router.peers.read().await.contains_key(&peer1));
     }
 
@@ -981,25 +991,13 @@ mod tests {
         let peer3 = LibP2PPeerId::random();
 
         // Set up peers
-        let discovered_peer1 = DiscoveredPeer::new(
-            peer1,
-            "127.0.0.1:8001".parse().unwrap(),
-            DiscoveryMethod::Static,
-        );
-        let discovered_peer2 = DiscoveredPeer::new(
-            peer2,
-            "127.0.0.1:8002".parse().unwrap(),
-            DiscoveryMethod::Static,
-        );
-        let discovered_peer3 = DiscoveredPeer::new(
-            peer3,
-            "127.0.0.1:8003".parse().unwrap(),
-            DiscoveryMethod::Static,
-        );
+        let discovered_peer1 = healthy_peer(peer1, "127.0.0.1:8001");
+        let discovered_peer2 = healthy_peer(peer2, "127.0.0.1:8002");
+        let discovered_peer3 = healthy_peer(peer3, "127.0.0.1:8003");
 
-        router.add_peer_connection(peer1, discovered_peer1).await;
-        router.add_peer_connection(peer2, discovered_peer2).await;
-        router.add_peer_connection(peer3, discovered_peer3).await;
+        router.add_discovered_peer(peer1, discovered_peer1).await;
+        router.add_discovered_peer(peer2, discovered_peer2).await;
+        router.add_discovered_peer(peer3, discovered_peer3).await;
 
         let test_msg = vec![1, 2, 3, 4];
         router.route_message(peer3, test_msg.clone()).await.unwrap();
@@ -1017,25 +1015,13 @@ mod tests {
         let peer3 = LibP2PPeerId::random();
 
         // Set up peers
-        let discovered_peer1 = DiscoveredPeer::new(
-            peer1,
-            "127.0.0.1:8001".parse().unwrap(),
-            DiscoveryMethod::Static,
-        );
-        let discovered_peer2 = DiscoveredPeer::new(
-            peer2,
-            "127.0.0.1:8002".parse().unwrap(),
-            DiscoveryMethod::Static,
-        );
-        let discovered_peer3 = DiscoveredPeer::new(
-            peer3,
-            "127.0.0.1:8003".parse().unwrap(),
-            DiscoveryMethod::Static,
-        );
+        let discovered_peer1 = healthy_peer(peer1, "127.0.0.1:8001");
+        let discovered_peer2 = healthy_peer(peer2, "127.0.0.1:8002");
+        let discovered_peer3 = healthy_peer(peer3, "127.0.0.1:8003");
 
-        router.add_peer_connection(peer1, discovered_peer1).await;
-        router.add_peer_connection(peer2, discovered_peer2).await;
-        router.add_peer_connection(peer3, discovered_peer3).await;
+        router.add_discovered_peer(peer1, discovered_peer1).await;
+        router.add_discovered_peer(peer2, discovered_peer2).await;
+        router.add_discovered_peer(peer3, discovered_peer3).await;
 
         let criteria = RouteSelectionCriteria {
             max_latency: None,
@@ -1065,25 +1051,13 @@ mod tests {
         let peer3 = LibP2PPeerId::random();
 
         // Set up some peers
-        let discovered_peer1 = DiscoveredPeer::new(
-            peer1,
-            "127.0.0.1:8001".parse().unwrap(),
-            DiscoveryMethod::Static,
-        );
-        let discovered_peer2 = DiscoveredPeer::new(
-            peer2,
-            "127.0.0.1:8002".parse().unwrap(),
-            DiscoveryMethod::Static,
-        );
-        let discovered_peer3 = DiscoveredPeer::new(
-            peer3,
-            "127.0.0.1:8003".parse().unwrap(),
-            DiscoveryMethod::Static,
-        );
+        let discovered_peer1 = healthy_peer(peer1, "127.0.0.1:8001");
+        let discovered_peer2 = healthy_peer(peer2, "127.0.0.1:8002");
+        let discovered_peer3 = healthy_peer(peer3, "127.0.0.1:8003");
 
-        router.add_peer_connection(peer1, discovered_peer1).await;
-        router.add_peer_connection(peer2, discovered_peer2).await;
-        router.add_peer_connection(peer3, discovered_peer3).await;
+        router.add_discovered_peer(peer1, discovered_peer1).await;
+        router.add_discovered_peer(peer2, discovered_peer2).await;
+        router.add_discovered_peer(peer3, discovered_peer3).await;
 
         // Try routing to a shadow address
         let shadow_addr = create_test_shadow_address();

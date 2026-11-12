@@ -54,6 +54,17 @@ pub enum HqcError {
     MessageTooLong,
 }
 
+/// Run a pqcrypto-hqc decapsulation, turning its failure panic into an error.
+///
+/// `pqcrypto-hqc` asserts that the underlying C `crypto_kem_dec` returns 0, and
+/// that function reports a failed re-encryption check for malformed or tampered
+/// ciphertexts. Without this guard, attacker-controlled ciphertext would panic
+/// the caller instead of producing `HqcError::DecryptionError`.
+fn decapsulate_checked<T>(decapsulate: impl FnOnce() -> T) -> Result<T, HqcError> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(decapsulate))
+        .map_err(|_| HqcError::DecryptionError)
+}
+
 /// Public key for HQC that can hold any security level
 #[derive(Debug, Clone)]
 pub struct PublicKey {
@@ -261,7 +272,8 @@ impl Hqc {
                 let kem_ct = hqc128::Ciphertext::from_bytes(&ct.kem_ciphertext)
                     .map_err(|_| HqcError::InvalidCiphertext)?;
 
-                let shared_secret = hqc128::decapsulate(&kem_ct, &sk_bytes);
+                let shared_secret =
+                    decapsulate_checked(|| hqc128::decapsulate(&kem_ct, &sk_bytes))?;
 
                 // Derive the same key from shared secret
                 let key = self.derive_key(shared_secret.as_bytes());
@@ -275,7 +287,8 @@ impl Hqc {
                 let kem_ct = hqc192::Ciphertext::from_bytes(&ct.kem_ciphertext)
                     .map_err(|_| HqcError::InvalidCiphertext)?;
 
-                let shared_secret = hqc192::decapsulate(&kem_ct, &sk_bytes);
+                let shared_secret =
+                    decapsulate_checked(|| hqc192::decapsulate(&kem_ct, &sk_bytes))?;
 
                 let key = self.derive_key(shared_secret.as_bytes());
                 let message = self.xor_decrypt(&ct.encrypted_message, &key);
@@ -288,7 +301,8 @@ impl Hqc {
                 let kem_ct = hqc256::Ciphertext::from_bytes(&ct.kem_ciphertext)
                     .map_err(|_| HqcError::InvalidCiphertext)?;
 
-                let shared_secret = hqc256::decapsulate(&kem_ct, &sk_bytes);
+                let shared_secret =
+                    decapsulate_checked(|| hqc256::decapsulate(&kem_ct, &sk_bytes))?;
 
                 let key = self.derive_key(shared_secret.as_bytes());
                 let message = self.xor_decrypt(&ct.encrypted_message, &key);

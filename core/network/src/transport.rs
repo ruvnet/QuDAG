@@ -346,8 +346,15 @@ impl SecureTransport {
 
         info!("Setting up TLS configuration");
 
-        // Setup client configuration
-        let client_config = ClientConfig::builder()
+        // Setup client configuration. Use the process-wide crypto provider if one
+        // is installed; otherwise pick aws-lc-rs explicitly, because the dependency
+        // graph enables more than one rustls provider and `ClientConfig::builder()`
+        // panics when it cannot choose.
+        let provider = rustls::crypto::CryptoProvider::get_default()
+            .cloned()
+            .unwrap_or_else(|| Arc::new(rustls::crypto::aws_lc_rs::default_provider()));
+        let client_config = ClientConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()?
             .with_root_certificates(self.load_ca_certificates()?)
             .with_no_client_auth();
 

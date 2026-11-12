@@ -40,7 +40,8 @@ pub enum RecordType {
 pub struct DnsRecord {
     /// Record name/hostname
     pub name: String,
-    /// Record type
+    /// Record type (serialized as `type`, matching the Cloudflare API)
+    #[serde(rename = "type")]
     pub record_type: RecordType,
     /// Record content/value
     pub content: String,
@@ -63,14 +64,44 @@ pub struct CloudflareConfig {
 pub struct CloudflareClient {
     config: CloudflareConfig,
     http_client: reqwest::Client,
+    api_base: String,
+}
+
+/// Response envelope returned by every Cloudflare v4 API call
+#[derive(Debug, Deserialize)]
+struct CloudflareResponse<T> {
+    success: bool,
+    result: Option<T>,
+    #[serde(default)]
+    errors: Vec<serde_json::Value>,
+}
+
+impl<T> CloudflareResponse<T> {
+    fn into_result(self) -> Result<T, DnsError> {
+        if !self.success {
+            return Err(DnsError::ApiError(format!(
+                "Cloudflare reported failure: {:?}",
+                self.errors
+            )));
+        }
+        self.result
+            .ok_or_else(|| DnsError::ApiError("Cloudflare response has no result".to_string()))
+    }
 }
 
 impl CloudflareClient {
     /// Creates a new Cloudflare API client
     pub fn new(config: CloudflareConfig) -> Self {
+        Self::with_api_base(config, Self::API_BASE)
+    }
+
+    /// Creates a client that talks to `api_base` instead of the public Cloudflare
+    /// endpoint (e.g. a proxy or a local test server)
+    pub fn with_api_base(config: CloudflareConfig, api_base: impl Into<String>) -> Self {
         Self {
             config,
             http_client: reqwest::Client::new(),
+            api_base: api_base.into(),
         }
     }
 
@@ -80,8 +111,7 @@ impl CloudflareClient {
     pub async fn list_records(&self) -> Result<Vec<DnsRecord>, DnsError> {
         let url = format!(
             "{}/zones/{}/dns_records",
-            Self::API_BASE,
-            self.config.zone_id
+            self.api_base, self.config.zone_id
         );
 
         let response = self
@@ -101,9 +131,10 @@ impl CloudflareClient {
         }
 
         let records = response
-            .json::<Vec<DnsRecord>>()
+            .json::<CloudflareResponse<Vec<DnsRecord>>>()
             .await
-            .map_err(|e| DnsError::ApiError(e.to_string()))?;
+            .map_err(|e| DnsError::ApiError(e.to_string()))?
+            .into_result()?;
 
         Ok(records)
     }
@@ -112,8 +143,7 @@ impl CloudflareClient {
     pub async fn create_record(&self, record: DnsRecord) -> Result<DnsRecord, DnsError> {
         let url = format!(
             "{}/zones/{}/dns_records",
-            Self::API_BASE,
-            self.config.zone_id
+            self.api_base, self.config.zone_id
         );
 
         let response = self
@@ -134,9 +164,10 @@ impl CloudflareClient {
         }
 
         let created_record = response
-            .json::<DnsRecord>()
+            .json::<CloudflareResponse<DnsRecord>>()
             .await
-            .map_err(|e| DnsError::ApiError(e.to_string()))?;
+            .map_err(|e| DnsError::ApiError(e.to_string()))?
+            .into_result()?;
 
         Ok(created_record)
     }
@@ -149,9 +180,7 @@ impl CloudflareClient {
     ) -> Result<DnsRecord, DnsError> {
         let url = format!(
             "{}/zones/{}/dns_records/{}",
-            Self::API_BASE,
-            self.config.zone_id,
-            record_id
+            self.api_base, self.config.zone_id, record_id
         );
 
         let response = self
@@ -172,9 +201,10 @@ impl CloudflareClient {
         }
 
         let updated_record = response
-            .json::<DnsRecord>()
+            .json::<CloudflareResponse<DnsRecord>>()
             .await
-            .map_err(|e| DnsError::ApiError(e.to_string()))?;
+            .map_err(|e| DnsError::ApiError(e.to_string()))?
+            .into_result()?;
 
         Ok(updated_record)
     }
@@ -183,9 +213,7 @@ impl CloudflareClient {
     pub async fn delete_record(&self, record_id: &str) -> Result<(), DnsError> {
         let url = format!(
             "{}/zones/{}/dns_records/{}",
-            Self::API_BASE,
-            self.config.zone_id,
-            record_id
+            self.api_base, self.config.zone_id, record_id
         );
 
         let response = self
@@ -273,12 +301,7 @@ impl DnsManager {
         match record.record_type {
             RecordType::A => {
                 // Validate IPv4 address
-                if !record.content.split('.').count() == 4
-                    && !record
-                        .content
-                        .split('.')
-                        .all(|octet| octet.parse::<u8>().is_ok())
-                {
+                if record.content.parse::<std::net::Ipv4Addr>().is_err() {
                     return Err(DnsError::ValidationError(
                         "Invalid IPv4 address".to_string(),
                     ));
@@ -324,7 +347,7 @@ impl DnsManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockito::mock;
+    use mockito::Server;
     use serde_json::json;
 
     fn setup_test_config() -> CloudflareConfig {
@@ -346,8 +369,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_records() {
-        let _m = mock("GET", "/zones/test_zone/dns_records")
-            .with_header("Authorization", "Bearer test_token")
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("GET", "/zones/test_zone/dns_records")
+            .match_header("authorization", "Bearer test_token")
             .with_status(200)
             .with_body(
                 json!({
@@ -362,19 +387,23 @@ mod tests {
                 })
                 .to_string(),
             )
-            .create();
+            .create_async()
+            .await;
 
-        let client = CloudflareClient::new(setup_test_config());
+        let client = CloudflareClient::with_api_base(setup_test_config(), server.url());
         let records = client.list_records().await.unwrap();
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].name, "test.example.com");
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_create_record() {
         let record = create_test_record();
-        let _m = mock("POST", "/zones/test_zone/dns_records")
-            .with_header("Authorization", "Bearer test_token")
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("POST", "/zones/test_zone/dns_records")
+            .match_header("authorization", "Bearer test_token")
             .with_status(200)
             .with_body(
                 json!({
@@ -389,19 +418,23 @@ mod tests {
                 })
                 .to_string(),
             )
-            .create();
+            .create_async()
+            .await;
 
-        let client = CloudflareClient::new(setup_test_config());
+        let client = CloudflareClient::with_api_base(setup_test_config(), server.url());
         let created = client.create_record(record.clone()).await.unwrap();
         assert_eq!(created.name, record.name);
         assert_eq!(created.content, record.content);
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_update_record() {
         let record = create_test_record();
-        let _m = mock("PUT", "/zones/test_zone/dns_records/test_id")
-            .with_header("Authorization", "Bearer test_token")
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("PUT", "/zones/test_zone/dns_records/test_id")
+            .match_header("authorization", "Bearer test_token")
             .with_status(200)
             .with_body(
                 json!({
@@ -416,17 +449,21 @@ mod tests {
                 })
                 .to_string(),
             )
-            .create();
+            .create_async()
+            .await;
 
-        let client = CloudflareClient::new(setup_test_config());
+        let client = CloudflareClient::with_api_base(setup_test_config(), server.url());
         let updated = client.update_record("test_id", record).await.unwrap();
         assert_eq!(updated.content, "192.0.2.2");
+        mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_delete_record() {
-        let _m = mock("DELETE", "/zones/test_zone/dns_records/test_id")
-            .with_header("Authorization", "Bearer test_token")
+        let mut server = Server::new_async().await;
+        let mock = server
+            .mock("DELETE", "/zones/test_zone/dns_records/test_id")
+            .match_header("authorization", "Bearer test_token")
             .with_status(200)
             .with_body(
                 json!({
@@ -435,10 +472,12 @@ mod tests {
                 })
                 .to_string(),
             )
-            .create();
+            .create_async()
+            .await;
 
-        let client = CloudflareClient::new(setup_test_config());
+        let client = CloudflareClient::with_api_base(setup_test_config(), server.url());
         client.delete_record("test_id").await.unwrap();
+        mock.assert_async().await;
     }
 
     #[test]

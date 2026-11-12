@@ -789,6 +789,7 @@ mod tests {
         assert!(response.result.is_some());
         let result = response.result.unwrap();
         assert!(result["tools"].is_array());
+        assert!(!result["tools"].as_array().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -802,6 +803,63 @@ mod tests {
         assert!(response.result.is_some());
         let result = response.result.unwrap();
         assert!(result["resources"].is_array());
+        assert!(!result["resources"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_initialize_result_contents() {
+        let server = QuDAGMCPServer::new(ServerConfig::new()).await.unwrap();
+
+        let request =
+            MCPRequest::initialize(ClientInfo::new("test-client", "1.0.0"), HashMap::new());
+        let response = server.handle_request(request).await;
+        assert!(response.error.is_none());
+
+        let result = response.result.unwrap();
+        assert_eq!(result["protocolVersion"], crate::MCP_PROTOCOL_VERSION);
+        assert!(result["serverInfo"].is_object());
+        assert!(result["capabilities"].is_object());
+        assert_eq!(
+            server.client_info.read().await.as_ref().unwrap().name,
+            "test-client"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_unsupported_protocol_version_is_rejected() {
+        let server = QuDAGMCPServer::new(ServerConfig::new()).await.unwrap();
+
+        let params = InitializeParams {
+            protocol_version: "unsupported-version".to_string(),
+            capabilities: HashMap::new(),
+            client_info: ClientInfo::new("test", "1.0.0"),
+        };
+        let request = MCPRequest::new("test", "initialize")
+            .with_params(serde_json::to_value(params).unwrap());
+
+        let error = server.handle_initialize(&request).await.unwrap_err();
+        assert!(error.to_string().contains("Unsupported protocol version"));
+        assert_eq!(error.error_code(), -32600);
+        assert!(server.client_info.read().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_invalid_request_handling() {
+        let server = QuDAGMCPServer::new(ServerConfig::new()).await.unwrap();
+
+        // Unknown method
+        let response = server
+            .handle_request(MCPRequest::new("test-id", "invalid/method"))
+            .await;
+        assert!(response.result.is_none());
+        assert_eq!(response.error.unwrap()["code"], -32601);
+
+        // tools/call without a tool name
+        let request = MCPRequest::new("test-id", "tools/call")
+            .with_params(serde_json::json!({"invalid": "params"}));
+        let response = server.handle_request(request).await;
+        assert_eq!(response.id, RequestId::from_string("test-id"));
+        assert_eq!(response.error.unwrap()["code"], -32602);
     }
 }
 

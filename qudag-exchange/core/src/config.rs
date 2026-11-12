@@ -485,36 +485,57 @@ impl Default for GovernanceConfig {
 /// Summary of configuration for display purposes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigSummary {
+    /// Human-readable network name
     pub network_name: String,
+    /// Chain ID of the network
     pub chain_id: u64,
+    /// Current state of the immutable deployment
     pub immutable_status: ImmutableStatus,
+    /// Parameters of the active fee model
     pub fee_model_summary: FeeModelSummary,
+    /// Whether quantum-resistant signatures are required
     pub security_enabled: bool,
+    /// Whether dark addressing is enabled on the network
     pub dark_addressing_enabled: bool,
+    /// Business plan feature summary, if business plan features are configured
     pub business_plan_summary: Option<BusinessPlanSummary>,
 }
 
 /// Business plan features summary for display
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BusinessPlanSummary {
+    /// Whether business plan features are enabled at all
     pub enabled: bool,
+    /// Whether fees are automatically distributed to contributors
     pub auto_distribution_enabled: bool,
+    /// Whether contributor vault management is enabled
     pub vault_management_enabled: bool,
+    /// Whether role-based earnings are enabled
     pub role_earnings_enabled: bool,
+    /// Whether bounty rewards are enabled
     pub bounty_rewards_enabled: bool,
+    /// Number of payouts recorded by the fee router
     pub total_contributors: u32,
+    /// Minimum accumulated amount (in rUv) before a payout is made
     pub min_payout_threshold: u64,
+    /// Fraction of each fee retained by the system (0.0 to 1.0)
     pub system_fee_percentage: f64,
 }
 
 /// Fee model summary for display
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeeModelSummary {
+    /// Minimum fee rate for unverified agents
     pub f_min: f64,
+    /// Maximum fee rate for unverified agents
     pub f_max: f64,
+    /// Minimum fee rate for verified agents
     pub f_min_verified: f64,
+    /// Maximum fee rate for verified agents
     pub f_max_verified: f64,
+    /// Fee phase-in time constant, in days
     pub time_constant_days: u64,
+    /// Monthly usage threshold, in rUv
     pub usage_threshold: u64,
 }
 
@@ -583,10 +604,12 @@ impl ExchangeConfigBuilder {
 
     /// Enable basic business plan features with default configuration
     pub fn with_basic_business_plan(mut self) -> Self {
-        let mut bp_config = BusinessPlanConfig::default();
-        bp_config.enabled = true;
-        bp_config.enable_auto_distribution = true;
-        bp_config.enable_role_earnings = true;
+        let bp_config = BusinessPlanConfig {
+            enabled: true,
+            enable_auto_distribution: true,
+            enable_role_earnings: true,
+            ..Default::default()
+        };
         self.business_plan = Some(bp_config);
         self
     }

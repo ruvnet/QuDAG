@@ -51,6 +51,12 @@ pub struct WasmDag {
     inner: Arc<Mutex<Dag>>,
 }
 
+impl Default for WasmDag {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[wasm_bindgen]
 impl WasmDag {
     /// Create a new DAG instance
@@ -64,13 +70,13 @@ impl WasmDag {
     /// Add a vertex to the DAG
     #[wasm_bindgen(js_name = "addVertex")]
     pub fn add_vertex(&self, vertex_data: JsValue) -> Result<String, JsError> {
-        let data: VertexData = serde_wasm_bindgen::from_value(vertex_data)?;
+        let _data: VertexData = serde_wasm_bindgen::from_value(vertex_data)?;
 
         // Create a vertex from the data
         // Note: This is simplified - actual implementation would need proper vertex construction
         let vertex_id = VertexId::new();
 
-        let mut dag = self
+        let _dag = self
             .inner
             .lock()
             .map_err(|e| JsError::new(&format!("Failed to lock DAG: {}", e)))?;
@@ -84,10 +90,10 @@ impl WasmDag {
     /// Get a vertex by ID
     #[wasm_bindgen(js_name = "getVertex")]
     pub fn get_vertex(&self, vertex_id: &str) -> Result<JsValue, JsError> {
-        let id_bytes = hex::decode(vertex_id)
+        let _id_bytes = hex::decode(vertex_id)
             .map_err(|e| JsError::new(&format!("Invalid vertex ID: {}", e)))?;
 
-        let dag = self
+        let _dag = self
             .inner
             .lock()
             .map_err(|e| JsError::new(&format!("Failed to lock DAG: {}", e)))?;
@@ -128,17 +134,17 @@ impl WasmDag {
     /// Get tips (vertices without children)
     #[wasm_bindgen(js_name = "getTips")]
     pub fn get_tips(&self) -> Result<Vec<JsValue>, JsError> {
-        let dag = self
+        let _dag = self
             .inner
             .lock()
             .map_err(|e| JsError::new(&format!("Failed to lock DAG: {}", e)))?;
 
         // Get tips from DAG (simplified)
-        let tips = vec![]; // dag.get_tips();
+        let tips: Vec<VertexId> = vec![]; // dag.get_tips();
 
         let js_tips: Result<Vec<JsValue>, _> = tips
             .into_iter()
-            .map(|tip| {
+            .map(|_tip| {
                 let tip_info = VertexInfo {
                     id: "mock_tip_id".to_string(),
                     parents: vec![],
@@ -150,13 +156,13 @@ impl WasmDag {
             })
             .collect();
 
-        js_tips
+        js_tips.map_err(|e| JsError::new(&format!("Failed to serialize tips: {}", e)))
     }
 
     /// Validate the DAG structure
     #[wasm_bindgen(js_name = "validate")]
     pub fn validate(&self) -> Result<bool, JsError> {
-        let dag = self
+        let _dag = self
             .inner
             .lock()
             .map_err(|e| JsError::new(&format!("Failed to lock DAG: {}", e)))?;
@@ -170,7 +176,13 @@ impl WasmDag {
 /// WASM wrapper for QR-Avalanche consensus
 #[wasm_bindgen]
 pub struct WasmConsensus {
-    inner: Arc<Mutex<QRAvalanche>>,
+    _inner: Arc<Mutex<QRAvalanche>>,
+}
+
+impl Default for WasmConsensus {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[wasm_bindgen]
@@ -179,14 +191,14 @@ impl WasmConsensus {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(Mutex::new(QRAvalanche::new())),
+            _inner: Arc::new(Mutex::new(QRAvalanche::new())),
         }
     }
 
     /// Query consensus for a vertex
     #[wasm_bindgen(js_name = "queryVertex")]
     pub async fn query_vertex(&self, vertex_id: &str) -> Result<JsValue, JsError> {
-        let id_bytes = hex::decode(vertex_id)
+        let _id_bytes = hex::decode(vertex_id)
             .map_err(|e| JsError::new(&format!("Invalid vertex ID: {}", e)))?;
 
         // Query consensus (simplified)

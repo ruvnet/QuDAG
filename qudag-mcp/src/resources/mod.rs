@@ -53,7 +53,7 @@ impl ResourceRegistry {
     /// Get all available resources
     pub async fn list_resources(&self) -> Result<Vec<Resource>> {
         let mut resources = Vec::new();
-        for (_name, resource) in &self.resources {
+        for resource in self.resources.values() {
             let definition = resource.definition();
             resources.push(Resource {
                 uri: definition.uri,
@@ -67,22 +67,7 @@ impl ResourceRegistry {
 
     /// Read a resource
     pub async fn read_resource(&self, uri: &ResourceURI) -> Result<Vec<ResourceContent>> {
-        let uri_str = uri.as_str();
-
-        // Parse resource type from URI
-        let resource_type = if uri_str.starts_with("vault://") {
-            "vault"
-        } else if uri_str.starts_with("dag://") {
-            "dag"
-        } else if uri_str.starts_with("network://") {
-            "network"
-        } else if uri_str.starts_with("exchange://") {
-            "exchange"
-        } else if uri_str.starts_with("crypto://") {
-            "crypto"
-        } else {
-            return Err(Error::resource("unknown", "Unknown resource type"));
-        };
+        let resource_type = provider_key(uri)?;
 
         if let Some(resource) = self.resources.get(resource_type) {
             resource.read(uri).await
@@ -96,22 +81,7 @@ impl ResourceRegistry {
 
     /// Subscribe to resource changes
     pub async fn subscribe_to_resource(&self, uri: &ResourceURI) -> Result<()> {
-        let uri_str = uri.as_str();
-
-        // Parse resource type from URI
-        let resource_type = if uri_str.starts_with("vault://") {
-            "vault"
-        } else if uri_str.starts_with("dag://") {
-            "dag"
-        } else if uri_str.starts_with("network://") {
-            "network"
-        } else if uri_str.starts_with("exchange://") {
-            "exchange"
-        } else if uri_str.starts_with("crypto://") {
-            "crypto"
-        } else {
-            return Err(Error::resource("unknown", "Unknown resource type"));
-        };
+        let resource_type = provider_key(uri)?;
 
         if let Some(resource) = self.resources.get(resource_type) {
             if resource.supports_subscriptions() {
@@ -132,6 +102,23 @@ impl ResourceRegistry {
     }
 }
 
+/// Map a resource URI to the key of the provider registered for its scheme.
+fn provider_key(uri: &ResourceURI) -> Result<&'static str> {
+    const SCHEMES: [(&str, &str); 6] = [
+        ("vault://", "vault"),
+        ("dag://", "dag"),
+        ("network://", "network"),
+        ("system://", "system"),
+        ("exchange://", "exchange"),
+        ("crypto://", "crypto"),
+    ];
+    SCHEMES
+        .iter()
+        .find(|(prefix, _)| uri.as_str().starts_with(prefix))
+        .map(|(_, key)| *key)
+        .ok_or_else(|| Error::resource("unknown", "Unknown resource type"))
+}
+
 impl Default for ResourceRegistry {
     fn default() -> Self {
         Self::new()
@@ -140,7 +127,7 @@ impl Default for ResourceRegistry {
 
 /// Trait for MCP resources
 #[async_trait]
-pub trait McpResource {
+pub trait McpResource: Send + Sync {
     /// Get the resource URI
     fn uri(&self) -> &str;
 

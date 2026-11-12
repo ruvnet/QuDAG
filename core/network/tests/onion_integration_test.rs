@@ -5,7 +5,7 @@ use qudag_network::onion::{
     MixMessageType, MixNode, TrafficAnalysisResistance,
 };
 use qudag_network::router::Router;
-use qudag_network::types::{MessagePriority, NetworkMessage, RoutingStrategy};
+use qudag_network::types::{MessagePriority, NetworkMessage, PeerId, RoutingStrategy};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -26,12 +26,20 @@ async fn test_complete_onion_routing_system() {
     let circuit_manager = Arc::new(Mutex::new(CircuitManager::new()));
     let directory_client = Arc::new(DirectoryClient::new());
     let router = Arc::new(Router::new().await.unwrap());
+    // Anonymous routing needs enough known peers besides source and destination
+    for _ in 0..10 {
+        router.add_peer(PeerId::random()).await;
+    }
 
     info!("Infrastructure initialized");
 
     // Phase 2: Build multiple circuits
     let mut circuit_ids = Vec::new();
     for i in 0..3 {
+        if i > 0 {
+            // Circuit creation is rate limited to one per second
+            sleep(Duration::from_millis(1100)).await;
+        }
         let mut cm = circuit_manager.lock().await;
         match cm.build_circuit(3 + i, &directory_client).await {
             Ok(circuit_id) => {
@@ -75,8 +83,8 @@ async fn test_complete_onion_routing_system() {
 
                 // Update circuit metrics
                 let mut cm = circuit_manager.lock().await;
-                if let Some(circuit) = cm.get_active_circuit() {
-                    cm.update_circuit_metrics(circuit.id, message.payload.len() as u64, true);
+                if let Some(circuit_id) = cm.get_active_circuit().map(|circuit| circuit.id) {
+                    cm.update_circuit_metrics(circuit_id, message.payload.len() as u64, true);
                 }
             }
             Err(e) => {
@@ -227,8 +235,8 @@ async fn test_complete_onion_routing_system() {
 
                     // Update metrics
                     let mut cm = cm_clone.lock().await;
-                    if let Some(circuit) = cm.get_active_circuit() {
-                        cm.update_circuit_metrics(circuit.id, message.payload.len() as u64, true);
+                    if let Some(circuit_id) = cm.get_active_circuit().map(|circuit| circuit.id) {
+                        cm.update_circuit_metrics(circuit_id, message.payload.len() as u64, true);
                     }
                 }
 
@@ -278,8 +286,8 @@ async fn test_circuit_failure_recovery() {
         .unwrap();
     circuit_manager.activate_circuit(circuit_id).unwrap();
 
-    // Simulate failures
-    for _ in 0..10 {
+    // Simulate failures (each failure decays quality by 5%, so 15 take it below 0.5)
+    for _ in 0..15 {
         circuit_manager.update_circuit_metrics(circuit_id, 0, false);
     }
 
@@ -287,7 +295,8 @@ async fn test_circuit_failure_recovery() {
     let circuit = circuit_manager.get_active_circuit().unwrap();
     assert!(circuit.quality_score < 0.5);
 
-    // Build replacement circuit
+    // Build replacement circuit (after the one-per-second creation limit)
+    sleep(Duration::from_millis(1100)).await;
     let new_circuit_id = circuit_manager
         .build_circuit(3, &directory_client)
         .await

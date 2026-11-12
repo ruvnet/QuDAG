@@ -97,14 +97,55 @@ pub struct PersistedDagState {
     pub last_saved: u64,
 }
 
+/// Serializes maps with non-string keys (byte IDs) as a list of `(key, value)`
+/// pairs. JSON object keys must be strings, so serializing these maps directly
+/// made `FileStateStore::save_state` fail for any state containing vertices.
+/// Deserialization also accepts the legacy object form, which could only ever
+/// have been written for empty maps.
+mod map_as_pairs {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::collections::HashMap;
+    use std::hash::Hash;
+
+    pub fn serialize<K, V, S>(map: &HashMap<K, V>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        K: Serialize,
+        V: Serialize,
+        S: Serializer,
+    {
+        serializer.collect_seq(map.iter())
+    }
+
+    pub fn deserialize<'de, K, V, D>(deserializer: D) -> Result<HashMap<K, V>, D::Error>
+    where
+        K: Deserialize<'de> + Eq + Hash,
+        V: Deserialize<'de>,
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Repr<K: Eq + Hash, V> {
+            Pairs(Vec<(K, V)>),
+            Map(HashMap<K, V>),
+        }
+
+        Ok(match Repr::deserialize(deserializer)? {
+            Repr::Pairs(pairs) => pairs.into_iter().collect(),
+            Repr::Map(map) => map,
+        })
+    }
+}
+
 /// DAG-specific state information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DagState {
     /// DAG vertices stored as HashMap for efficient lookup
+    #[serde(with = "map_as_pairs")]
     pub vertices: HashMap<VertexId, Vertex>,
     /// Current tip vertices
     pub tips: std::collections::HashSet<VertexId>,
     /// Voting records for consensus
+    #[serde(with = "map_as_pairs")]
     pub voting_records: HashMap<VertexId, VotingRecord>,
     /// Last checkpoint information
     pub last_checkpoint: Option<CheckpointInfo>,
@@ -116,6 +157,7 @@ pub struct VotingRecord {
     /// Vertex being voted on
     pub vertex_id: VertexId,
     /// Votes received (node_id -> vote)
+    #[serde(with = "map_as_pairs")]
     pub votes: HashMap<Vec<u8>, bool>,
     /// Timestamp when voting started
     pub started_at: u64,
@@ -231,10 +273,10 @@ pub trait StateStore: Send + Sync {
     async fn recover_state(&self) -> Result<Option<PersistedDagState>>;
 
     /// Create backup of the entire state
-    async fn create_backup(&self, backup_path: &PathBuf) -> Result<()>;
+    async fn create_backup(&self, backup_path: &Path) -> Result<()>;
 
     /// Restore from backup
-    async fn restore_backup(&self, backup_path: &PathBuf) -> Result<()>;
+    async fn restore_backup(&self, backup_path: &Path) -> Result<()>;
 }
 
 /// File-based storage implementation using JSON files
@@ -534,7 +576,7 @@ impl StateStore for FileStateStore {
         Ok(state)
     }
 
-    async fn create_backup(&self, backup_path: &PathBuf) -> Result<()> {
+    async fn create_backup(&self, backup_path: &Path) -> Result<()> {
         // Create backup directory if it doesn't exist
         fs::create_dir_all(backup_path).await.map_err(|e| {
             PersistenceError::DirectoryCreation(format!("Failed to create backup dir: {}", e))
@@ -553,7 +595,7 @@ impl StateStore for FileStateStore {
         Ok(())
     }
 
-    async fn restore_backup(&self, backup_path: &PathBuf) -> Result<()> {
+    async fn restore_backup(&self, backup_path: &Path) -> Result<()> {
         let backup_data_dir = backup_path.join("data");
 
         if !backup_data_dir.exists() {
@@ -713,13 +755,13 @@ impl StateStore for MemoryStateStore {
         Ok(None)
     }
 
-    async fn create_backup(&self, _backup_path: &PathBuf) -> Result<()> {
+    async fn create_backup(&self, _backup_path: &Path) -> Result<()> {
         // Memory store doesn't support backups
         warn!("Backup creation called on memory store (no-op)");
         Ok(())
     }
 
-    async fn restore_backup(&self, _backup_path: &PathBuf) -> Result<()> {
+    async fn restore_backup(&self, _backup_path: &Path) -> Result<()> {
         // Memory store doesn't support backups
         warn!("Backup restoration called on memory store (no-op)");
         Ok(())
@@ -926,7 +968,7 @@ fn copy_dir_all(
 mod tests {
     use super::*;
     use qudag_dag::vertex::VertexId;
-    use qudag_network::peer::PeerId;
+    use qudag_network::types::PeerId;
     use std::collections::HashSet;
     use tempfile::tempdir;
 
@@ -958,10 +1000,30 @@ mod tests {
             ttl: 3600,
             registered_at: 1234567890,
             expires_at: 1234567890 + 3600,
-            owner_id: PeerId::new(),
+            owner_id: PeerId::random(),
             signature: vec![9, 10, 11, 12],
             metadata: HashMap::new(),
         }
+    }
+
+    #[test]
+    fn test_dag_state_byte_keyed_maps_round_trip_through_json() {
+        let vertex = create_test_vertex();
+        let state = DagState {
+            vertices: HashMap::from([(vertex.id.clone(), vertex.clone())]),
+            tips: HashSet::from([vertex.id.clone()]),
+            voting_records: HashMap::new(),
+            last_checkpoint: None,
+        };
+        let json = serde_json::to_string(&state).unwrap();
+        let decoded: DagState = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.vertices[&vertex.id].payload, vertex.payload);
+
+        // Files written before byte-keyed maps were stored as pairs hold `{}`
+        let legacy = r#"{"vertices":{},"tips":[],"voting_records":{},"last_checkpoint":null}"#;
+        let decoded: DagState = serde_json::from_str(legacy).unwrap();
+        assert!(decoded.vertices.is_empty());
+        assert!(decoded.voting_records.is_empty());
     }
 
     #[tokio::test]

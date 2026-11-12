@@ -1878,6 +1878,7 @@ mod tests {
         let peer_id = LibP2PPeerId::random();
         let address = SocketAddr::from(([127, 0, 0, 1], 8000));
         let peer = DiscoveredPeer::new(peer_id, address, DiscoveryMethod::Kademlia);
+        let initial_reputation = peer.reputation;
 
         discovery
             .discovered_peers
@@ -1886,10 +1887,10 @@ mod tests {
             .insert(peer_id, peer);
 
         // Update reputation
-        discovery.update_peer_reputation(peer_id, 5.0).await;
+        discovery.update_peer_reputation(peer_id, -5.0).await;
 
         let peers = discovery.get_discovered_peers().await;
-        assert_eq!(peers[0].reputation, 5.0);
+        assert_eq!(peers[0].reputation, initial_reputation - 5.0);
     }
 
     #[tokio::test]
@@ -1900,6 +1901,7 @@ mod tests {
         let peer_id = LibP2PPeerId::random();
         let address = SocketAddr::from(([127, 0, 0, 1], 8000));
         let peer = DiscoveredPeer::new(peer_id, address, DiscoveryMethod::Kademlia);
+        let initial_reputation = peer.reputation;
 
         discovery
             .discovered_peers
@@ -1912,6 +1914,6 @@ mod tests {
 
         let peers = discovery.get_discovered_peers().await;
         assert_eq!(peers[0].connection_attempts, 1);
-        assert!(peers[0].reputation < 0.0);
+        assert!(peers[0].reputation < initial_reputation);
     }
 }

@@ -92,10 +92,10 @@ impl OnionLayer {
     }
 
     /// Validates layer format and timing constraints
+    ///
+    /// An empty `next_hop` marks the innermost layer (final destination), as
+    /// produced by `encrypt_layers` and expected by `decrypt_layer`.
     pub fn validate(&self) -> Result<(), OnionError> {
-        if self.next_hop.is_empty() {
-            return Err(OnionError::InvalidFormat("empty next hop key".into()));
-        }
         if self.payload.is_empty() {
             return Err(OnionError::InvalidFormat("empty payload".into()));
         }
@@ -193,6 +193,12 @@ impl MLKEMOnionRouter {
             circuit_manager,
             directory_client,
         })
+    }
+
+    /// Directory this router resolves hop public keys from. Routes passed to
+    /// `encrypt_layers` must be node ids from this directory.
+    pub fn directory_client(&self) -> Arc<DirectoryClient> {
+        Arc::clone(&self.directory_client)
     }
 
     /// Creates a new ML-KEM onion router with custom layer size
@@ -536,22 +542,20 @@ impl MixNode {
     }
 
     /// Add a message to the mix node buffer
+    ///
+    /// Messages stay buffered until the owner calls [`MixNode::flush_batch`]
+    /// (see [`MixNode::should_flush`]); flushing here would discard the batch.
     pub async fn add_message(&mut self, mut message: MixMessage) -> Result<(), OnionError> {
         // Normalize message size for traffic analysis resistance
         message.normalized_size = self.normalize_message_size(&message);
 
         self.message_buffer.push(message);
 
-        // Check if we should flush the batch
-        if self.should_flush() {
-            self.flush_batch().await?;
-        }
-
         Ok(())
     }
 
-    /// Check if batch should be flushed
-    fn should_flush(&self) -> bool {
+    /// Check if the batch is full or its timeout has elapsed
+    pub fn should_flush(&self) -> bool {
         self.message_buffer.len() >= self.config.batch_size
             || self.last_flush.elapsed().unwrap_or(Duration::ZERO) >= self.config.batch_timeout
     }
@@ -997,8 +1001,8 @@ pub struct CircuitManager {
     circuits: HashMap<u64, Circuit>,
     /// Circuit creation rate limiter
     creation_rate: f64,
-    /// Last circuit creation time
-    last_creation: Instant,
+    /// Last circuit creation time (`None` until the first circuit is built)
+    last_creation: Option<Instant>,
     /// Maximum concurrent circuits
     max_circuits: usize,
     /// Circuit lifetime
@@ -1053,7 +1057,7 @@ impl CircuitManager {
         Self {
             circuits: HashMap::new(),
             creation_rate: 1.0, // 1 circuit per second max
-            last_creation: Instant::now(),
+            last_creation: None,
             max_circuits: 100,
             circuit_lifetime: Duration::from_secs(600), // 10 minutes
             rotation_interval: Duration::from_secs(300), // 5 minutes
@@ -1067,8 +1071,10 @@ impl CircuitManager {
         directory: &DirectoryClient,
     ) -> Result<u64, OnionError> {
         // Rate limiting
-        let elapsed = self.last_creation.elapsed().as_secs_f64();
-        if elapsed < 1.0 / self.creation_rate {
+        let rate_limited = self
+            .last_creation
+            .is_some_and(|last| last.elapsed().as_secs_f64() < 1.0 / self.creation_rate);
+        if rate_limited {
             return Err(OnionError::RouteError(
                 "Circuit creation rate limit exceeded".into(),
             ));
@@ -1099,7 +1105,7 @@ impl CircuitManager {
         };
 
         self.circuits.insert(circuit_id, circuit);
-        self.last_creation = Instant::now();
+        self.last_creation = Some(Instant::now());
 
         Ok(circuit_id)
     }
@@ -1147,6 +1153,11 @@ impl CircuitManager {
             .filter(|c| c.state == CircuitState::Active)
             .filter(|c| c.created_at.elapsed() < self.circuit_lifetime)
             .max_by(|a, b| a.quality_score.total_cmp(&b.quality_score))
+    }
+
+    /// Get a circuit by id
+    pub fn get_circuit(&self, circuit_id: u64) -> Option<&Circuit> {
+        self.circuits.get(&circuit_id)
     }
 
     /// Update circuit metrics
@@ -1232,8 +1243,8 @@ pub struct DirectoryClient {
     /// Directory servers
     #[allow(dead_code)]
     directory_servers: Vec<String>,
-    /// Last directory update
-    last_update: Arc<TokioMutex<Instant>>,
+    /// Last directory update (`None` until the directory is first fetched)
+    last_update: Arc<TokioMutex<Option<Instant>>>,
     /// Update interval
     update_interval: Duration,
 }
@@ -1288,7 +1299,7 @@ impl DirectoryClient {
                 "dir2.qudag.net:9030".to_string(),
                 "dir3.qudag.net:9030".to_string(),
             ],
-            last_update: Arc::new(TokioMutex::new(Instant::now())),
+            last_update: Arc::new(TokioMutex::new(None)),
             update_interval: Duration::from_secs(3600), // 1 hour
         }
     }
@@ -1320,52 +1331,51 @@ impl DirectoryClient {
             return Err(OnionError::RouteError("Not enough active nodes".into()));
         }
 
-        // Select nodes with bandwidth weighting
+        // Select nodes with bandwidth weighting. Hops are identified by node id,
+        // which is what get_public_key / measure_bandwidth look up.
         let mut selected = Vec::new();
-        let mut available = active_nodes.clone();
+        let mut available = active_nodes;
 
         for i in 0..count {
-            // For entry guard, prefer nodes with guard flag
-            if i == 0 {
-                let guards: Vec<_> = available
+            // Entry hop prefers guard nodes and the exit hop requires an exit
+            // node; the remaining pool stays intact for the other hops.
+            let mut candidates: Vec<usize> = (0..available.len()).collect();
+            if i == 0 && count > 1 {
+                let guards: Vec<usize> = candidates
                     .iter()
-                    .filter(|n| n.flags.guard)
                     .copied()
+                    .filter(|&idx| available[idx].flags.guard)
                     .collect();
-
                 if !guards.is_empty() {
-                    available = guards;
+                    candidates = guards;
                 }
             }
-
-            // For exit node, require exit flag
             if i == count - 1 {
-                available.retain(|n| n.flags.exit);
-                if available.is_empty() {
+                candidates.retain(|&idx| available[idx].flags.exit);
+                if candidates.is_empty() {
                     return Err(OnionError::RouteError("No exit nodes available".into()));
                 }
             }
 
-            // Select node weighted by bandwidth. If all nodes report zero
+            // Select node weighted by bandwidth. If all candidates report zero
             // bandwidth, fall back to uniform random selection to avoid a
             // panic in gen_range(0..0).
-            let total_bandwidth: u64 = available.iter().map(|n| n.bandwidth).sum();
-            if total_bandwidth == 0 {
-                // Uniform fallback: pick a random index
-                let idx = thread_rng().gen_range(0..available.len());
-                selected.push(available[idx].public_key.as_bytes().to_vec());
-                available.remove(idx);
+            let total_bandwidth: u64 = candidates.iter().map(|&idx| available[idx].bandwidth).sum();
+            let chosen = if total_bandwidth == 0 {
+                candidates[thread_rng().gen_range(0..candidates.len())]
             } else {
                 let mut target = thread_rng().gen_range(0..total_bandwidth);
-                for (idx, node) in available.iter().enumerate() {
-                    if target < node.bandwidth {
-                        selected.push(node.public_key.as_bytes().to_vec());
-                        available.remove(idx);
+                let mut chosen = candidates[candidates.len() - 1];
+                for &idx in &candidates {
+                    if target < available[idx].bandwidth {
+                        chosen = idx;
                         break;
                     }
-                    target -= node.bandwidth;
+                    target -= available[idx].bandwidth;
                 }
-            }
+                chosen
+            };
+            selected.push(available.remove(chosen).id.clone());
         }
 
         Ok(selected)
@@ -1375,7 +1385,7 @@ impl DirectoryClient {
     async fn update_directory_if_needed(&self) -> Result<(), OnionError> {
         let last_update = *self.last_update.lock().await;
 
-        if last_update.elapsed() < self.update_interval {
+        if last_update.is_some_and(|last| last.elapsed() < self.update_interval) {
             return Ok(());
         }
 
@@ -1383,7 +1393,7 @@ impl DirectoryClient {
         // For now, we'll simulate with some dummy nodes
         self.populate_dummy_nodes().await;
 
-        *self.last_update.lock().await = Instant::now();
+        *self.last_update.lock().await = Some(Instant::now());
         Ok(())
     }
 

@@ -1,10 +1,11 @@
 //! Integration tests for the shadow address system with other network components
 
 use qudag_network::{
-    dark_resolver::{DarkDomainRecord, DarkResolver},
+    dark_resolver::DarkResolver,
     shadow_address::*,
-    types::NetworkAddress,
+    types::{NetworkAddress, PeerId},
 };
+use std::sync::Arc;
 use std::time::Duration;
 
 #[tokio::test]
@@ -26,14 +27,23 @@ async fn test_shadow_address_with_dark_resolver() {
     // Create network address for dark domain
     let network_addr = NetworkAddress::new([127, 0, 0, 1], 8080);
 
-    // Register dark domain with stealth address
-    resolver
-        .register_domain("shadow-test.dark", network_addr.clone())
+    // Register dark domain pointing at the network address
+    let dark_address = resolver
+        .register_domain(
+            Some("shadow-test"),
+            vec![network_addr.clone()],
+            None,
+            3600,
+            PeerId::random(),
+            &mut rand::thread_rng(),
+        )
         .unwrap();
+    assert_eq!(dark_address.domain, "shadow-test.dark");
 
     // Lookup domain
     let record = resolver.lookup_domain("shadow-test.dark").unwrap();
-    assert_eq!(record.encrypted_address.len() > 0, true);
+    assert_eq!(record.addresses, vec![network_addr]);
+    assert!(!record.encryption_public_key.is_empty());
 
     // Verify stealth address can be used for payments
     assert!(stealth_addr.shadow_features.stealth_prefix.is_some());
@@ -150,15 +160,6 @@ async fn test_usage_based_rotation() {
     let seed = [0u8; 32];
     let manager = ShadowAddressManager::new(NetworkType::Testnet, seed).await;
 
-    // Set rotation policy
-    let policies = RotationPolicies {
-        rotate_after_uses: Some(3),
-        rotate_after_duration: None,
-        min_pool_size: 5,
-        max_pool_size: 10,
-    };
-    *manager.rotation_policies.write().await = policies;
-
     // Create pool
     manager
         .create_address_pool("usage_pool".to_string(), 5, None)
@@ -169,12 +170,23 @@ async fn test_usage_based_rotation() {
     let mut addr = manager.get_pool_address("usage_pool").await.unwrap();
     addr.shadow_features.pool_id = Some("usage_pool".to_string());
 
-    // Use address 3 times (should trigger rotation)
+    // Rotation policies are internal; the default policy rotates a pool once an
+    // address reaches 100 uses
     for _ in 0..3 {
         manager.mark_address_used(&mut addr).await;
     }
-
     assert_eq!(addr.metadata.usage_count, 3);
+
+    for _ in 3..100 {
+        manager.mark_address_used(&mut addr).await;
+    }
+    assert_eq!(addr.metadata.usage_count, 100);
+
+    // The pool was rotated: the worn-out address is no longer handed out
+    for _ in 0..20 {
+        let pooled = manager.get_pool_address("usage_pool").await.unwrap();
+        assert_ne!(pooled.view_key, addr.view_key);
+    }
 }
 
 #[tokio::test]
@@ -204,12 +216,12 @@ async fn test_stealth_address_with_network_messages() {
 
 #[tokio::test]
 async fn test_concurrent_address_management() {
-    let manager = ShadowAddressManager::new(NetworkType::Testnet, [0u8; 32]).await;
+    let manager = Arc::new(ShadowAddressManager::new(NetworkType::Testnet, [0u8; 32]).await);
 
     // Create multiple pools concurrently
     let handles: Vec<_> = (0..5)
         .map(|i| {
-            let mgr = manager.clone();
+            let mgr = Arc::clone(&manager);
             tokio::spawn(async move {
                 mgr.create_address_pool(format!("pool_{}", i), 10, Some(Duration::from_secs(600)))
                     .await

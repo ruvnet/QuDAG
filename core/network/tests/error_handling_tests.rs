@@ -2,13 +2,14 @@ use qudag_network::{
     ConnectionManager, ConnectionStatus, MessagePriority, NetworkAddress, NetworkError,
     NetworkMessage, PeerId, Router, RoutingStrategy,
 };
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::IpAddr;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Test various network error scenarios and their handling
 #[tokio::test]
 async fn test_network_error_types() {
-    let router = Router::new();
+    let router = Router::new().await.unwrap();
 
     // Test routing error with invalid peer ID format
     let msg = NetworkMessage {
@@ -34,27 +35,23 @@ async fn test_network_error_types() {
 #[tokio::test]
 async fn test_error_propagation() {
     let manager = ConnectionManager::new(1);
-    let router = Router::new();
+    let router = Router::new().await.unwrap();
 
     // Test cascading errors
     let peer_id = PeerId::random();
 
     // Connect peer
     manager.connect(peer_id).await.unwrap();
-    manager
-        .update_status(peer_id, ConnectionStatus::Connected)
-        .await;
+    manager.update_status(peer_id, ConnectionStatus::Connected);
 
     // Simulate network failure
-    manager
-        .update_status(
-            peer_id,
-            ConnectionStatus::Failed("Network unreachable".into()),
-        )
-        .await;
+    manager.update_status(
+        peer_id,
+        ConnectionStatus::Failed("Network unreachable".into()),
+    );
 
     // Verify error state is maintained
-    let status = manager.get_status(&peer_id).await;
+    let status = manager.get_status(&peer_id);
     assert!(matches!(status, Some(ConnectionStatus::Failed(_))));
 
     if let Some(ConnectionStatus::Failed(error_msg)) = status {
@@ -87,30 +84,24 @@ async fn test_error_recovery() {
 
     // Normal connection
     manager.connect(peer_id).await.unwrap();
-    manager
-        .update_status(peer_id, ConnectionStatus::Connected)
-        .await;
+    manager.update_status(peer_id, ConnectionStatus::Connected);
 
     // Simulate transient failure
-    manager
-        .update_status(
-            peer_id,
-            ConnectionStatus::Failed("Temporary network issue".into()),
-        )
-        .await;
+    manager.update_status(
+        peer_id,
+        ConnectionStatus::Failed("Temporary network issue".into()),
+    );
 
     // Attempt recovery
-    manager.disconnect(&peer_id).await;
+    manager.disconnect(&peer_id);
     let recovery_result = manager.connect(peer_id).await;
     assert!(recovery_result.is_ok());
 
     // Update to connected state
-    manager
-        .update_status(peer_id, ConnectionStatus::Connected)
-        .await;
+    manager.update_status(peer_id, ConnectionStatus::Connected);
 
     // Verify recovery
-    let final_status = manager.get_status(&peer_id).await;
+    let final_status = manager.get_status(&peer_id);
     assert_eq!(final_status, Some(ConnectionStatus::Connected));
 }
 
@@ -118,7 +109,7 @@ async fn test_error_recovery() {
 #[tokio::test]
 async fn test_timeout_handling() {
     let manager = ConnectionManager::new(10);
-    let router = Router::new();
+    let router = Router::new().await.unwrap();
 
     // Test connection timeout
     let peer_id = PeerId::random();
@@ -129,8 +120,10 @@ async fn test_timeout_handling() {
     // Don't immediately update to connected - simulates timeout scenario
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let status = manager.get_status(&peer_id).await;
-    assert_eq!(status, Some(ConnectionStatus::Connecting));
+    // connect() completes the (simulated) handshake before returning, so the
+    // peer is Connected without an explicit status update and stays so.
+    let status = manager.get_status(&peer_id);
+    assert_eq!(status, Some(ConnectionStatus::Connected));
 
     // Test routing timeout with insufficient peers
     let msg_with_short_ttl = NetworkMessage {
@@ -168,28 +161,31 @@ async fn test_resource_exhaustion() {
         let peer_id = PeerId::random();
         peers.push(peer_id);
         small_manager.connect(peer_id).await.unwrap();
-        small_manager
-            .update_status(peer_id, ConnectionStatus::Connected)
-            .await;
+        small_manager.update_status(peer_id, ConnectionStatus::Connected);
     }
 
     // Verify at capacity
-    assert_eq!(small_manager.connection_count().await, 2);
+    assert_eq!(small_manager.connection_count(), 2);
 
     // Try to exceed capacity
     let excess_peer = PeerId::random();
     let result = small_manager.connect(excess_peer).await;
 
-    // Should handle gracefully (not error, but apply limits)
-    assert!(result.is_ok());
+    // The limit is applied by rejecting the excess connect with an error
+    assert!(
+        matches!(result, Err(NetworkError::ConnectionError(_))),
+        "connect beyond the limit should be rejected, got {:?}",
+        result
+    );
+    assert!(small_manager.get_status(&excess_peer).is_none());
 
     // Should not exceed capacity
-    let final_count = small_manager.connection_count().await;
+    let final_count = small_manager.connection_count();
     assert!(final_count <= 2);
 
     // Test that existing connections still work
     for peer in &peers {
-        let status = small_manager.get_status(peer).await;
+        let status = small_manager.get_status(peer);
         assert!(status.is_some());
     }
 }
@@ -197,7 +193,7 @@ async fn test_resource_exhaustion() {
 /// Test malformed data handling
 #[tokio::test]
 async fn test_malformed_data_handling() {
-    let router = Router::new();
+    let router = Router::new().await.unwrap();
 
     // Test with null bytes in message ID
     let msg_with_nulls = NetworkMessage {
@@ -267,14 +263,13 @@ async fn test_network_address_errors() {
 /// Test concurrent error conditions
 #[tokio::test]
 async fn test_concurrent_error_conditions() {
-    let manager = ConnectionManager::new(5);
+    // ConnectionManager is not Clone; share it across tasks through an Arc
+    let manager = Arc::new(ConnectionManager::new(5));
     let peer_id = PeerId::random();
 
     // Connect peer
     manager.connect(peer_id).await.unwrap();
-    manager
-        .update_status(peer_id, ConnectionStatus::Connected)
-        .await;
+    manager.update_status(peer_id, ConnectionStatus::Connected);
 
     // Spawn concurrent operations that may cause errors
     let mut handles = Vec::new();
@@ -288,7 +283,7 @@ async fn test_concurrent_error_conditions() {
             } else {
                 ConnectionStatus::Connected
             };
-            manager1.update_status(peer_id, status).await;
+            manager1.update_status(peer_id, status);
         }
     });
     handles.push(handle1);
@@ -297,7 +292,7 @@ async fn test_concurrent_error_conditions() {
     let manager2 = manager.clone();
     let handle2 = tokio::spawn(async move {
         for _ in 0..50 {
-            manager2.disconnect(&peer_id).await;
+            manager2.disconnect(&peer_id);
             let _ = manager2.connect(peer_id).await;
         }
     });
@@ -307,7 +302,7 @@ async fn test_concurrent_error_conditions() {
     let manager3 = manager.clone();
     let handle3 = tokio::spawn(async move {
         for i in 0..100 {
-            manager3.update_metrics(i as f64, (i % 1000) as u64).await;
+            manager3.update_metrics(i as f64, (i % 1000) as u64);
         }
     });
     handles.push(handle3);
@@ -318,10 +313,10 @@ async fn test_concurrent_error_conditions() {
     }
 
     // Verify system is still in a consistent state
-    let final_status = manager.get_status(&peer_id).await;
+    let final_status = manager.get_status(&peer_id);
     assert!(final_status.is_some() || final_status.is_none()); // Any state is valid
 
-    let metrics = manager.get_metrics().await;
+    let metrics = manager.get_metrics();
     assert!(metrics.messages_per_second >= 0.0);
     assert!(metrics.connections >= 0);
 }
@@ -330,7 +325,7 @@ async fn test_concurrent_error_conditions() {
 #[tokio::test]
 async fn test_error_message_quality() {
     // Test that error messages are informative
-    let router = Router::new();
+    let router = Router::new().await.unwrap();
 
     let msg = NetworkMessage {
         id: "test".into(),
@@ -378,27 +373,21 @@ async fn test_error_isolation() {
     manager1.connect(peer1).await.unwrap();
     manager2.connect(peer2).await.unwrap();
 
-    manager1
-        .update_status(peer1, ConnectionStatus::Connected)
-        .await;
-    manager2
-        .update_status(peer2, ConnectionStatus::Connected)
-        .await;
+    manager1.update_status(peer1, ConnectionStatus::Connected);
+    manager2.update_status(peer2, ConnectionStatus::Connected);
 
     // Cause error in manager1
-    manager1
-        .update_status(peer1, ConnectionStatus::Failed("Isolated error".into()))
-        .await;
+    manager1.update_status(peer1, ConnectionStatus::Failed("Isolated error".into()));
 
     // Verify manager2 is unaffected
-    let status2 = manager2.get_status(&peer2).await;
+    let status2 = manager2.get_status(&peer2);
     assert_eq!(status2, Some(ConnectionStatus::Connected));
 
-    let metrics2 = manager2.get_metrics().await;
+    let metrics2 = manager2.get_metrics();
     assert_eq!(metrics2.connections, 1);
 
     // Verify manager1 error is contained
-    let status1 = manager1.get_status(&peer1).await;
+    let status1 = manager1.get_status(&peer1);
     assert!(matches!(status1, Some(ConnectionStatus::Failed(_))));
 
     // Manager1 should still be functional for other operations
@@ -418,31 +407,20 @@ async fn test_graceful_degradation_with_errors() {
         let peer_id = PeerId::random();
         peers.push(peer_id);
         manager.connect(peer_id).await.unwrap();
-        manager
-            .update_status(peer_id, ConnectionStatus::Connected)
-            .await;
+        manager.update_status(peer_id, ConnectionStatus::Connected);
     }
 
     // Introduce progressive failures
     for (i, peer) in peers.iter().enumerate() {
         if i % 2 == 0 {
-            manager
-                .update_status(*peer, ConnectionStatus::Failed(format!("Failure {}", i)))
-                .await;
+            manager.update_status(*peer, ConnectionStatus::Failed(format!("Failure {}", i)));
         }
     }
 
     // System should still be partially functional
     let remaining_connections = peers
         .iter()
-        .filter(|peer| {
-            futures::executor::block_on(async {
-                matches!(
-                    manager.get_status(peer).await,
-                    Some(ConnectionStatus::Connected)
-                )
-            })
-        })
+        .filter(|peer| matches!(manager.get_status(peer), Some(ConnectionStatus::Connected)))
         .count();
 
     assert!(
@@ -452,11 +430,25 @@ async fn test_graceful_degradation_with_errors() {
     );
 
     // Metrics should still be accessible
-    let metrics = manager.get_metrics().await;
+    let metrics = manager.get_metrics();
     assert!(metrics.connections >= 0);
 
-    // New connections should still work
+    // Failed connections still occupy their slots until they are disconnected,
+    // and the manager rejects connects beyond max_connections.
     let new_peer = PeerId::random();
     let result = manager.connect(new_peer).await;
+    assert!(
+        matches!(result, Err(NetworkError::ConnectionError(_))),
+        "connect at capacity should be rejected, got {:?}",
+        result
+    );
+
+    // New connections should still work once a failed peer is dropped
+    manager.disconnect(&peers[0]);
+    let result = manager.connect(new_peer).await;
     assert!(result.is_ok());
+    assert_eq!(
+        manager.get_status(&new_peer),
+        Some(ConnectionStatus::Connected)
+    );
 }

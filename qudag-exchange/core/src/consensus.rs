@@ -81,8 +81,9 @@ pub struct PendingTransaction {
     /// Number of consensus rounds
     pub rounds: u64,
 
-    /// Votes received (for simulation)
+    /// Votes received in favour of the transaction (for simulation)
     pub votes_for: u32,
+    /// Votes received against the transaction (for simulation)
     pub votes_against: u32,
 }
 
@@ -132,13 +133,17 @@ pub enum ConsensusEvent {
 
     /// Transaction confidence updated
     ConfidenceUpdated {
+        /// Transaction whose confidence changed
         tx_id: TransactionId,
+        /// New confidence level (0.0 to 1.0)
         confidence: f64,
     },
 
     /// Transaction finalized
     TransactionFinalized {
+        /// Transaction that was finalized
         tx_id: TransactionId,
+        /// Whether the transaction was accepted (`false` means rejected)
         accepted: bool,
     },
 

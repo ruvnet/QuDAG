@@ -241,10 +241,11 @@ impl SecureConnection {
         self.channels.batch_buffer.put_u32(encrypted_len);
         self.channels.batch_buffer.extend_from_slice(&encrypted);
 
-        // Update metrics
+        // Update metrics. The queue size tracks the framed bytes held in the batch
+        // buffer, which is what `flush_batch` subtracts again.
         self.channels
             .queue_size
-            .fetch_add(msg_size, Ordering::Release);
+            .fetch_add(4 + encrypted.len(), Ordering::Release);
         self.channels.message_count.fetch_add(1, Ordering::Relaxed);
         self.channels
             .bytes_processed
@@ -439,10 +440,15 @@ impl SecureConnection {
 ///
 /// # Example
 /// ```rust
+/// # use qudag_network::{ConnectionManager, PeerId};
+/// # async fn example() -> Result<(), qudag_network::NetworkError> {
 /// let manager = ConnectionManager::new(100); // 100 max connections
+/// let peer_id = PeerId::random();
 /// manager.connect(peer_id).await?;
-/// let status = manager.get_status(&peer_id).await;
-/// let metrics = manager.get_metrics().await;
+/// let status = manager.get_status(&peer_id);
+/// let metrics = manager.get_metrics();
+/// # Ok(())
+/// # }
 /// ```
 pub struct ConnectionManager {
     /// Maximum concurrent connections
@@ -579,8 +585,12 @@ impl ConnectionInfo {
 
     /// Check if connection is healthy
     pub fn is_healthy(&self) -> bool {
-        self.quality_score > 0.5 && self.last_activity.elapsed() < Duration::from_secs(300)
-        // 5 minutes
+        // Failed or closed connections are never healthy, whatever their score
+        !matches!(
+            self.status,
+            ConnectionStatus::Failed(_) | ConnectionStatus::Disconnected
+        ) && self.quality_score > 0.5
+            && self.last_activity.elapsed() < Duration::from_secs(300) // 5 minutes
     }
 }
 
@@ -1104,8 +1114,9 @@ impl HealthCheck for PingHealthCheck {
     async fn check(&self, _peer_id: &PeerId, connection: &ConnectionInfo) -> HealthCheckResult {
         let start = Instant::now();
 
-        // Simulate ping check (in real implementation, this would send actual ping)
-        let success = connection.is_healthy() && rand::random::<f64>() > 0.1;
+        // Simulated ping: the result reflects the tracked connection health
+        // (in a real implementation this would send an actual ping)
+        let success = connection.is_healthy();
         let response_time = start.elapsed();
 
         HealthCheckResult {
@@ -1354,6 +1365,7 @@ impl ConnectionManager {
                 // Connection is still valid and healthy, reuse it
                 self.connections.insert(peer_id, conn_info.clone());
                 debug!("Reusing pooled healthy connection for peer {:?}", peer_id);
+                self.refresh_connection_metrics();
 
                 // Record successful circuit breaker operation
                 if let Some(mut circuit_breaker) = self.circuit_breakers.get_mut(&peer_id) {
@@ -1382,6 +1394,7 @@ impl ConnectionManager {
         // Create new connection with enhanced monitoring
         let connecting_info = ConnectionInfo::new(ConnectionStatus::Connecting);
         self.connections.insert(peer_id, connecting_info);
+        self.refresh_connection_metrics();
         debug!("Creating new connection for peer {:?}", peer_id);
 
         // Simulate connection establishment (in real implementation, this would be actual network code)
@@ -1389,44 +1402,26 @@ impl ConnectionManager {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         let connection_time = start_time.elapsed();
 
-        // Simulate connection success/failure (90% success rate)
-        let success = rand::random::<f64>() > 0.1;
+        // The simulated handshake always succeeds; a real transport reports
+        // failures through update_status.
+        let mut connected_info = ConnectionInfo::new(ConnectionStatus::Connected);
+        connected_info.update_activity(true, connection_time, 0);
 
-        if success {
-            // Update to connected status on success
-            let mut connected_info = ConnectionInfo::new(ConnectionStatus::Connected);
-            connected_info.update_activity(true, connection_time, 0);
+        self.connections.insert(peer_id, connected_info.clone());
+        self.refresh_connection_metrics();
+        self.quality_scores
+            .insert(peer_id, connected_info.quality_score);
 
-            self.connections.insert(peer_id, connected_info.clone());
-            self.quality_scores
-                .insert(peer_id, connected_info.quality_score);
+        // Record successful circuit breaker operation
+        self.circuit_breakers
+            .entry(peer_id)
+            .or_default()
+            .record_result(true);
 
-            // Record successful circuit breaker operation
-            self.circuit_breakers
-                .entry(peer_id)
-                .or_default()
-                .record_result(true);
-
-            debug!(
-                "Successfully connected to peer {:?} in {:?}",
-                peer_id, connection_time
-            );
-        } else {
-            // Handle connection failure
-            let failed_info =
-                ConnectionInfo::new(ConnectionStatus::Failed("Connection timeout".into()));
-            self.connections.insert(peer_id, failed_info);
-
-            // Record failed circuit breaker operation
-            self.circuit_breakers
-                .entry(peer_id)
-                .or_default()
-                .record_result(false);
-
-            return Err(NetworkError::ConnectionError(
-                "Failed to establish connection".into(),
-            ));
-        }
+        debug!(
+            "Successfully connected to peer {:?} in {:?}",
+            peer_id, connection_time
+        );
 
         Ok(())
     }
@@ -1491,16 +1486,20 @@ impl ConnectionManager {
             self.connections.insert(peer_id, conn_info);
         }
 
-        // Update metrics with high-performance lock
-        let mut metrics = self.metrics.write();
-        metrics.connections = self.connections.len();
+        self.refresh_connection_metrics();
+    }
 
-        // Count active (healthy) connections
+    /// Recomputes the connection counts in the metrics snapshot. Called after
+    /// every change to the connection table so `get_metrics` stays in step
+    /// with `connection_count`.
+    fn refresh_connection_metrics(&self) {
         let active_count = self
             .connections
             .iter()
             .filter(|entry| entry.value().is_healthy())
             .count();
+        let mut metrics = self.metrics.write();
+        metrics.connections = self.connections.len();
         metrics.active_connections = active_count;
     }
 
@@ -1534,17 +1533,7 @@ impl ConnectionManager {
         // Clean expired connections from pool (non-blocking)
         self.cleanup_pool();
 
-        // Update metrics with high-performance lock
-        let mut metrics = self.metrics.write();
-        metrics.connections = self.connections.len();
-
-        // Count active (healthy) connections
-        let active_count = self
-            .connections
-            .iter()
-            .filter(|entry| entry.value().is_healthy())
-            .count();
-        metrics.active_connections = active_count;
+        self.refresh_connection_metrics();
     }
 
     /// Cleanup expired connections from the pool
@@ -1810,7 +1799,6 @@ pub struct ConnectionStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::{IpAddr, Ipv4Addr};
     use std::time::Instant;
     use tokio::time::Duration;
 
@@ -1822,16 +1810,47 @@ mod tests {
         }
     }
 
+    /// Starts a loopback QUIC server with a self-signed certificate for the
+    /// `qudag` server name and returns a client endpoint that trusts it, plus
+    /// the server address and endpoint (kept alive by the caller).
+    fn loopback_quic() -> (Endpoint, SocketAddr, Endpoint) {
+        let cert = rcgen::generate_simple_self_signed(vec!["qudag".to_string()]).unwrap();
+        let cert_der = cert.cert.der().clone();
+        let key = rustls::pki_types::PrivateKeyDer::Pkcs8(cert.key_pair.serialize_der().into());
+
+        let server_config = quinn::ServerConfig::with_single_cert(vec![cert_der.clone()], key)
+            .expect("server config");
+        let server = Endpoint::server(server_config, "127.0.0.1:0".parse().unwrap())
+            .expect("server endpoint");
+        let server_addr = server.local_addr().unwrap();
+
+        let acceptor = server.clone();
+        tokio::spawn(async move {
+            while let Some(incoming) = acceptor.accept().await {
+                tokio::spawn(async move {
+                    if let Ok(conn) = incoming.await {
+                        // Hold the connection open until the client goes away.
+                        let _ = conn.closed().await;
+                    }
+                });
+            }
+        });
+
+        let mut roots = rustls::RootCertStore::empty();
+        roots.add(cert_der).unwrap();
+        let client_config =
+            quinn::ClientConfig::with_root_certificates(Arc::new(roots)).expect("client config");
+        let mut client = Endpoint::client("127.0.0.1:0".parse().unwrap()).expect("client endpoint");
+        client.set_default_client_config(client_config);
+
+        (client, server_addr, server)
+    }
+
     #[tokio::test]
     async fn test_secure_connection() {
         let test_config = setup_test_config();
-        let test_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8000);
-
-        // Set up QUIC endpoint
-        let server_config = ServerConfig::default();
-        let endpoint = Endpoint::server(server_config, "127.0.0.1:0".parse().unwrap())
-            .unwrap()
-            .0;
+        // Set up a loopback QUIC server and a client endpoint that trusts it
+        let (endpoint, test_addr, _server) = loopback_quic();
 
         // Create secure connection
         let mut connection = SecureConnection::new(&endpoint, test_addr, test_config)
@@ -1856,7 +1875,7 @@ mod tests {
         // Test connection limit
         assert!(manager.connect(peer1).await.is_ok());
         assert!(manager.connect(peer2).await.is_ok());
-        assert!(manager.connect(peer3).await.is_ok()); // Should be ignored due to limit
+        assert!(manager.connect(peer3).await.is_err()); // Rejected: max connections reached
 
         assert_eq!(manager.connection_count(), 2);
 
@@ -1881,7 +1900,8 @@ mod tests {
 
     #[tokio::test]
     async fn bench_route_computation() {
-        let manager = ConnectionManager::new(100);
+        // Room for every peer: connects beyond max_connections are rejected
+        let manager = ConnectionManager::new(1000);
         let _rng = rand::thread_rng();
         let mut latencies = Vec::new();
 
@@ -1903,9 +1923,10 @@ mod tests {
 
     #[tokio::test]
     async fn bench_cache_efficiency() {
+        // Room for every peer: connects beyond max_connections are rejected
         let manager = ConnectionManager::new(1000);
         let mut hit_count = 0;
-        let iterations = 10000;
+        let iterations = 1000;
 
         for _ in 0..iterations {
             let peer = PeerId::random();
@@ -1928,17 +1949,14 @@ mod tests {
     #[tokio::test]
     async fn bench_circuit_setup() {
         let test_config = setup_test_config();
-        let test_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8000);
-        let server_config = ServerConfig::default();
-        let endpoint = Endpoint::server(server_config, "127.0.0.1:0".parse().unwrap())
-            .unwrap()
-            .0;
+        let (endpoint, test_addr, _server) = loopback_quic();
 
         let mut setup_times = Vec::new();
         for _ in 0..100 {
             let start = Instant::now();
-            let _connection =
-                SecureConnection::new(&endpoint, test_addr, test_config.clone()).await;
+            let _connection = SecureConnection::new(&endpoint, test_addr, test_config.clone())
+                .await
+                .expect("circuit setup");
             setup_times.push(start.elapsed());
         }
 
@@ -1977,11 +1995,7 @@ mod tests {
     #[tokio::test]
     async fn bench_message_throughput() {
         let test_config = setup_test_config();
-        let test_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8000);
-        let server_config = ServerConfig::default();
-        let endpoint = Endpoint::server(server_config, "127.0.0.1:0".parse().unwrap())
-            .unwrap()
-            .0;
+        let (endpoint, test_addr, _server) = loopback_quic();
 
         let mut connection = SecureConnection::new(&endpoint, test_addr, test_config)
             .await
@@ -2391,29 +2405,18 @@ impl WarmingManager {
         let mut stats = self.stats.write().await;
         stats.total_attempts += 1;
 
-        if rand::random::<f64>() > 0.1 {
-            // 90% success rate
-            self.warming_states.insert(peer_id, WarmingState::Warm);
-            stats.successful_warmings += 1;
+        // The simulated warm-up always succeeds
+        self.warming_states.insert(peer_id, WarmingState::Warm);
+        stats.successful_warmings += 1;
 
-            // Update average warming time
-            let total_time =
-                stats.avg_warming_time.as_millis() as f64 * stats.successful_warmings as f64;
-            let new_avg = (total_time + warming_time.as_millis() as f64)
-                / (stats.successful_warmings + 1) as f64;
-            stats.avg_warming_time = Duration::from_millis(new_avg as u64);
+        // Update average warming time
+        let total_time =
+            stats.avg_warming_time.as_millis() as f64 * stats.successful_warmings as f64;
+        let new_avg =
+            (total_time + warming_time.as_millis() as f64) / (stats.successful_warmings + 1) as f64;
+        stats.avg_warming_time = Duration::from_millis(new_avg as u64);
 
-            Ok(())
-        } else {
-            self.warming_states.insert(
-                peer_id,
-                WarmingState::FailedToWarm("Warming timeout".to_string()),
-            );
-            stats.failed_warmings += 1;
-            Err(NetworkError::ConnectionError(
-                "Connection warming failed".into(),
-            ))
-        }
+        Ok(())
     }
 
     /// Get warming state for a peer

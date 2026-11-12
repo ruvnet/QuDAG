@@ -1,14 +1,17 @@
 use blake3::Hash;
+use qudag_dag::{ConsensusError, ConsensusStatus, Graph, Node, NodeState, QRAvalanche, VertexId};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc;
-
-use crate::{ConsensusEvent, DagError, Graph, Node, NodeState, QrAvalanche};
+use tokio::sync::Mutex;
 
 const TEST_NODES: usize = 1000;
 const MAX_PARENTS: usize = 5;
 const CONCURRENT_VOTES: usize = 100;
 const TARGET_FINALITY_MS: u64 = 1000; // 1 second target
+
+fn to_vertex_id(hash: &Hash) -> VertexId {
+    VertexId::from_bytes(hash.as_bytes().to_vec())
+}
 
 async fn setup_test_dag(nodes: usize) -> (Arc<Graph>, Vec<Hash>) {
     let graph = Arc::new(Graph::new());
@@ -16,24 +19,25 @@ async fn setup_test_dag(nodes: usize) -> (Arc<Graph>, Vec<Hash>) {
 
     // Create root node
     let root = Node::new(vec![0], vec![]);
-    let root_hash = *root.hash();
+    let root_hash = root.hash();
     graph.add_node(root).unwrap();
     node_hashes.push(root_hash);
 
-    // Create remaining nodes with random parents
+    // Create remaining nodes with parents drawn from existing nodes
     for i in 1..nodes {
-        let data = vec![i as u8];
+        let data = (i as u64).to_le_bytes().to_vec();
         let mut parents = Vec::new();
 
-        // Select random parents from existing nodes
         let parent_count = (i % MAX_PARENTS) + 1;
-        for _ in 0..parent_count {
-            let parent_idx = i % node_hashes.len();
-            parents.push(node_hashes[parent_idx]);
+        for p in 0..parent_count {
+            let parent_idx = (i + p * 7) % node_hashes.len();
+            if !parents.contains(&node_hashes[parent_idx]) {
+                parents.push(node_hashes[parent_idx]);
+            }
         }
 
         let node = Node::new(data, parents);
-        let node_hash = *node.hash();
+        let node_hash = node.hash();
         graph.add_node(node).unwrap();
         node_hashes.push(node_hash);
     }
@@ -42,19 +46,23 @@ async fn setup_test_dag(nodes: usize) -> (Arc<Graph>, Vec<Hash>) {
 }
 
 async fn simulate_concurrent_voting(
-    consensus: &QrAvalanche,
+    consensus: &Arc<Mutex<QRAvalanche>>,
     node_hash: Hash,
     vote_count: usize,
-) -> Result<(), DagError> {
+) -> Result<(), ConsensusError> {
     let mut handles = Vec::with_capacity(vote_count);
 
     for i in 0..vote_count {
-        let voter_hash = blake3::hash(&[i as u8]);
+        let voter_id = to_vertex_id(&blake3::hash(&(i as u64).to_le_bytes()));
         let consensus = consensus.clone();
-        let node_hash = node_hash;
+        let vertex_id = to_vertex_id(&node_hash);
 
-        let handle =
-            tokio::spawn(async move { consensus.record_vote(node_hash, voter_hash, true).await });
+        let handle = tokio::spawn(async move {
+            consensus
+                .lock()
+                .await
+                .record_vote(vertex_id, voter_id, true)
+        });
 
         handles.push(handle);
     }
@@ -66,10 +74,19 @@ async fn simulate_concurrent_voting(
     Ok(())
 }
 
+async fn status(consensus: &Arc<Mutex<QRAvalanche>>, node_hash: &Hash) -> Option<ConsensusStatus> {
+    consensus
+        .lock()
+        .await
+        .vertices
+        .get(&to_vertex_id(node_hash))
+        .cloned()
+}
+
 #[tokio::test]
 async fn test_finality_latency() {
     let (graph, node_hashes) = setup_test_dag(TEST_NODES).await;
-    let (consensus, mut events_rx) = QrAvalanche::new(graph.clone());
+    let consensus = Arc::new(Mutex::new(QRAvalanche::new()));
 
     let mut total_latency = Duration::ZERO;
     let mut finalized_count = 0;
@@ -80,31 +97,41 @@ async fn test_finality_latency() {
             .unwrap();
 
         let start = Instant::now();
-        consensus.process_node(node_hash).await.unwrap();
+        consensus
+            .lock()
+            .await
+            .process_vertex(to_vertex_id(&node_hash))
+            .unwrap();
 
         // Simulate concurrent voting
         simulate_concurrent_voting(&consensus, node_hash, CONCURRENT_VOTES)
             .await
             .unwrap();
 
-        // Wait for finalization event
-        match events_rx.recv().await {
-            Some(ConsensusEvent::NodeFinalized(hash)) => {
-                assert_eq!(hash, node_hash);
-                let latency = start.elapsed();
-                total_latency += latency;
-                finalized_count += 1;
+        // Verify finalization
+        assert_eq!(
+            status(&consensus, &node_hash).await,
+            Some(ConsensusStatus::Final)
+        );
+        graph
+            .update_node_state(&node_hash, NodeState::Final)
+            .unwrap();
+        let latency = start.elapsed();
+        total_latency += latency;
+        finalized_count += 1;
 
-                // Verify sub-second finality
-                assert!(
-                    latency.as_millis() < TARGET_FINALITY_MS as u128,
-                    "Finality took {}ms, exceeding target of {}ms",
-                    latency.as_millis(),
-                    TARGET_FINALITY_MS
-                );
-            }
-            _ => panic!("Expected finalization event"),
-        }
+        // Verify sub-second finality
+        assert!(
+            latency.as_millis() < TARGET_FINALITY_MS as u128,
+            "Finality took {}ms, exceeding target of {}ms",
+            latency.as_millis(),
+            TARGET_FINALITY_MS
+        );
+    }
+
+    assert_eq!(finalized_count, TEST_NODES);
+    for node_hash in &node_hashes {
+        assert_eq!(graph.get_node(node_hash).unwrap().state(), NodeState::Final);
     }
 
     let avg_latency = total_latency / finalized_count as u32;
@@ -118,15 +145,13 @@ async fn test_finality_latency() {
 #[tokio::test]
 async fn test_concurrent_path_validation() {
     let (graph, node_hashes) = setup_test_dag(TEST_NODES).await;
-    let (consensus, mut events_rx) = QrAvalanche::new(graph.clone());
+    let consensus = Arc::new(Mutex::new(QRAvalanche::new()));
 
     // Process nodes in parallel batches
     let batch_size = 10;
     let mut handles = Vec::new();
 
     for nodes in node_hashes.chunks(batch_size) {
-        let mut batch_handles = Vec::new();
-
         for &node_hash in nodes {
             graph
                 .update_node_state(&node_hash, NodeState::Verified)
@@ -134,17 +159,19 @@ async fn test_concurrent_path_validation() {
 
             let consensus = consensus.clone();
             let handle = tokio::spawn(async move {
-                consensus.process_node(node_hash).await.unwrap();
+                consensus
+                    .lock()
+                    .await
+                    .process_vertex(to_vertex_id(&node_hash))
+                    .unwrap();
                 simulate_concurrent_voting(&consensus, node_hash, CONCURRENT_VOTES)
                     .await
                     .unwrap();
                 node_hash
             });
 
-            batch_handles.push(handle);
+            handles.push(handle);
         }
-
-        handles.extend(batch_handles);
     }
 
     // Verify all nodes were finalized
@@ -152,14 +179,11 @@ async fn test_concurrent_path_validation() {
 
     for handle in handles {
         let node_hash = handle.await.unwrap();
-
-        match events_rx.recv().await {
-            Some(ConsensusEvent::NodeFinalized(hash)) => {
-                assert_eq!(hash, node_hash);
-                finalized_nodes.insert(hash);
-            }
-            _ => panic!("Expected finalization event"),
-        }
+        assert_eq!(
+            status(&consensus, &node_hash).await,
+            Some(ConsensusStatus::Final)
+        );
+        finalized_nodes.insert(node_hash);
     }
 
     assert_eq!(finalized_nodes.len(), TEST_NODES);
@@ -167,14 +191,15 @@ async fn test_concurrent_path_validation() {
 
 #[tokio::test]
 async fn test_vertex_processing_performance() {
-    let (graph, node_hashes) = setup_test_dag(TEST_NODES).await;
-    let (consensus, mut events_rx) = QrAvalanche::new(graph);
+    let (_graph, node_hashes) = setup_test_dag(TEST_NODES).await;
+    let mut consensus = QRAvalanche::new();
 
     let start = Instant::now();
     let mut processed = 0;
 
-    for &node_hash in &node_hashes {
-        consensus.process_node(node_hash).await.unwrap();
+    for node_hash in &node_hashes {
+        let status = consensus.process_vertex(to_vertex_id(node_hash)).unwrap();
+        assert_eq!(status, ConsensusStatus::Pending);
         processed += 1;
     }
 
@@ -188,6 +213,7 @@ async fn test_vertex_processing_performance() {
         vertices_per_second as u64
     );
 
+    assert_eq!(consensus.metrics.total_vertices_processed, TEST_NODES);
     assert!(
         vertices_per_second > 1000.0,
         "Vertex processing rate below target: {} vertices/second",

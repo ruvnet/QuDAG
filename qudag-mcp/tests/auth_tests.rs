@@ -1,35 +1,55 @@
 //! Authentication and security tests with vault integration
 
-use qudag_mcp::*;
+use qudag_mcp::protocol::{InitializeParams, MCPRequest};
+use qudag_mcp::resources::ResourceRegistry;
+use qudag_mcp::tools::ToolRegistry;
+use qudag_mcp::{
+    ClientInfo, Error, QuDAGMCPServer, ResourceURI, ServerCapabilities, ServerConfig, ServerState,
+    ToolName, ToolResultContent,
+};
 use std::collections::HashMap;
 use std::time::Duration;
 
+/// Parse the JSON payload of the first text content item of a tool result
+fn tool_result_json(content: &[ToolResultContent]) -> serde_json::Value {
+    match &content[0] {
+        ToolResultContent::Text { text } => serde_json::from_str(text).unwrap(),
+        other => panic!("Expected text content in tool result, got {:?}", other),
+    }
+}
+
+/// Read a resource and parse its single JSON text content
+async fn read_json_resource(registry: &ResourceRegistry, uri: &str) -> serde_json::Value {
+    let contents = registry
+        .read_resource(&ResourceURI::new(uri))
+        .await
+        .unwrap();
+    assert_eq!(contents.len(), 1);
+    serde_json::from_str(contents[0].text.as_ref().unwrap()).unwrap()
+}
+
 #[tokio::test]
 async fn test_basic_authentication_flow() {
-    // Test creating a client with authentication capabilities
+    // A client advertises its authentication capabilities in the initialize request
     let mut capabilities = HashMap::new();
     capabilities.insert(
         "authentication".to_string(),
         serde_json::json!({
-            "oauth2": true,
-            "api_key": true
+            "supported_methods": ["oauth2", "api_key"],
+            "token_refresh": true
         }),
     );
 
-    let config = ClientConfig::new()
-        .with_client_info("Authenticated Client", "1.0.0")
-        .with_capability(
-            "authentication",
-            serde_json::json!({
-                "supported_methods": ["oauth2", "api_key"],
-                "token_refresh": true
-            }),
-        );
+    let request = MCPRequest::initialize(
+        ClientInfo::new("Authenticated Client", "1.0.0"),
+        capabilities,
+    );
 
-    let client = QuDAGMCPClient::new(config).await.unwrap();
-
-    // Verify authentication capabilities are set
-    assert!(client.config.capabilities.contains_key("authentication"));
+    // Verify authentication capabilities are carried to the server
+    let params: InitializeParams = serde_json::from_value(request.params.unwrap()).unwrap();
+    assert_eq!(params.client_info.name, "Authenticated Client");
+    assert!(params.capabilities.contains_key("authentication"));
+    assert_eq!(params.capabilities["authentication"]["token_refresh"], true);
 }
 
 #[tokio::test]
@@ -48,62 +68,77 @@ async fn test_server_authentication_capabilities() {
         );
     }
 
-    let config = ServerConfig::new().with_server_info("Secure QuDAG MCP Server", "1.0.0");
+    let mut config = ServerConfig::new().with_server_info("Secure QuDAG MCP Server", "1.0.0");
+    config.capabilities = server_capabilities;
+
+    // The advertised capabilities serialize with the authentication block
+    let advertised = serde_json::to_value(&config.capabilities).unwrap();
+    assert_eq!(
+        advertised["experimental"]["authentication"]["methods"][2],
+        "vault_token"
+    );
 
     let server = QuDAGMCPServer::new(config).await.unwrap();
 
-    // Test server capabilities include authentication options
+    // Test server starts uninitialized until a client completes the handshake
     let stats = server.stats().await;
     assert!(matches!(stats.state, ServerState::Uninitialized));
+    assert!(!stats.client_connected);
 }
 
 #[tokio::test]
 async fn test_vault_integration_security() {
-    use qudag_mcp::resources::ResourceRegistry;
-
     let registry = ResourceRegistry::new();
 
     // Test accessing vault resources
     let vault_resources = registry.list_resources().await.unwrap();
-    let vault_uris: Vec<String> = vault_resources
+    let vault_uris: Vec<&str> = vault_resources
         .iter()
-        .filter(|r| r.uri.scheme() == Some("vault"))
-        .map(|r| r.uri.to_string())
+        .map(|r| r.uri.as_str())
+        .filter(|uri| uri.starts_with("vault://"))
         .collect();
 
     assert!(!vault_uris.is_empty());
 
-    // Test reading vault health status (should not expose sensitive data)
-    let health_uri = ResourceURI::vault("health/status");
-    let contents = registry.read_resource(&health_uri).await.unwrap();
-    assert_eq!(contents.len(), 1);
+    // Test reading vault entries (should not expose sensitive data)
+    let data = read_json_resource(&registry, "vault://entries").await;
+    let encryption = &data["vault_info"]["encryption"];
+    assert!(encryption["algorithm"].is_string());
+    assert_eq!(encryption["quantum_resistant"], true);
 
-    if let Some(text) = &contents[0].text {
-        let data: serde_json::Value = serde_json::from_str(text).unwrap();
-        assert_eq!(data["status"], "healthy");
-        assert!(data["encryption"]["status"].is_string());
-        assert!(data["integrity"]["checksum_valid"].is_boolean());
+    // Ensure no secret material is exposed anywhere in the resource
+    // (aggregate keys such as "password_strength" are statistics, not secrets)
+    let text = data.to_string();
+    assert!(!text.contains("private_key"));
+    assert!(!text.contains("secret"));
+    assert!(!text.contains("\"password\":"));
 
-        // Ensure no sensitive key material is exposed
-        assert!(!text.contains("private_key"));
-        assert!(!text.contains("secret"));
-        assert!(!text.contains("password"));
+    // ...and no entry carries a secret-valued field
+    let entries = data["entries"].as_array().unwrap();
+    assert!(!entries.is_empty());
+    for entry in entries {
+        for field in ["password", "secret", "private_key", "token"] {
+            assert!(
+                entry.get(field).is_none(),
+                "vault entry {} exposes field {}",
+                entry["id"],
+                field
+            );
+        }
     }
 }
 
 #[tokio::test]
 async fn test_crypto_tool_security() {
-    use qudag_mcp::tools::ToolRegistry;
-
     let registry = ToolRegistry::new();
 
-    // Test crypto key generation (should be secure)
+    // Test crypto key generation (should be quantum-resistant)
     let keygen_args = serde_json::json!({
-        "algorithm": "ml-kem",
-        "security_level": 3
+        "operation": "generateKeypair",
+        "algorithm": "ml-kem-768"
     });
 
-    let tool_name = ToolName::new("crypto_generate_keypair");
+    let tool_name = ToolName::new("crypto");
     let result = registry
         .call_tool(&tool_name, Some(keygen_args))
         .await
@@ -111,390 +146,301 @@ async fn test_crypto_tool_security() {
 
     assert_eq!(result.is_error, Some(false));
 
-    if let ToolResultContent::Text { text } = &result.content[0] {
-        let key_data: serde_json::Value = serde_json::from_str(text).unwrap();
+    let key_data = tool_result_json(&result.content);
 
-        // Verify quantum-resistant algorithm is used
-        assert_eq!(key_data["algorithm"], "ml-kem");
-        assert_eq!(key_data["security_level"], 3);
+    // Verify quantum-resistant algorithm is used
+    assert_eq!(key_data["algorithm"], "ml-kem-768");
+    assert_eq!(key_data["quantumResistant"], true);
 
-        // Verify key material is present (mock data in this case)
-        assert!(key_data["public_key"].is_string());
-        assert!(key_data["private_key"].is_string());
-        assert!(key_data["key_id"].is_string());
-        assert!(key_data["created_at"].is_string());
-    }
+    // Verify key material is present (mock data in this case)
+    assert!(key_data["publicKey"].is_string());
+    assert!(key_data["privateKey"].is_string());
+    assert!(key_data["keyId"].is_string());
+    assert!(key_data["format"].is_string());
 }
 
 #[tokio::test]
 async fn test_signature_verification_security() {
-    use qudag_mcp::tools::ToolRegistry;
-
     let registry = ToolRegistry::new();
+    let crypto = ToolName::new("crypto");
 
     // Test digital signature creation
     let sign_args = serde_json::json!({
+        "operation": "sign",
         "data": "SGVsbG8gV29ybGQ=", // "Hello World" in base64
-        "private_key": "mock_private_key_data"
+        "privateKey": "mock_private_key_data"
     });
 
-    let sign_tool = ToolName::new("crypto_sign");
-    let sign_result = registry
-        .call_tool(&sign_tool, Some(sign_args))
-        .await
-        .unwrap();
-
+    let sign_result = registry.call_tool(&crypto, Some(sign_args)).await.unwrap();
     assert_eq!(sign_result.is_error, Some(false));
+    let sign_data = tool_result_json(&sign_result.content);
+    assert!(sign_data["signature"].is_string());
+    assert_eq!(sign_data["algorithm"], "ml-dsa-65");
 
     // Test signature verification
     let verify_args = serde_json::json!({
+        "operation": "verify",
         "data": "SGVsbG8gV29ybGQ=",
-        "signature": "mock_signature_data",
-        "public_key": "mock_public_key_data"
+        "signature": sign_data["signature"],
+        "publicKey": "mock_public_key_data"
     });
 
-    let verify_tool = ToolName::new("crypto_verify");
     let verify_result = registry
-        .call_tool(&verify_tool, Some(verify_args))
+        .call_tool(&crypto, Some(verify_args))
         .await
         .unwrap();
 
     assert_eq!(verify_result.is_error, Some(false));
 
-    if let ToolResultContent::Text { text } = &verify_result.content[0] {
-        let verify_data: serde_json::Value = serde_json::from_str(text).unwrap();
-        assert!(verify_data["valid"].is_boolean());
-        assert_eq!(verify_data["algorithm"], "ml-dsa");
-    }
+    let verify_data = tool_result_json(&verify_result.content);
+    assert!(verify_data["valid"].is_boolean());
+    assert_eq!(verify_data["algorithm"], "ml-dsa-65");
+
+    // Signing without a private key is rejected
+    let error = registry
+        .call_tool(
+            &crypto,
+            Some(serde_json::json!({"operation": "sign", "data": "SGVsbG8="})),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.error_code(), -32600);
 }
 
 #[tokio::test]
 async fn test_encryption_security() {
-    use qudag_mcp::tools::ToolRegistry;
-
     let registry = ToolRegistry::new();
+    let crypto = ToolName::new("crypto");
 
     // Test encryption
     let encrypt_args = serde_json::json!({
+        "operation": "encrypt",
         "data": "U2VjcmV0IE1lc3NhZ2U=", // "Secret Message" in base64
-        "public_key": "mock_public_key_data"
+        "publicKey": "mock_public_key_data"
     });
 
-    let encrypt_tool = ToolName::new("crypto_encrypt");
     let encrypt_result = registry
-        .call_tool(&encrypt_tool, Some(encrypt_args))
+        .call_tool(&crypto, Some(encrypt_args))
         .await
         .unwrap();
 
     assert_eq!(encrypt_result.is_error, Some(false));
 
-    if let ToolResultContent::Text { text } = &encrypt_result.content[0] {
-        let encrypt_data: serde_json::Value = serde_json::from_str(text).unwrap();
-        assert!(encrypt_data["ciphertext"].is_string());
-        assert_eq!(encrypt_data["algorithm"], "ml-kem");
+    let encrypt_data = tool_result_json(&encrypt_result.content);
+    assert!(encrypt_data["encryptedData"].is_string());
+    assert_eq!(encrypt_data["algorithm"], "ml-kem-768");
+    assert_eq!(encrypt_data["quantumResistant"], true);
 
-        // Test decryption
-        let decrypt_args = serde_json::json!({
-            "ciphertext": encrypt_data["ciphertext"],
-            "private_key": "mock_private_key_data"
-        });
+    // Test decryption
+    let decrypt_args = serde_json::json!({
+        "operation": "decrypt",
+        "encryptedData": encrypt_data["encryptedData"],
+        "privateKey": "mock_private_key_data"
+    });
 
-        let decrypt_tool = ToolName::new("crypto_decrypt");
-        let decrypt_result = registry
-            .call_tool(&decrypt_tool, Some(decrypt_args))
-            .await
-            .unwrap();
+    let decrypt_result = registry
+        .call_tool(&crypto, Some(decrypt_args))
+        .await
+        .unwrap();
 
-        assert_eq!(decrypt_result.is_error, Some(false));
+    assert_eq!(decrypt_result.is_error, Some(false));
 
-        if let ToolResultContent::Text { text } = &decrypt_result.content[0] {
-            let decrypt_data: serde_json::Value = serde_json::from_str(text).unwrap();
-            assert!(decrypt_data["plaintext"].is_string());
-            assert_eq!(decrypt_data["algorithm"], "ml-kem");
-        }
-    }
+    let decrypt_data = tool_result_json(&decrypt_result.content);
+    assert!(decrypt_data["data"].is_string());
+    assert_eq!(decrypt_data["algorithm"], "ml-kem-768");
 }
 
 #[tokio::test]
 async fn test_access_control_errors() {
-    use qudag_mcp::resources::ResourceRegistry;
-
     let registry = ResourceRegistry::new();
 
-    // Test attempting to access non-existent or restricted resources
-    let restricted_uri = ResourceURI::new("vault://secrets/master_key");
-    let result = registry.read_resource(&restricted_uri).await;
-
-    // Should fail with resource not found (proper access control)
-    assert!(matches!(result, Err(MCPError::ResourceNotFound { .. })));
+    // Test attempting to access a scheme with no registered provider
+    let crypto_uri = ResourceURI::new("crypto://keys/master_key");
+    let result = registry.read_resource(&crypto_uri).await;
+    assert!(matches!(result, Err(Error::Resource { .. })));
 
     // Test attempting to access malformed URIs
     let malformed_uri = ResourceURI::new("invalid://malformed/uri");
     let result = registry.read_resource(&malformed_uri).await;
-    assert!(matches!(result, Err(MCPError::ResourceNotFound { .. })));
+    assert!(matches!(result, Err(Error::Resource { .. })));
+
+    // Subscriptions to resources that do not support them are refused
+    let result = registry
+        .subscribe_to_resource(&ResourceURI::new("invalid://malformed/uri"))
+        .await;
+    assert!(matches!(result, Err(Error::Resource { .. })));
 }
 
 #[tokio::test]
 async fn test_input_validation_security() {
-    use qudag_mcp::tools::ToolRegistry;
-
     let registry = ToolRegistry::new();
 
-    // Test tool execution with invalid parameters
+    // Test tool execution with invalid parameters (no operation given)
     let invalid_args = serde_json::json!({
         "invalid_param": "malicious_input",
         "sql_injection": "'; DROP TABLE users; --"
     });
 
-    let tool_name = ToolName::new("dag_add_vertex");
+    let tool_name = ToolName::new("dag");
     let result = registry.call_tool(&tool_name, Some(invalid_args)).await;
 
-    // Should fail with invalid parameters
-    assert!(matches!(result, Err(MCPError::InvalidParams { .. })));
+    // Should fail as an invalid request
+    let error = result.unwrap_err();
+    assert!(matches!(error, Error::Protocol { .. }));
+    assert_eq!(error.error_code(), -32600);
 
-    // Test with missing required parameters
-    let missing_args = serde_json::json!({
-        "payload": "test payload"
-        // Missing required "id" parameter
-    });
+    // Test with missing arguments entirely
+    let result = registry.call_tool(&tool_name, None).await;
+    assert!(matches!(result, Err(Error::Protocol { .. })));
 
-    let result = registry.call_tool(&tool_name, Some(missing_args)).await;
-    assert!(matches!(result, Err(MCPError::InvalidParams { .. })));
+    // Test with out-of-range parameters
+    let vault = ToolName::new("vault");
+    let result = registry
+        .call_tool(
+            &vault,
+            Some(serde_json::json!({"operation": "generate", "length": 4})),
+        )
+        .await;
+    assert!(matches!(result, Err(Error::Protocol { .. })));
 }
 
 #[tokio::test]
 async fn test_error_information_leakage() {
-    use qudag_mcp::tools::ToolRegistry;
-
     let registry = ToolRegistry::new();
 
     // Test that error messages don't leak sensitive information
     let tool_name = ToolName::new("nonexistent_sensitive_tool");
     let result = registry.call_tool(&tool_name, None).await;
 
-    if let Err(MCPError::ToolNotFound { name }) = result {
-        // Error message should not contain sensitive system information
-        assert_eq!(name, "nonexistent_sensitive_tool");
+    if let Err(error @ Error::Tool { .. }) = result {
+        if let Error::Tool { tool_name, .. } = &error {
+            assert_eq!(tool_name, "nonexistent_sensitive_tool");
+        }
 
-        let error_json = MCPError::ToolNotFound { name: name.clone() }.to_json_rpc_error();
+        let error_json = error.to_json_rpc_error();
         let error_message = error_json["message"].as_str().unwrap();
 
         // Ensure error doesn't leak file paths, internal structure, etc.
-        assert!(!error_message.contains("/"));
-        assert!(!error_message.contains("\\"));
+        assert!(!error_message.contains('/'));
+        assert!(!error_message.contains('\\'));
         assert!(!error_message.contains("internal"));
         assert!(!error_message.contains("debug"));
     } else {
-        panic!("Expected ToolNotFound error");
+        panic!("Expected tool-not-found error, got {:?}", result);
     }
-}
-
-#[tokio::test]
-async fn test_concurrent_authentication_requests() {
-    use std::sync::Arc;
-
-    // Test multiple concurrent authentication attempts
-    let mut handles = vec![];
-
-    for i in 0..10 {
-        let handle = tokio::spawn(async move {
-            let config = ClientConfig::new()
-                .with_client_info(format!("Client-{}", i), "1.0.0")
-                .with_capability(
-                    "auth_token",
-                    serde_json::Value::String(format!("token-{}", i)),
-                );
-
-            let client = QuDAGMCPClient::new(config).await.unwrap();
-
-            // Simulate authentication check
-            let stats = client.stats().await;
-            assert!(matches!(stats.state, ClientState::Disconnected));
-
-            i
-        });
-        handles.push(handle);
-    }
-
-    // Wait for all authentication attempts
-    for handle in handles {
-        let client_id = handle.await.unwrap();
-        assert!(client_id < 10);
-    }
-}
-
-#[tokio::test]
-async fn test_session_security() {
-    // Test that sessions are properly isolated
-    let config1 = ClientConfig::new()
-        .with_client_info("Client1", "1.0.0")
-        .with_capability(
-            "session_id",
-            serde_json::Value::String("session-1".to_string()),
-        );
-
-    let config2 = ClientConfig::new()
-        .with_client_info("Client2", "1.0.0")
-        .with_capability(
-            "session_id",
-            serde_json::Value::String("session-2".to_string()),
-        );
-
-    let client1 = QuDAGMCPClient::new(config1).await.unwrap();
-    let client2 = QuDAGMCPClient::new(config2).await.unwrap();
-
-    // Verify sessions are different
-    let stats1 = client1.stats().await;
-    let stats2 = client2.stats().await;
-
-    // Both should be in disconnected state initially
-    assert!(matches!(stats1.state, ClientState::Disconnected));
-    assert!(matches!(stats2.state, ClientState::Disconnected));
-
-    // Verify client info is different
-    assert_ne!(
-        client1.config.client_info.name,
-        client2.config.client_info.name
-    );
 }
 
 #[tokio::test]
 async fn test_resource_access_patterns() {
-    use qudag_mcp::resources::ResourceRegistry;
-
     let registry = ResourceRegistry::new();
 
-    // Test that only appropriate vault resources are exposed
-    let vault_resources = registry.list_resources().await.unwrap();
-    let vault_uris: Vec<&ResourceURI> = vault_resources
+    // Test that only the vault entry index is exposed, not raw secrets
+    let resources = registry.list_resources().await.unwrap();
+    let vault_uris: Vec<&str> = resources
         .iter()
-        .filter(|r| r.uri.scheme() == Some("vault"))
-        .map(|r| &r.uri)
+        .map(|r| r.uri.as_str())
+        .filter(|uri| uri.starts_with("vault://"))
         .collect();
 
-    // Should have metadata and stats, but not raw secrets
-    let allowed_patterns = vec![
-        "entries/count",
-        "categories/list",
-        "stats/usage",
-        "health/status",
-    ];
-
-    for uri in vault_uris {
-        if let Some(path) = uri.path() {
-            assert!(
-                allowed_patterns
-                    .iter()
-                    .any(|pattern| path.contains(pattern)),
-                "Unexpected vault resource exposed: {}",
-                path
-            );
-        }
-    }
+    assert_eq!(vault_uris, vec!["vault://entries"]);
 }
 
 #[tokio::test]
 async fn test_crypto_algorithm_security() {
-    use qudag_mcp::resources::ResourceRegistry;
+    let registry = ToolRegistry::new();
+    let crypto = ToolName::new("crypto");
 
-    let registry = ResourceRegistry::new();
+    // Every key-generation algorithm the crypto tool advertises is post-quantum
+    let tools = registry.list_tools().await.unwrap();
+    let crypto_tool = tools.iter().find(|t| t.name == "crypto").unwrap();
+    let algorithms = crypto_tool.input_schema["properties"]["algorithm"]["enum"]
+        .as_array()
+        .unwrap();
 
-    // Test that only quantum-resistant algorithms are advertised
-    let crypto_uri = ResourceURI::crypto("algorithms/supported");
-    let contents = registry.read_resource(&crypto_uri).await.unwrap();
+    let keypair_algorithms: Vec<&str> = algorithms
+        .iter()
+        .filter_map(|a| a.as_str())
+        .filter(|a| a.starts_with("ml-"))
+        .collect();
+    assert!(keypair_algorithms.contains(&"ml-kem-768"));
+    assert!(keypair_algorithms.contains(&"ml-dsa-65"));
 
-    if let Some(text) = &contents[0].text {
-        let data: serde_json::Value = serde_json::from_str(text).unwrap();
-        let algorithms = data["algorithms"].as_array().unwrap();
-
-        for algorithm in algorithms {
-            let is_quantum_resistant = algorithm["quantum_resistant"].as_bool().unwrap_or(false);
-            assert!(
-                is_quantum_resistant,
-                "Non-quantum-resistant algorithm found: {:?}",
-                algorithm
-            );
-
-            let name = algorithm["name"].as_str().unwrap();
-            assert!(
-                name == "ML-KEM" || name == "ML-DSA" || name == "HQC",
-                "Unexpected algorithm: {}",
-                name
-            );
-        }
+    for algorithm in keypair_algorithms {
+        let result = registry
+            .call_tool(
+                &crypto,
+                Some(serde_json::json!({"operation": "generateKeypair", "algorithm": algorithm})),
+            )
+            .await
+            .unwrap();
+        let key_data = tool_result_json(&result.content);
+        assert_eq!(
+            key_data["quantumResistant"], true,
+            "Non-quantum-resistant algorithm found: {}",
+            algorithm
+        );
     }
 }
 
 #[tokio::test]
 async fn test_network_security_information() {
-    use qudag_mcp::resources::ResourceRegistry;
-
     let registry = ResourceRegistry::new();
 
     // Test network peer information doesn't leak sensitive data
-    let peers_uri = ResourceURI::network("peers/connected");
-    let contents = registry.read_resource(&peers_uri).await.unwrap();
+    let data = read_json_resource(&registry, "network://peers").await;
+    let peers = data["peers"].as_array().unwrap();
+    assert!(!peers.is_empty());
 
-    if let Some(text) = &contents[0].text {
-        let data: serde_json::Value = serde_json::from_str(text).unwrap();
-        let peers = data["peers"].as_array().unwrap();
+    for peer in peers {
+        // Should have basic connection info but not sensitive details
+        assert!(peer["id"].is_string());
+        assert!(peer["status"].is_string());
+        assert!(peer["latency_ms"].is_number());
 
-        for peer in peers {
-            // Should have basic connection info but not sensitive details
-            assert!(peer["id"].is_string());
-            assert!(peer["status"].is_string());
-            assert!(peer["latency_ms"].is_number());
-
-            // Should not expose internal addresses or keys
-            let peer_str = peer.to_string();
-            assert!(!peer_str.contains("private_key"));
-            assert!(!peer_str.contains("secret"));
-            assert!(!peer_str.contains("127.0.0.1"));
-        }
+        // Should not expose keys or loopback addresses
+        let peer_str = peer.to_string();
+        assert!(!peer_str.contains("private_key"));
+        assert!(!peer_str.contains("secret"));
+        assert!(!peer_str.contains("127.0.0.1"));
     }
 }
 
 #[tokio::test]
 async fn test_dag_data_access_security() {
-    use qudag_mcp::resources::ResourceRegistry;
-
     let registry = ResourceRegistry::new();
 
-    // Test DAG vertex data access
-    let vertices_uri = ResourceURI::dag("vertices/all");
-    let contents = registry.read_resource(&vertices_uri).await.unwrap();
+    // Test DAG tip data access
+    let data = read_json_resource(&registry, "dag://state").await;
+    let tips = data["tips"].as_array().unwrap();
+    assert!(!tips.is_empty());
 
-    if let Some(text) = &contents[0].text {
-        let data: serde_json::Value = serde_json::from_str(text).unwrap();
-        let vertices = data["vertices"].as_array().unwrap();
+    for tip in tips {
+        // Should have public DAG information
+        assert!(tip["id"].is_string());
+        assert!(tip["confidence"].is_number());
+        assert!(tip["timestamp"].is_string());
 
-        for vertex in vertices {
-            // Should have public DAG information but not sensitive payload details
-            assert!(vertex["id"].is_string());
-            assert!(vertex["confidence"].is_number());
-            assert!(vertex["timestamp"].is_string());
-
-            // Check that confidence values are reasonable
-            let confidence = vertex["confidence"].as_f64().unwrap();
-            assert!(confidence >= 0.0 && confidence <= 1.0);
-        }
+        // Check that confidence values are reasonable
+        let confidence = tip["confidence"].as_f64().unwrap();
+        assert!((0.0..=1.0).contains(&confidence));
     }
 }
 
 #[tokio::test]
 async fn test_rate_limiting_simulation() {
-    use qudag_mcp::tools::ToolRegistry;
     use std::time::Instant;
 
     let registry = ToolRegistry::new();
+    let tool_name = ToolName::new("dag");
 
     // Simulate rapid tool calls to test for potential DoS protection
     let start = Instant::now();
     let mut results = vec![];
 
     for _ in 0..50 {
-        let tool_name = ToolName::new("dag_get_tips");
-        let result = registry.call_tool(&tool_name, None).await;
+        let result = registry
+            .call_tool(&tool_name, Some(serde_json::json!({"operation": "tips"})))
+            .await;
         results.push(result);
     }
 
@@ -515,45 +461,39 @@ async fn test_rate_limiting_simulation() {
 
 #[tokio::test]
 async fn test_memory_safety_with_large_inputs() {
-    use qudag_mcp::tools::ToolRegistry;
-
     let registry = ToolRegistry::new();
 
     // Test with reasonably large input to ensure memory safety
     let large_payload = "x".repeat(1024 * 10); // 10KB payload
 
     let args = serde_json::json!({
-        "id": "large_vertex",
-        "payload": large_payload,
-        "parents": []
+        "operation": "hash",
+        "data": large_payload
     });
 
-    let tool_name = ToolName::new("dag_add_vertex");
+    let tool_name = ToolName::new("crypto");
     let result = registry.call_tool(&tool_name, Some(args)).await;
 
     // Should handle large inputs gracefully
-    assert!(result.is_ok());
-
-    if let Ok(tool_result) = result {
-        assert_eq!(tool_result.is_error, Some(false));
-    }
+    let tool_result = result.unwrap();
+    assert_eq!(tool_result.is_error, Some(false));
+    let data = tool_result_json(&tool_result.content);
+    assert_eq!(
+        data["hash"],
+        blake3::hash(large_payload.as_bytes()).to_hex().to_string()
+    );
 }
 
 #[tokio::test]
 async fn test_secure_error_reporting() {
     // Test that error reporting doesn't expose sensitive system information
     let errors = vec![
-        MCPError::CryptoOperationFailed {
-            operation: "key_generation".to_string(),
-        },
-        MCPError::VaultOperationFailed {
-            operation: "secret_retrieval".to_string(),
-        },
-        MCPError::DAGOperationFailed {
-            operation: "consensus_validation".to_string(),
-        },
-        MCPError::NetworkOperationFailed {
-            operation: "peer_connection".to_string(),
+        Error::qudag("crypto", "key_generation failed"),
+        Error::vault("entry_retrieval", "vault backend unavailable"),
+        Error::qudag("dag", "consensus_validation failed"),
+        Error::Network {
+            message: "peer_connection failed".to_string(),
+            source: None,
         },
     ];
 

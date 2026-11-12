@@ -50,3 +50,8 @@ rocksdb = ["dep:rocksdb"]
 [dev-dependencies]
 proptest.workspace = true
 tempfile = "3.0"
+criterion.workspace = true
+
+[[bench]]
+name = "protocol_benchmarks"
+harness = false

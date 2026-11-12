@@ -35,7 +35,7 @@ impl Password {
 }
 
 /// Key derivation context containing salt and parameters.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct KdfContext {
     /// Salt for the KDF.
     pub salt: String,
@@ -140,7 +140,11 @@ pub fn decrypt_vault_key(
 ) -> VaultResult<[u8; VAULT_KEY_SIZE]> {
     let derived_key = derive_key_with_context(password, context)?;
     let crypto = VaultCrypto::from_key(derived_key);
-    let decrypted = crypto.decrypt(encrypted_key)?;
+    // The vault key is AEAD-encrypted under the password-derived key, so an
+    // authentication failure here means the password is wrong.
+    let decrypted = crypto
+        .decrypt(encrypted_key)
+        .map_err(|_| VaultError::InvalidPassword)?;
 
     if decrypted.len() != VAULT_KEY_SIZE {
         return Err(VaultError::InvalidFormat(

@@ -24,7 +24,7 @@ static CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
 
 /// Optimized ML-DSA with caching and batching
 struct OptimizedMlDsa {
-    keypair_cache: Arc<Mutex<HashMap<Vec<u8>, MlDsaKeyPair>>>,
+    keypair_cache: Arc<Mutex<HashMap<Vec<u8>, Arc<MlDsaKeyPair>>>>,
     signature_cache: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
     batch_size: usize,
     enable_parallel: bool,
@@ -43,22 +43,22 @@ impl OptimizedMlDsa {
     fn generate_keypair_cached(
         &self,
         seed: &[u8],
-    ) -> Result<MlDsaKeyPair, qudag_crypto::ml_dsa::MlDsaError> {
+    ) -> Result<Arc<MlDsaKeyPair>, qudag_crypto::ml_dsa::MlDsaError> {
         // Try cache first
         if let Ok(cache) = self.keypair_cache.lock() {
             if let Some(keypair) = cache.get(seed) {
                 CACHE_HITS.fetch_add(1, Ordering::Relaxed);
-                return Ok(keypair.clone());
+                return Ok(Arc::clone(keypair));
             }
         }
 
         CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
         let mut rng = thread_rng();
-        let keypair = MlDsaKeyPair::generate(&mut rng)?;
+        let keypair = Arc::new(MlDsaKeyPair::generate(&mut rng)?);
 
         // Cache the result
         if let Ok(mut cache) = self.keypair_cache.lock() {
-            cache.insert(seed.to_vec(), keypair.clone());
+            cache.insert(seed.to_vec(), Arc::clone(&keypair));
         }
 
         Ok(keypair)
@@ -69,7 +69,7 @@ impl OptimizedMlDsa {
         messages: &[Vec<u8>],
     ) -> Result<Vec<Vec<u8>>, qudag_crypto::ml_dsa::MlDsaError> {
         let mut rng = thread_rng();
-        let keypair = MlDsaKeyPair::generate(&mut rng)?;
+        let keypair = Arc::new(MlDsaKeyPair::generate(&mut rng)?);
         let mut signatures = Vec::with_capacity(messages.len());
 
         if self.enable_parallel && messages.len() > 4 {
@@ -80,7 +80,7 @@ impl OptimizedMlDsa {
             let handles: Vec<_> = chunks
                 .into_iter()
                 .map(|chunk| {
-                    let keypair_clone = keypair.clone();
+                    let keypair_clone = Arc::clone(&keypair);
                     let chunk_owned = chunk.to_vec();
 
                     thread::spawn(move || {
@@ -173,15 +173,6 @@ impl OptimizedMlDsa {
         if let Ok(mut cache) = self.signature_cache.lock() {
             cache.clear();
         }
-    }
-}
-
-impl Clone for MlDsaKeyPair {
-    fn clone(&self) -> Self {
-        // This is a simplified clone - in production, you'd want a proper implementation
-        // For benchmarking purposes, we'll generate a new keypair
-        let mut rng = thread_rng();
-        MlDsaKeyPair::generate(&mut rng).expect("Failed to generate keypair")
     }
 }
 

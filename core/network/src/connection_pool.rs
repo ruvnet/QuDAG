@@ -192,7 +192,9 @@ impl ConnectionPool {
 
         // No available connection, create new one if under limit
         if self.get_peer_connection_count(peer_id) < self.config.max_size {
-            let conn = self.create_connection(peer_id).await?;
+            let mut conn = self.create_connection(peer_id).await?;
+            conn.last_used = Instant::now();
+            conn.usage_count += 1;
 
             // Move to active connections
             let conn_id = self.connection_counter.fetch_add(1, Ordering::Relaxed) as u64;
@@ -236,6 +238,21 @@ impl ConnectionPool {
     pub fn release(&self, peer_id: PeerId, mut connection: PooledConnection) {
         if self.shutdown.load(Ordering::Acquire) {
             return;
+        }
+
+        // The connection is no longer checked out: drop it from the active set and
+        // hand back the permit that `acquire` kept for it.
+        if let Some(mut active) = self.active.get_mut(&peer_id) {
+            let checked_out = active
+                .iter()
+                .find(|(_, conn)| conn.created_at == connection.created_at)
+                .map(|(id, _)| *id);
+            if let Some(id) = checked_out {
+                active.remove(&id);
+            }
+        }
+        if let Some(semaphore) = self.semaphores.get(&peer_id) {
+            semaphore.add_permits(1);
         }
 
         // Update connection state
@@ -418,9 +435,11 @@ impl ConnectionPool {
             let needed = self.config.min_size - total_count;
             debug!("Pool below minimum size, creating {} connections", needed);
 
-            // Create connections for known peers
-            for entry in self.available.iter() {
-                let peer_id = *entry.key();
+            // Create connections for known peers. Collect the ids first: inserting
+            // while iterating the map would deadlock on its shard lock.
+            let known_peers: Vec<PeerId> =
+                self.available.iter().map(|entry| *entry.key()).collect();
+            for peer_id in known_peers {
                 for _ in 0..needed {
                     match self.create_connection(peer_id).await {
                         Ok(conn) => {
@@ -469,7 +488,7 @@ impl ConnectionPool {
 
         for entry in self.active.iter() {
             let peer_id = *entry.key();
-            for (_, conn) in entry.value().iter() {
+            for conn in entry.value().values() {
                 self.destroy_connection(peer_id, conn.clone());
             }
         }
@@ -483,6 +502,7 @@ impl ConnectionPool {
 
     /// Get pool statistics
     pub fn get_stats(&self) -> PoolStats {
+        self.update_pool_stats();
         self.stats.read().clone()
     }
 
@@ -639,6 +659,7 @@ mod tests {
         let config = PoolConfig {
             idle_timeout: Duration::from_millis(100),
             health_check_interval: Duration::from_millis(50),
+            min_size: 0,
             ..Default::default()
         };
         let pool = ConnectionPool::new(config);

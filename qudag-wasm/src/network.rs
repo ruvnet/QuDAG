@@ -18,6 +18,12 @@ pub struct WasmNetworkManager {
     peers: Arc<Mutex<Vec<PeerInfo>>>,
 }
 
+impl Default for WasmNetworkManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[wasm_bindgen]
 impl WasmNetworkManager {
     /// Create a new network manager
@@ -113,7 +119,7 @@ impl WasmNetworkManager {
 
     /// Ban a peer
     #[wasm_bindgen(js_name = "banPeer")]
-    pub fn ban_peer(&self, peer_id: &str, reason: Option<String>) -> Result<bool, JsError> {
+    pub fn ban_peer(&self, peer_id: &str, _reason: Option<String>) -> Result<bool, JsError> {
         let mut peers = self
             .peers
             .lock()
@@ -152,7 +158,7 @@ impl WasmOnionRouter {
     /// Create an onion route
     #[wasm_bindgen(js_name = "createRoute")]
     pub fn create_route(hop_count: u8) -> Result<JsValue, JsError> {
-        if hop_count < 3 || hop_count > 7 {
+        if !(3..=7).contains(&hop_count) {
             return Err(JsError::new("Hop count must be between 3 and 7"));
         }
 
@@ -167,7 +173,7 @@ impl WasmOnionRouter {
 
     /// Encrypt data for onion routing
     #[wasm_bindgen(js_name = "encryptForRoute")]
-    pub fn encrypt_for_route(data: &[u8], route_id: &str) -> Result<Vec<u8>, JsError> {
+    pub fn encrypt_for_route(data: &[u8], _route_id: &str) -> Result<Vec<u8>, JsError> {
         // Mock implementation - would use ML-KEM encryption in practice
         let mut encrypted = vec![0u8; data.len() + 32]; // Add overhead
         encrypted[..data.len()].copy_from_slice(data);

@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use qudag_crypto::ml_kem::{KeyEncapsulation, MlKem768};
+use qudag_crypto::ml_kem::MlKem768;
 
 fn benchmark_mlkem(c: &mut Criterion) {
     c.bench_function("ml_kem_768_keygen", |b| {

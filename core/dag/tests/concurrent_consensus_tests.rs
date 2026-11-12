@@ -6,19 +6,23 @@
 
 use blake3::Hash;
 use qudag_dag::{
-    consensus::{ConsensusEngine, QrAvalanche, Vote, VoteResult},
-    error::{DagError, Result},
-    node::{NodeId, NodeState},
-    tip_selection::TipSelector,
-    Graph, Node, QrDag,
+    AdvancedTipSelection, ConsensusError, ConsensusStatus, Graph, Node, NodeState,
+    ParentSelectionAlgorithm, QRAvalanche, TipSelection, TipSelectionConfig, Vertex, VertexId,
 };
 use rand::{seq::SliceRandom, thread_rng, Rng};
-use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Barrier, Mutex, RwLock};
-use tokio::time::sleep;
+
+fn to_vertex_id(hash: &Hash) -> VertexId {
+    VertexId::from_bytes(hash.as_bytes().to_vec())
+}
+
+fn to_hash(id: &VertexId) -> Hash {
+    let bytes: [u8; 32] = id.as_bytes().try_into().expect("32-byte vertex id");
+    Hash::from(bytes)
+}
 
 /// Test concurrent node additions to DAG
 #[tokio::test]
@@ -26,15 +30,15 @@ async fn test_concurrent_dag_node_addition() {
     const NUM_THREADS: usize = 16;
     const NODES_PER_THREAD: usize = 50;
 
-    let dag = Arc::new(QrDag::new());
+    let dag = Arc::new(Graph::new());
     let barrier = Arc::new(Barrier::new(NUM_THREADS));
     let mut handles = Vec::new();
 
     // Create genesis node first
     let genesis_data = vec![0u8; 256];
     let genesis_node = Node::new(genesis_data, vec![]);
-    let genesis_hash = *genesis_node.hash();
-    dag.add_node(genesis_node).await.unwrap();
+    let genesis_hash = genesis_node.hash();
+    dag.add_node(genesis_node).unwrap();
 
     for thread_id in 0..NUM_THREADS {
         let dag_clone = dag.clone();
@@ -71,9 +75,9 @@ async fn test_concurrent_dag_node_addition() {
                 };
 
                 let node = Node::new(node_data, parents);
-                let node_hash = *node.hash();
+                let node_hash = node.hash();
 
-                match dag_clone.add_node(node).await {
+                match dag_clone.add_node(node) {
                     Ok(()) => {
                         successful_additions += 1;
                         node_hashes.push(node_hash);
@@ -117,7 +121,7 @@ async fn test_concurrent_dag_node_addition() {
         all_node_hashes.extend(hashes);
     }
 
-    let final_dag_size = dag.node_count().await;
+    let final_dag_size = dag.len();
     let expected_size = total_successful + 1; // +1 for genesis
 
     println!("Concurrent DAG node addition results:");
@@ -138,7 +142,7 @@ async fn test_concurrent_dag_node_addition() {
     // Verify all nodes are actually accessible
     let mut accessible_count = 0;
     for hash in &all_node_hashes {
-        if dag.get_node(hash).await.is_some() {
+        if dag.get_node(hash).is_some() {
             accessible_count += 1;
         }
     }
@@ -156,14 +160,14 @@ async fn test_concurrent_consensus_voting() {
     const NODES_TO_VOTE_ON: usize = 50;
     const VOTES_PER_VOTER: usize = 100;
 
-    let dag = Arc::new(QrDag::new());
-    let consensus = Arc::new(QrAvalanche::new());
+    let dag = Arc::new(Graph::new());
+    let consensus = Arc::new(Mutex::new(QRAvalanche::new()));
     let barrier = Arc::new(Barrier::new(NUM_VOTERS));
 
     // Setup: Create nodes to vote on
     let genesis_node = Node::new(vec![0u8; 256], vec![]);
-    let genesis_hash = *genesis_node.hash();
-    dag.add_node(genesis_node).await.unwrap();
+    let genesis_hash = genesis_node.hash();
+    dag.add_node(genesis_node).unwrap();
 
     let mut vote_targets = Vec::new();
     vote_targets.push(genesis_hash);
@@ -171,9 +175,17 @@ async fn test_concurrent_consensus_voting() {
     for i in 1..NODES_TO_VOTE_ON {
         let node_data = format!("Vote target node {}", i).into_bytes();
         let node = Node::new(node_data, vec![genesis_hash]);
-        let node_hash = *node.hash();
-        dag.add_node(node).await.unwrap();
+        let node_hash = node.hash();
+        dag.add_node(node).unwrap();
         vote_targets.push(node_hash);
+    }
+
+    // Register every target with the consensus engine
+    {
+        let mut engine = consensus.lock().await;
+        for target in &vote_targets {
+            engine.process_vertex(to_vertex_id(target)).unwrap();
+        }
     }
 
     let vote_targets = Arc::new(vote_targets);
@@ -187,9 +199,13 @@ async fn test_concurrent_consensus_voting() {
         let handle = tokio::spawn(async move {
             barrier_clone.wait().await;
 
+            let voter = VertexId::from_bytes(format!("voter_{}", voter_id).into_bytes());
             let mut votes_cast = 0;
             let mut vote_conflicts = 0;
-            let mut vote_results = Vec::new();
+            // The first vote this voter cast on each target
+            let mut first_votes: HashMap<Hash, bool> = HashMap::new();
+            // Set once this voter equivocates; every later vote from it is rejected
+            let mut flagged = false;
 
             for i in 0..VOTES_PER_VOTER {
                 // Select random target to vote on
@@ -197,37 +213,38 @@ async fn test_concurrent_consensus_voting() {
                 let target_hash = targets_clone[target_index];
 
                 // Create vote (alternating between accept/reject to create conflicts)
-                let vote_value = if i % 3 == 0 {
-                    false // Reject vote to create conflicts
-                } else {
-                    true // Accept vote
-                };
+                let vote_value = i % 3 != 0;
 
-                let vote = Vote {
-                    node_id: target_hash,
-                    voter_id: format!("voter_{}", voter_id),
-                    value: vote_value,
-                    timestamp: Instant::now(),
-                };
+                let result = consensus_clone.lock().await.record_vote(
+                    to_vertex_id(&target_hash),
+                    voter.clone(),
+                    vote_value,
+                );
 
-                match consensus_clone.cast_vote(vote).await {
-                    Ok(result) => {
+                let first_vote = *first_votes.entry(target_hash).or_insert(vote_value);
+                match result {
+                    Ok(()) => {
+                        // Only a consistent vote from an unflagged voter is accepted
+                        assert!(!flagged, "vote from a flagged Byzantine voter was accepted");
+                        assert_eq!(vote_value, first_vote, "conflicting vote was accepted");
                         votes_cast += 1;
-                        vote_results.push(result);
-
-                        // Check for conflicts
-                        if matches!(result, VoteResult::Conflict) {
-                            vote_conflicts += 1;
-                        }
                     }
-                    Err(e) => {
-                        eprintln!("Voter {} vote {}: Failed to cast vote: {}", voter_id, i, e);
+                    Err(ConsensusError::ByzantineBehavior(_)) => {
+                        // Changing a vote on the same vertex is equivocation; it flags the voter
+                        assert!(
+                            flagged || vote_value != first_vote,
+                            "consistent vote from an unflagged voter was rejected"
+                        );
+                        flagged = true;
+                        vote_conflicts += 1;
                     }
+                    Err(e) => panic!("Voter {} vote {}: unexpected error: {}", voter_id, i, e),
                 }
 
                 // Query consensus occasionally
                 if i % 20 == 0 {
-                    let _consensus_state = consensus_clone.get_consensus_state(&target_hash).await;
+                    let engine = consensus_clone.lock().await;
+                    assert!(engine.vertices.contains_key(&to_vertex_id(&target_hash)));
                 }
 
                 // Yield to allow other voters
@@ -236,7 +253,7 @@ async fn test_concurrent_consensus_voting() {
                 }
             }
 
-            (voter_id, votes_cast, vote_conflicts, vote_results)
+            (voter_id, votes_cast, vote_conflicts)
         });
 
         handles.push(handle);
@@ -245,17 +262,21 @@ async fn test_concurrent_consensus_voting() {
     // Collect results
     let mut total_votes = 0;
     let mut total_conflicts = 0;
-    let mut all_results = Vec::new();
+    let mut equivocating_voters = HashSet::new();
 
     for handle in handles {
-        let (voter_id, votes, conflicts, results) = handle.await.unwrap();
+        let (voter_id, votes, conflicts) = handle.await.unwrap();
         println!(
             "Voter {}: {} votes cast, {} conflicts",
             voter_id, votes, conflicts
         );
         total_votes += votes;
         total_conflicts += conflicts;
-        all_results.extend(results);
+        if conflicts > 0 {
+            equivocating_voters.insert(VertexId::from_bytes(
+                format!("voter_{}", voter_id).into_bytes(),
+            ));
+        }
     }
 
     println!("Concurrent consensus voting results:");
@@ -263,25 +284,19 @@ async fn test_concurrent_consensus_voting() {
     println!("  Total conflicts: {}", total_conflicts);
     println!(
         "  Conflict rate: {:.2}%",
-        (total_conflicts as f64 / total_votes as f64) * 100.0
+        (total_conflicts as f64 / (total_votes + total_conflicts) as f64) * 100.0
     );
 
     // Verify final consensus states
+    let engine = consensus.lock().await;
     let mut finalized_nodes = 0;
     let mut pending_nodes = 0;
 
     for target_hash in vote_targets.iter() {
-        match consensus.get_consensus_state(target_hash).await {
-            Ok(state) => {
-                if state.is_finalized() {
-                    finalized_nodes += 1;
-                } else {
-                    pending_nodes += 1;
-                }
-            }
-            Err(e) => {
-                eprintln!("Failed to get consensus state for {:?}: {}", target_hash, e);
-            }
+        match engine.vertices.get(&to_vertex_id(target_hash)) {
+            Some(ConsensusStatus::Final) => finalized_nodes += 1,
+            Some(_) => pending_nodes += 1,
+            None => panic!("Lost consensus state for {:?}", target_hash),
         }
     }
 
@@ -290,9 +305,14 @@ async fn test_concurrent_consensus_voting() {
 
     assert!(total_votes > 0, "Should cast some votes");
     assert_eq!(
-        total_votes,
+        total_votes + total_conflicts,
         NUM_VOTERS * VOTES_PER_VOTER,
-        "All votes should be cast successfully"
+        "Every vote should be either recorded or rejected as a conflict"
+    );
+    // Every voter that equivocated is flagged as Byzantine, and no one else
+    assert_eq!(
+        engine.voting_record.byzantine_voters, equivocating_voters,
+        "Byzantine voters should be exactly the equivocating voters"
     );
 }
 
@@ -303,14 +323,14 @@ async fn test_node_state_transition_races() {
     const STATE_TRANSITIONS_PER_THREAD: usize = 100;
     const NUM_NODES: usize = 50;
 
-    let dag = Arc::new(QrDag::new());
+    let dag = Arc::new(Graph::new());
     let state_consistency = Arc::new(std::sync::atomic::AtomicBool::new(true));
     let barrier = Arc::new(Barrier::new(NUM_THREADS));
 
     // Setup: Create nodes for state transitions
     let genesis_node = Node::new(vec![0u8; 256], vec![]);
-    let genesis_hash = *genesis_node.hash();
-    dag.add_node(genesis_node).await.unwrap();
+    let genesis_hash = genesis_node.hash();
+    dag.add_node(genesis_node).unwrap();
 
     let mut test_nodes = Vec::new();
     test_nodes.push(genesis_hash);
@@ -318,8 +338,8 @@ async fn test_node_state_transition_races() {
     for i in 1..NUM_NODES {
         let node_data = format!("State test node {}", i).into_bytes();
         let node = Node::new(node_data, vec![genesis_hash]);
-        let node_hash = *node.hash();
-        dag.add_node(node).await.unwrap();
+        let node_hash = node.hash();
+        dag.add_node(node).unwrap();
         test_nodes.push(node_hash);
     }
 
@@ -345,7 +365,7 @@ async fn test_node_state_transition_races() {
                 let node_hash = nodes_clone[node_index];
 
                 // Get current state
-                let current_state = if let Some(node) = dag_clone.get_node(&node_hash).await {
+                let current_state = if let Some(node) = dag_clone.get_node(&node_hash) {
                     node.state()
                 } else {
                     continue;
@@ -354,17 +374,10 @@ async fn test_node_state_transition_races() {
                 // Determine next valid state transition
                 let next_state = match current_state {
                     NodeState::Pending => {
-                        if i % 3 == 0 {
-                            NodeState::Verified
-                        } else {
-                            NodeState::Processing
-                        }
-                    }
-                    NodeState::Processing => {
-                        if i % 2 == 0 {
-                            NodeState::Verified
-                        } else {
+                        if i % 4 == 0 {
                             NodeState::Rejected
+                        } else {
+                            NodeState::Verified
                         }
                     }
                     NodeState::Verified => NodeState::Final,
@@ -373,12 +386,12 @@ async fn test_node_state_transition_races() {
                 };
 
                 // Attempt state transition
-                match dag_clone.update_node_state(&node_hash, next_state).await {
+                match dag_clone.update_node_state(&node_hash, next_state) {
                     Ok(()) => {
                         successful_transitions += 1;
 
                         // Verify transition took effect
-                        if let Some(updated_node) = dag_clone.get_node(&node_hash).await {
+                        if let Some(updated_node) = dag_clone.get_node(&node_hash) {
                             if updated_node.state() != next_state {
                                 consistency_violations += 1;
                                 consistency_clone.store(false, std::sync::atomic::Ordering::SeqCst);
@@ -396,7 +409,7 @@ async fn test_node_state_transition_races() {
                             );
                         }
                     }
-                    Err(e) => {
+                    Err(_) => {
                         failed_transitions += 1;
                         // Some failures are expected due to invalid transitions or race conditions
                     }
@@ -446,8 +459,10 @@ async fn test_node_state_transition_races() {
     // Verify final state distribution
     let mut state_counts = HashMap::new();
     for node_hash in test_nodes.iter() {
-        if let Some(node) = dag.get_node(node_hash).await {
-            *state_counts.entry(node.state()).or_insert(0) += 1;
+        if let Some(node) = dag.get_node(node_hash) {
+            *state_counts
+                .entry(format!("{:?}", node.state()))
+                .or_insert(0) += 1;
         }
     }
 
@@ -471,14 +486,24 @@ async fn test_concurrent_tip_selection() {
     const SELECTIONS_PER_SELECTOR: usize = 200;
     const DAG_SIZE: usize = 100;
 
-    let dag = Arc::new(QrDag::new());
-    let tip_selector = Arc::new(TipSelector::new());
+    let dag = Arc::new(Graph::new());
+    let mut tip_selector = AdvancedTipSelection::new(
+        TipSelectionConfig::default(),
+        ParentSelectionAlgorithm::Random,
+    );
     let barrier = Arc::new(Barrier::new(NUM_SELECTORS));
 
     // Setup: Create a DAG structure
     let genesis_node = Node::new(vec![0u8; 256], vec![]);
-    let genesis_hash = *genesis_node.hash();
-    dag.add_node(genesis_node).await.unwrap();
+    let genesis_hash = genesis_node.hash();
+    dag.add_node(genesis_node).unwrap();
+    tip_selector
+        .add_vertex(&Vertex::new(
+            to_vertex_id(&genesis_hash),
+            vec![0u8; 256],
+            HashSet::new(),
+        ))
+        .unwrap();
 
     let mut all_nodes = vec![genesis_hash];
 
@@ -493,12 +518,24 @@ async fn test_concurrent_tip_selection() {
             .cloned()
             .collect();
 
+        let vertex = Vertex::new(
+            VertexId::new(),
+            node_data.clone(),
+            parents.iter().map(to_vertex_id).collect(),
+        );
         let node = Node::new(node_data, parents);
-        let node_hash = *node.hash();
-        dag.add_node(node).await.unwrap();
+        let node_hash = node.hash();
+        dag.add_node(node).unwrap();
+        tip_selector
+            .add_vertex(&Vertex {
+                id: to_vertex_id(&node_hash),
+                ..vertex
+            })
+            .unwrap();
         all_nodes.push(node_hash);
     }
 
+    let tip_selector = Arc::new(tip_selector);
     let mut handles = Vec::new();
 
     for selector_id in 0..NUM_SELECTORS {
@@ -515,9 +552,11 @@ async fn test_concurrent_tip_selection() {
             let mut tip_counts = HashMap::new();
 
             for i in 0..SELECTIONS_PER_SELECTOR {
-                match selector_clone.select_tips(&dag_clone, 2).await {
+                match selector_clone.select_tips() {
                     Ok(tips) => {
                         successful_selections += 1;
+                        let tips: Vec<Hash> = tips.iter().map(to_hash).collect();
+                        assert_eq!(tips.len(), 2, "Should select the configured tip count");
 
                         // Track unique tips and their frequency
                         for tip in &tips {
@@ -525,11 +564,13 @@ async fn test_concurrent_tip_selection() {
                             *tip_counts.entry(*tip).or_insert(0) += 1;
                         }
 
-                        // Verify tips are valid (exist in DAG)
+                        // Verify tips are valid (exist in DAG and have no children)
                         for tip in &tips {
-                            if dag_clone.get_node(tip).await.is_none() {
+                            let is_tip = dag_clone.get_node(tip).is_some()
+                                && dag_clone.get_edges(tip).is_some_and(|e| e.is_empty());
+                            if !is_tip {
                                 eprintln!(
-                                    "Selector {}: Selected non-existent tip {:?}",
+                                    "Selector {}: Selected invalid tip {:?}",
                                     selector_id, tip
                                 );
                                 failed_selections += 1;
@@ -609,7 +650,7 @@ async fn test_concurrent_tip_selection() {
     // Verify all selected tips actually exist in the DAG
     for tip in &all_unique_tips {
         assert!(
-            dag.get_node(tip).await.is_some(),
+            dag.get_node(tip).is_some(),
             "All selected tips should exist in DAG"
         );
     }
@@ -622,15 +663,18 @@ async fn test_dag_high_contention_stress() {
     const NUM_STATE_UPDATERS: usize = 6;
     const NUM_READERS: usize = 10;
     const STRESS_DURATION_SECS: u64 = 15;
+    // Keep the graph well below StorageConfig::default().max_vertices so that
+    // capacity pruning (which evicts Final nodes) never runs during the test.
+    const MAX_NODES_PER_ADDER: usize = 5_000;
 
-    let dag = Arc::new(QrDag::new());
+    let dag = Arc::new(Graph::new());
     let consistency_checker = Arc::new(std::sync::atomic::AtomicBool::new(true));
     let operation_counter = Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
     // Setup genesis
     let genesis_node = Node::new(vec![0u8; 256], vec![]);
-    let genesis_hash = *genesis_node.hash();
-    dag.add_node(genesis_node).await.unwrap();
+    let genesis_hash = genesis_node.hash();
+    dag.add_node(genesis_node).unwrap();
 
     let shared_node_list = Arc::new(RwLock::new(vec![genesis_hash]));
     let start_time = Instant::now();
@@ -648,7 +692,7 @@ async fn test_dag_high_contention_stress() {
             let mut operations = 0;
             let mut added_nodes = 0;
 
-            while Instant::now() < end_time {
+            while Instant::now() < end_time && added_nodes < MAX_NODES_PER_ADDER {
                 // Get random parents from existing nodes
                 let parents = {
                     let nodes = node_list_clone.read().await;
@@ -665,9 +709,9 @@ async fn test_dag_high_contention_stress() {
 
                 let node_data = format!("Adder {} Node {}", adder_id, operations).into_bytes();
                 let node = Node::new(node_data, parents);
-                let node_hash = *node.hash();
+                let node_hash = node.hash();
 
-                if dag_clone.add_node(node).await.is_ok() {
+                if dag_clone.add_node(node).is_ok() {
                     added_nodes += 1;
 
                     // Add to shared list
@@ -713,11 +757,10 @@ async fn test_dag_high_contention_stress() {
                 };
 
                 // Get current state and determine next state
-                if let Some(node) = dag_clone.get_node(&target_hash).await {
+                if let Some(node) = dag_clone.get_node(&target_hash) {
                     let current_state = node.state();
                     let next_state = match current_state {
-                        NodeState::Pending => NodeState::Processing,
-                        NodeState::Processing => {
+                        NodeState::Pending => {
                             if operations % 2 == 0 {
                                 NodeState::Verified
                             } else {
@@ -730,13 +773,12 @@ async fn test_dag_high_contention_stress() {
 
                     if dag_clone
                         .update_node_state(&target_hash, next_state)
-                        .await
                         .is_ok()
                     {
                         successful_updates += 1;
 
                         // Verify the update took effect
-                        if let Some(updated_node) = dag_clone.get_node(&target_hash).await {
+                        if let Some(updated_node) = dag_clone.get_node(&target_hash) {
                             if updated_node.state() != next_state {
                                 checker_clone.store(false, std::sync::atomic::Ordering::SeqCst);
                             }
@@ -782,12 +824,12 @@ async fn test_dag_high_contention_stress() {
                     *nodes.choose(&mut thread_rng()).unwrap()
                 };
 
-                if dag_clone.get_node(&target_hash).await.is_some() {
+                if dag_clone.get_node(&target_hash).is_some() {
                     successful_reads += 1;
                 }
 
                 // Also read DAG statistics
-                let _size = dag_clone.node_count().await;
+                let _size = dag_clone.len();
 
                 operations += 1;
                 counter_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -828,7 +870,7 @@ async fn test_dag_high_contention_stress() {
     let ops_per_second = total_operations as f64 / elapsed.as_secs_f64();
     let final_counter = operation_counter.load(std::sync::atomic::Ordering::SeqCst);
     let final_consistency = consistency_checker.load(std::sync::atomic::Ordering::SeqCst);
-    let final_dag_size = dag.node_count().await;
+    let final_dag_size = dag.len();
     let final_node_list_size = shared_node_list.read().await.len();
 
     println!("\nDAG high contention stress test results:");
@@ -871,12 +913,12 @@ fn test_dag_parallel_operations() {
     let rt = Runtime::new().unwrap();
 
     rt.block_on(async {
-        let dag = Arc::new(QrDag::new());
+        let dag = Arc::new(Graph::new());
 
         // Setup genesis
         let genesis_node = Node::new(vec![0u8; 256], vec![]);
-        let genesis_hash = *genesis_node.hash();
-        dag.add_node(genesis_node).await.unwrap();
+        let genesis_hash = genesis_node.hash();
+        dag.add_node(genesis_node).unwrap();
 
         // Generate test data
         let test_data: Vec<Vec<u8>> = (0..NUM_OPERATIONS)
@@ -887,7 +929,7 @@ fn test_dag_parallel_operations() {
         let semaphore = Arc::new(tokio::sync::Semaphore::new(THREAD_POOL_SIZE));
         let mut handles = Vec::new();
 
-        for (i, data) in test_data.iter().enumerate() {
+        for data in test_data.iter() {
             let dag_clone = dag.clone();
             let data_clone = data.clone();
             let semaphore_clone = semaphore.clone();
@@ -896,9 +938,9 @@ fn test_dag_parallel_operations() {
                 let _permit = semaphore_clone.acquire().await.unwrap();
 
                 let node = Node::new(data_clone, vec![genesis_hash]);
-                let node_hash = *node.hash();
+                let node_hash = node.hash();
 
-                match dag_clone.add_node(node).await {
+                match dag_clone.add_node(node) {
                     Ok(()) => Some(node_hash),
                     Err(_) => None,
                 }
@@ -923,7 +965,7 @@ fn test_dag_parallel_operations() {
             "  Successful additions: {}/{}",
             successful_additions, NUM_OPERATIONS
         );
-        println!("  Final DAG size: {}", dag.node_count().await);
+        println!("  Final DAG size: {}", dag.len());
 
         // Verify all nodes are accessible
         let mut accessible_count = 0;
@@ -931,7 +973,7 @@ fn test_dag_parallel_operations() {
             .into_iter()
             .map(|hash| {
                 let dag_clone = dag.clone();
-                tokio::spawn(async move { dag_clone.get_node(&hash).await.is_some() })
+                tokio::spawn(async move { dag_clone.get_node(&hash).is_some() })
             })
             .collect();
 
@@ -955,7 +997,7 @@ fn test_dag_parallel_operations() {
             "All nodes should be accessible"
         );
         assert_eq!(
-            dag.node_count().await,
+            dag.len(),
             successful_additions + 1,
             "DAG size should be correct"
         );

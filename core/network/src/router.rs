@@ -50,7 +50,9 @@ impl Router {
         })?;
 
         let circuit_manager = Arc::new(Mutex::new(CircuitManager::new()));
-        let directory_client = Arc::new(DirectoryClient::new());
+        // Build circuits from the directory the onion router encrypts against,
+        // so every hop's public key resolves.
+        let directory_client = onion_router.directory_client();
 
         Ok(Self {
             peers: Arc::new(RwLock::new(HashSet::new())),
@@ -175,21 +177,36 @@ impl Router {
             ));
         }
 
-        // Build a circuit using the circuit manager
+        // Reuse the best active circuit if it is long enough; otherwise build one.
+        // Circuit creation is rate limited, so building per message would fail
+        // for every message after the first within the limit window.
         let mut circuit_mgr = self.circuit_manager.lock().await;
-        let circuit_id = circuit_mgr
-            .build_circuit(actual_hops, &self.directory_client)
-            .await
-            .map_err(|e| NetworkError::RoutingError(format!("Circuit build failed: {:?}", e)))?;
+        let reusable = circuit_mgr
+            .get_active_circuit()
+            .filter(|circuit| circuit.hops.len() >= actual_hops)
+            .map(|circuit| circuit.id);
+        let circuit_id = match reusable {
+            Some(circuit_id) => circuit_id,
+            None => {
+                let circuit_id = circuit_mgr
+                    .build_circuit(actual_hops, &self.directory_client)
+                    .await
+                    .map_err(|e| {
+                        NetworkError::RoutingError(format!("Circuit build failed: {:?}", e))
+                    })?;
 
-        // Activate the circuit
-        circuit_mgr.activate_circuit(circuit_id).map_err(|e| {
-            NetworkError::RoutingError(format!("Circuit activation failed: {:?}", e))
-        })?;
+                // Activate the circuit
+                circuit_mgr.activate_circuit(circuit_id).map_err(|e| {
+                    NetworkError::RoutingError(format!("Circuit activation failed: {:?}", e))
+                })?;
+                circuit_id
+            }
+        };
 
         // Get circuit hops
         let circuit = circuit_mgr
-            .get_active_circuit()
+            .get_circuit(circuit_id)
+            .cloned()
             .ok_or_else(|| NetworkError::RoutingError("No active circuit available".into()))?;
 
         // Create onion layers for the message

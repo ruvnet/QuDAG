@@ -41,16 +41,45 @@ impl CharacterSet {
 }
 
 /// Generate a random password with the specified length and character set.
+///
+/// For the mixed sets (`Alphanumeric`, `All`), the password contains at least one
+/// character from every class in the set whenever `length` allows it, so a
+/// generated password always satisfies the usual composition rules.
 pub fn generate_password(length: usize, charset: CharacterSet) -> String {
-    let chars = charset.as_str();
-    let mut rng = rand::thread_rng();
+    use rand::seq::SliceRandom;
 
-    (0..length)
-        .map(|_| {
-            let idx = rng.gen_range(0..chars.len());
-            chars.chars().nth(idx).unwrap()
-        })
-        .collect()
+    let classes: &[CharacterSet] = match charset {
+        CharacterSet::Alphanumeric => &[
+            CharacterSet::Lowercase,
+            CharacterSet::Uppercase,
+            CharacterSet::Digits,
+        ],
+        CharacterSet::All => &[
+            CharacterSet::Lowercase,
+            CharacterSet::Uppercase,
+            CharacterSet::Digits,
+            CharacterSet::Special,
+        ],
+        _ => &[],
+    };
+
+    let mut rng = rand::thread_rng();
+    let pick = |rng: &mut rand::rngs::ThreadRng, set: &str| -> char {
+        let chars: Vec<char> = set.chars().collect();
+        chars[rng.gen_range(0..chars.len())]
+    };
+
+    let mut password: Vec<char> = Vec::with_capacity(length);
+    if length >= classes.len() {
+        for class in classes {
+            password.push(pick(&mut rng, class.as_str()));
+        }
+    }
+    while password.len() < length {
+        password.push(pick(&mut rng, charset.as_str()));
+    }
+    password.shuffle(&mut rng);
+    password.into_iter().collect()
 }
 
 /// Generate a random alphanumeric password.

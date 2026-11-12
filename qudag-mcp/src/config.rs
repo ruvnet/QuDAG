@@ -422,6 +422,12 @@ pub struct ConfigBuilder {
     config: McpConfig,
 }
 
+impl Default for ConfigBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConfigBuilder {
     /// Create new builder with default config
     pub fn new() -> Self {

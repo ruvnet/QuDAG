@@ -2,22 +2,20 @@
 use qudag_crypto::ml_kem::MlKem768;
 
 fn main() {
-    let mut rng = rand::thread_rng();
-
     // Generate key pair
-    let (pk, sk) = MlKem768::generate_keypair(&mut rng);
+    let (pk, sk) = MlKem768::keygen().expect("key generation failed");
 
     println!("Public key generated");
     println!("Secret key generated");
 
     // Encapsulate
-    let (ciphertext, shared_secret1) = MlKem768::encapsulate(&pk, &mut rng);
+    let (ciphertext, shared_secret1) = MlKem768::encapsulate(&pk).expect("encapsulation failed");
 
     println!("Ciphertext generated");
     println!("Shared secret 1 generated");
 
     // Decapsulate
-    let shared_secret2 = MlKem768::decapsulate(&ciphertext, &sk);
+    let shared_secret2 = MlKem768::decapsulate(&sk, &ciphertext).expect("decapsulation failed");
 
     println!("Shared secret 2 generated");
     println!("Shared secrets match: {}", shared_secret1 == shared_secret2);

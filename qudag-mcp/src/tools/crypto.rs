@@ -13,6 +13,12 @@ pub struct CryptoTool {
     description: String,
 }
 
+impl Default for CryptoTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CryptoTool {
     /// Create a new crypto tool
     pub fn new() -> Self {

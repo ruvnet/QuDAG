@@ -17,6 +17,12 @@ pub struct NetworkPeersResource {
     description: Option<String>,
 }
 
+impl Default for NetworkPeersResource {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NetworkPeersResource {
     /// Create a new network peers resource
     pub fn new() -> Self {

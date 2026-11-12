@@ -30,7 +30,8 @@ fn test_dag_basic_workflow() {
     let mut dag = QrDag::new();
 
     // Create some test vertices
-    let vertex1_id = VertexId::new();
+    // The string-keyed lookup API requires UTF-8 vertex IDs (945fc6f).
+    let vertex1_id = VertexId::from_bytes(b"vertex1-id".to_vec());
     let vertex1 = Vertex::new(vertex1_id.clone(), b"vertex1".to_vec(), HashSet::new());
 
     let vertex2_id = VertexId::new();
@@ -49,7 +50,7 @@ fn test_dag_basic_workflow() {
     // Test getting confidence
     let vertex1_str = String::from_utf8_lossy(vertex1_id.as_bytes()).to_string();
     let confidence = dag.get_confidence(&vertex1_str);
-    assert!(confidence.is_some());
+    assert_eq!(confidence, Some(ConsensusStatus::Pending));
 
     println!("DAG basic workflow test passed");
 }

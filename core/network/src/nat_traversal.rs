@@ -260,12 +260,23 @@ impl Default for NatTraversalConfig {
             enable_hole_punching: true,
             enable_relay: true,
             enable_ipv6: true,
-            stun_servers: vec![
-                StunServer::new("stun1.l.google.com:19302".parse().unwrap(), 1),
-                StunServer::new("stun2.l.google.com:19302".parse().unwrap(), 2),
-                StunServer::new("stun3.l.google.com:19302".parse().unwrap(), 3),
-                StunServer::new("stun4.l.google.com:19302".parse().unwrap(), 4),
-            ],
+            // Hostnames are not `SocketAddr`s, so they must be resolved rather than
+            // parsed. Servers that do not resolve (e.g. offline) are skipped.
+            stun_servers: [
+                "stun1.l.google.com:19302",
+                "stun2.l.google.com:19302",
+                "stun3.l.google.com:19302",
+                "stun4.l.google.com:19302",
+            ]
+            .iter()
+            .zip(1u32..)
+            .filter_map(|(host, priority)| {
+                std::net::ToSocketAddrs::to_socket_addrs(host)
+                    .ok()
+                    .and_then(|mut addrs| addrs.next())
+                    .map(|addr| StunServer::new(addr, priority))
+            })
+            .collect(),
             turn_servers: vec![],
             max_relay_connections: 50,
             hole_punch_timeout: Duration::from_secs(30),

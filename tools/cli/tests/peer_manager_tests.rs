@@ -23,6 +23,7 @@ async fn test_peer_manager_initialization() {
 async fn test_peer_persistence() {
     let temp_dir = TempDir::new().unwrap();
     let data_path = temp_dir.path().join("peers.json");
+    let added;
 
     // Create first manager and add a peer
     {
@@ -36,11 +37,12 @@ async fn test_peer_persistence() {
 
         let manager = PeerManager::new(config).await.unwrap();
 
-        // Note: This will fail in tests because we can't actually connect
-        // but it demonstrates the API
-        let _ = manager
+        // Whether `add_peer` succeeds depends on the network layer; persistence
+        // is checked against whichever outcome occurred.
+        added = manager
             .add_peer("127.0.0.1:8000".to_string(), Some("test_peer".to_string()))
-            .await;
+            .await
+            .is_ok();
 
         // Save peers
         manager.save_peers().await.unwrap();
@@ -59,10 +61,12 @@ async fn test_peer_persistence() {
         let manager = PeerManager::new(config).await.unwrap();
         let peers = manager.list_peers().await.unwrap();
 
-        // Since we couldn't actually connect in the test environment,
-        // this should still be 0, but in a real scenario with mocked
-        // networking, we'd see the saved peer
-        assert_eq!(peers.len(), 0);
+        // A successfully added peer must survive a reload; a failed add stores nothing.
+        assert_eq!(peers.len(), usize::from(added));
+        if added {
+            assert_eq!(peers[0].address, "127.0.0.1:8000");
+            assert_eq!(peers[0].nickname.as_deref(), Some("test_peer"));
+        }
     }
 }
 

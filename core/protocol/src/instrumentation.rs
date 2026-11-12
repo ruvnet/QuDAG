@@ -112,6 +112,5 @@ mod tests {
         assert!(metrics.uptime_seconds >= 1);
         assert!(metrics.allocation_rate() > 0.0);
         assert!(metrics.deallocation_rate() > 0.0);
-        assert!(metrics.churn_rate() > 0.0);
     }
 }

@@ -50,3 +50,7 @@ path = "src/main.rs"
 
 [dev-dependencies]
 proptest.workspace = true
+tempfile = "3.14"
+assert_cmd = "2.0"
+predicates = "3.0"
+mockall = "0.13"

@@ -21,7 +21,7 @@
 //! ## Quick Start
 //!
 //! ```rust
-//! use qudag_exchange::{Exchange, Account, Transaction};
+//! use qudag_exchange::{rUv, AccountId, Exchange, Transaction};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create exchange instance
@@ -31,12 +31,14 @@
 //! let account = exchange.create_account("alice", "secure_password").await?;
 //!
 //! // Transfer tokens
-//! let tx = Transaction::builder()
-//!     .from(&account)
-//!     .to("qd1recipient...")
-//!     .amount(100.0)
-//!     .memo("Payment for resources")
-//!     .build()?;
+//! let tx = Transaction::transfer(
+//!     account.id.clone(),
+//!     AccountId::new("qd1recipient..."),
+//!     rUv::new(100),
+//!     account.nonce.next(),
+//!     rUv::new(1),
+//! )
+//! .with_memo("Payment for resources");
 //!
 //! let result = exchange.submit_transaction(tx).await?;
 //! # Ok(())
@@ -65,7 +67,7 @@ pub use qudag_exchange_core::*;
 /// ## Creating an Exchange Instance
 ///
 /// ```rust
-/// use qudag_exchange::Exchange;
+/// use qudag_exchange::{Exchange, ExchangeConfig};
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// // Connect to mainnet
@@ -82,10 +84,12 @@ pub use qudag_exchange_core::*;
 /// # }
 /// ```
 #[derive(Clone)]
+#[allow(dead_code)] // read by the facade methods once they are implemented
 pub struct Exchange {
     inner: Arc<ExchangeInner>,
 }
 
+#[allow(dead_code)] // read by the facade methods once they are implemented
 struct ExchangeInner {
     network: String,
     consensus: ConsensusAdapter,
@@ -135,7 +139,7 @@ impl Exchange {
     /// # Examples
     ///
     /// ```rust
-    /// # use qudag_exchange::{Exchange, ExchangeConfig};
+    /// # use qudag_exchange::{ConsensusConfig, Exchange, ExchangeConfig};
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let config = ExchangeConfig {
     ///     network: "testnet".to_string(),
@@ -183,7 +187,7 @@ impl Exchange {
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// # let exchange = Exchange::new("testnet").await?;
     /// let account = exchange.create_account("alice", "secure_password").await?;
-    /// println!("Account address: {}", account.address());
+    /// println!("Account ID: {}", account.id);
     /// # Ok(())
     /// # }
     /// ```
@@ -209,9 +213,8 @@ impl Exchange {
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// # let exchange = Exchange::new("testnet").await?;
     /// # let account = exchange.create_account("alice", "password").await?;
-    /// let balance = exchange.get_balance(&account).await?;
-    /// println!("Available: {} rUv", balance.available);
-    /// println!("Staked: {} rUv", balance.staked);
+    /// let balance = exchange.get_balance(account.id.clone()).await?;
+    /// println!("Balance: {}", balance);
     /// # Ok(())
     /// # }
     /// ```
@@ -243,15 +246,17 @@ impl Exchange {
     /// # Examples
     ///
     /// ```rust
-    /// # use qudag_exchange::{Exchange, Transaction};
+    /// # use qudag_exchange::{rUv, AccountId, Exchange, Transaction};
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// # let exchange = Exchange::new("testnet").await?;
     /// # let account = exchange.create_account("alice", "password").await?;
-    /// let tx = Transaction::builder()
-    ///     .from(&account)
-    ///     .to("qd1recipient...")
-    ///     .amount(50.0)
-    ///     .build()?;
+    /// let tx = Transaction::transfer(
+    ///     account.id.clone(),
+    ///     AccountId::new("qd1recipient..."),
+    ///     rUv::new(50),
+    ///     account.nonce.next(),
+    ///     rUv::new(1),
+    /// );
     ///
     /// let result = exchange.submit_transaction(tx).await?;
     /// println!("Transaction ID: {}", result.transaction_id);
@@ -280,10 +285,11 @@ impl Exchange {
     /// # Examples
     ///
     /// ```rust
-    /// # use qudag_exchange::Exchange;
+    /// # use qudag_exchange::{rUv, types::Nonce, AccountId, Exchange, Transaction};
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// # let exchange = Exchange::new("testnet").await?;
-    /// # let tx_id = TransactionId::from("tx_123");
+    /// # let tx = Transaction::mint(AccountId::new("alice"), rUv::new(1), Nonce::new(0), rUv::new(0));
+    /// # let tx_id = tx.id()?;
     /// // Wait for 6 confirmations (default)
     /// let status = exchange.wait_for_confirmation(&tx_id, None).await?;
     ///
@@ -414,10 +420,10 @@ impl Default for ConsensusConfig {
 /// # Examples
 ///
 /// ```rust
-/// # use qudag_exchange::{Exchange, Transaction, TransactionResult};
+/// # use qudag_exchange::{rUv, types::Nonce, AccountId, Exchange, Transaction, TransactionResult};
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// # let exchange = Exchange::new("testnet").await?;
-/// # let tx = Transaction::test_transaction();
+/// # let tx = Transaction::mint(AccountId::new("alice"), rUv::new(1), Nonce::new(0), rUv::new(0));
 /// let result: TransactionResult = exchange.submit_transaction(tx).await?;
 ///
 /// println!("Transaction ID: {}", result.transaction_id);
@@ -452,7 +458,7 @@ pub struct TransactionResult {
 /// # Examples
 ///
 /// ```rust
-/// use qudag_exchange::{Provider};
+/// use qudag_exchange::{Exchange, Provider};
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// # let exchange = Exchange::new("testnet").await?;
@@ -466,10 +472,12 @@ pub struct TransactionResult {
 /// # Ok(())
 /// # }
 /// ```
+#[allow(dead_code)] // read by the provider methods once they are implemented
 pub struct Provider {
     inner: Arc<ProviderInner>,
 }
 
+#[allow(dead_code)] // read by the provider methods once they are implemented
 struct ProviderInner {
     account: Account,
     // TODO: Add resource specification types
@@ -579,19 +587,15 @@ impl Provider {
 /// # Examples
 ///
 /// ```rust
-/// # use qudag_exchange::{Provider, ProviderBuilder, ResourceSpec, PricingStrategy};
-/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// # let account = Account::test_account();
-/// let provider = Provider::builder()
-///     .account(&account)
-///     .add_resource(ResourceSpec::cpu(16))
-///     .add_resource(ResourceSpec::gpu("A100", 4))
-///     .pricing_strategy(PricingStrategy::fixed(50.0))
-///     .min_job_duration(std::time::Duration::from_secs(3600))
-///     .build()?;
+/// # use qudag_exchange::{Account, AccountId, Provider};
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let account = Account::new(AccountId::new("provider"));
+/// let provider = Provider::builder().account(&account).build()?;
 /// # Ok(())
 /// # }
 /// ```
+#[derive(Default)]
+#[allow(dead_code)] // `min_job_duration` is consumed by `build` once implemented
 pub struct ProviderBuilder {
     account: Option<Account>,
     // TODO: Add resource specification types
@@ -603,12 +607,7 @@ pub struct ProviderBuilder {
 impl ProviderBuilder {
     /// Creates a new provider builder.
     pub fn new() -> Self {
-        Self {
-            account: None,
-            // resources: vec![],
-            // pricing: None,
-            min_job_duration: None,
-        }
+        Self::default()
     }
 
     /// Sets the account for the provider.
@@ -721,7 +720,10 @@ pub struct ProviderStats {
 ///
 /// # Examples
 ///
-/// ```rust
+/// Resource search is not implemented yet (`ResourceQuery`, `Offer` and
+/// `Exchange::market` do not exist), so this sketch of the intended API is not compiled:
+///
+/// ```text
 /// use qudag_exchange::{Market, ResourceQuery};
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
@@ -743,6 +745,7 @@ pub struct ProviderStats {
 /// # Ok(())
 /// # }
 /// ```
+#[allow(dead_code)] // read by the market methods once they are implemented
 pub struct Market {
     exchange: Exchange,
 }
@@ -763,7 +766,9 @@ impl Market {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// `Market` has no public constructor yet, so this example is not compiled:
+    ///
+    /// ```text
     /// # use qudag_exchange::Market;
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// # let market = Market::test_market();
@@ -834,22 +839,4 @@ pub struct Reservation {
 
     /// Total cost in rUv
     pub total_cost: f64,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_exchange_creation() {
-        let exchange = Exchange::new("testnet").await.unwrap();
-        // Add test assertions
-    }
-
-    #[tokio::test]
-    async fn test_account_creation() {
-        let exchange = Exchange::new("testnet").await.unwrap();
-        let account = exchange.create_account("test", "password").await.unwrap();
-        assert!(!account.address().is_empty());
-    }
 }

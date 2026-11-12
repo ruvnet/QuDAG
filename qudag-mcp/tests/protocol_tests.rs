@@ -1,10 +1,15 @@
 //! Protocol-specific tests for MCP message handling and transport layers
 
-use qudag_mcp::*;
+use base64::Engine as _;
+use qudag_mcp::protocol::{
+    InitializeParams, MCPMessage, MCPNotification, MCPRequest, MCPResponse, RequestId,
+};
+use qudag_mcp::{
+    ClientInfo, Error, MessageContent, MessageRole, PromptMessage, Resource, ResourceContent,
+    ServerCapabilities, ServerInfo, Tool, ToolResult, ToolResultContent, MCP_PROTOCOL_VERSION,
+};
 use std::collections::HashMap;
-use std::time::Duration;
 use tokio::sync::mpsc;
-use tokio_test;
 
 #[tokio::test]
 async fn test_json_rpc_message_format() {
@@ -35,9 +40,7 @@ async fn test_json_rpc_message_format() {
     // Test error response format
     let error_response = MCPResponse::error(
         RequestId::from_string("test-123"),
-        MCPError::MethodNotFound {
-            method: "test/method".to_string(),
-        },
+        Error::method_not_found("test/method"),
     );
 
     assert_eq!(error_response.jsonrpc, "2.0");
@@ -123,7 +126,7 @@ async fn test_initialize_protocol_flow() {
     assert_eq!(request.method, "initialize");
 
     if let Some(params) = request.params {
-        assert_eq!(params["protocolVersion"], crate::MCP_PROTOCOL_VERSION);
+        assert_eq!(params["protocolVersion"], MCP_PROTOCOL_VERSION);
         assert_eq!(params["clientInfo"]["name"], "test-client");
         assert_eq!(params["clientInfo"]["version"], "1.0.0");
         assert!(params["capabilities"].is_object());
@@ -141,7 +144,7 @@ async fn test_initialize_protocol_flow() {
 
     assert!(response.result.is_some());
     if let Some(result) = response.result {
-        assert_eq!(result["protocolVersion"], crate::MCP_PROTOCOL_VERSION);
+        assert_eq!(result["protocolVersion"], MCP_PROTOCOL_VERSION);
         assert_eq!(result["serverInfo"]["name"], server_info.name);
         assert_eq!(result["serverInfo"]["version"], server_info.version);
         assert!(result["capabilities"].is_object());
@@ -156,17 +159,17 @@ async fn test_tools_protocol_flow() {
     assert!(list_request.params.is_none());
 
     // Test tools/list response
-    let tools = vec![Tool::new(
-        "test_tool",
-        "A test tool",
-        serde_json::json!({
+    let tools = vec![Tool {
+        name: "test_tool".to_string(),
+        description: "A test tool".to_string(),
+        input_schema: serde_json::json!({
             "type": "object",
             "properties": {
                 "input": {"type": "string"}
             },
             "required": ["input"]
         }),
-    )];
+    }];
 
     let response = MCPResponse::tools_list_success(list_request.id.clone(), tools.clone());
     assert!(response.result.is_some());
@@ -188,7 +191,12 @@ async fn test_tools_protocol_flow() {
     }
 
     // Test tools/call response
-    let tool_result = ToolResult::success(ToolResultContent::text("Operation completed"));
+    let tool_result = ToolResult {
+        content: vec![ToolResultContent::Text {
+            text: "Operation completed".to_string(),
+        }],
+        is_error: Some(false),
+    };
     let response = MCPResponse::tool_call_success(call_request.id, tool_result);
 
     assert!(response.result.is_some());
@@ -205,12 +213,21 @@ async fn test_resources_protocol_flow() {
     assert_eq!(list_request.method, "resources/list");
 
     // Test resources/list response
-    let resources = vec![Resource::new("test://resource/1", "Test Resource 1")
-        .with_description("A test resource")
-        .with_mime_type("application/json")];
+    let resources = vec![Resource {
+        uri: "test://resource/1".to_string(),
+        name: "Test Resource 1".to_string(),
+        description: Some("A test resource".to_string()),
+        mime_type: Some("application/json".to_string()),
+    }];
 
     let response = MCPResponse::resources_list_success(list_request.id.clone(), resources);
     assert!(response.result.is_some());
+    if let Some(result) = &response.result {
+        let listed: Vec<Resource> = serde_json::from_value(result["resources"].clone()).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].uri, "test://resource/1");
+        assert_eq!(listed[0].description.as_deref(), Some("A test resource"));
+    }
 
     // Test resources/read request
     let read_request = MCPRequest::read_resource("test://resource/1");
@@ -221,7 +238,12 @@ async fn test_resources_protocol_flow() {
     }
 
     // Test resources/read response
-    let content = vec![ResourceContent::text("test://resource/1", "Test content")];
+    let content = vec![ResourceContent {
+        uri: "test://resource/1".to_string(),
+        mime_type: Some("text/plain".to_string()),
+        text: Some("Test content".to_string()),
+        blob: None,
+    }];
 
     let response = MCPResponse::resource_read_success(read_request.id, content);
     assert!(response.result.is_some());
@@ -230,7 +252,8 @@ async fn test_resources_protocol_flow() {
         let contents: Vec<ResourceContent> =
             serde_json::from_value(result["contents"].clone()).unwrap();
         assert_eq!(contents.len(), 1);
-        assert_eq!(contents[0].uri.to_string(), "test://resource/1");
+        assert_eq!(contents[0].uri, "test://resource/1");
+        assert_eq!(contents[0].text.as_deref(), Some("Test content"));
     }
 }
 
@@ -255,7 +278,9 @@ async fn test_prompts_protocol_flow() {
     // Test prompts/get response
     let messages = vec![PromptMessage {
         role: MessageRole::System,
-        content: MessageContent::Text("You are a security expert.".to_string()),
+        content: MessageContent::Text {
+            text: "You are a security expert.".to_string(),
+        },
     }];
 
     let response = MCPResponse::prompt_get_success(
@@ -327,70 +352,21 @@ async fn test_notification_messages() {
 #[tokio::test]
 async fn test_error_response_codes() {
     let test_cases = vec![
-        (
-            MCPError::ParseError {
-                message: "test".to_string(),
-            },
-            -32700,
-        ),
-        (
-            MCPError::InvalidRequest {
-                message: "test".to_string(),
-            },
-            -32600,
-        ),
-        (
-            MCPError::MethodNotFound {
-                method: "test".to_string(),
-            },
-            -32601,
-        ),
-        (
-            MCPError::InvalidParams {
-                message: "test".to_string(),
-            },
-            -32602,
-        ),
-        (
-            MCPError::InternalError {
-                message: "test".to_string(),
-            },
-            -32603,
-        ),
-        (
-            MCPError::ResourceNotFound {
-                uri: "test".to_string(),
-            },
-            -32010,
-        ),
-        (
-            MCPError::ToolNotFound {
-                name: "test".to_string(),
-            },
-            -32020,
-        ),
-        (
-            MCPError::DAGOperationFailed {
-                operation: "test".to_string(),
-            },
-            -32100,
-        ),
-        (
-            MCPError::CryptoOperationFailed {
-                operation: "test".to_string(),
-            },
-            -32101,
-        ),
-        (
-            MCPError::VaultOperationFailed {
-                operation: "test".to_string(),
-            },
-            -32103,
-        ),
+        (Error::parse_error("test"), -32700),
+        (Error::invalid_request("test"), -32600),
+        (Error::method_not_found("test"), -32601),
+        (Error::invalid_params("test"), -32602),
+        (Error::internal("test"), -32603),
+        (Error::unsupported_protocol_version("test"), -32600),
+        (Error::auth("test"), -32001),
+        (Error::vault("test", "failed"), -32002),
+        (Error::qudag("dag", "failed"), -32003),
+        (Error::resource("test", "not found"), -32004),
+        (Error::tool_not_found("test"), -32005),
     ];
 
     for (error, expected_code) in test_cases {
-        assert_eq!(error.json_rpc_code(), expected_code);
+        assert_eq!(error.error_code(), expected_code);
 
         let json_error = error.to_json_rpc_error();
         assert_eq!(json_error["code"], expected_code);
@@ -454,40 +430,24 @@ async fn test_message_serialization_roundtrip() {
 
 #[tokio::test]
 async fn test_protocol_version_handling() {
-    // Test supported version
-    let params = InitializeParams {
-        protocol_version: crate::MCP_PROTOCOL_VERSION.to_string(),
-        capabilities: HashMap::new(),
-        client_info: ClientInfo::new("test", "1.0.0"),
-    };
+    // The initialize request built by the helper carries the supported version and
+    // decodes into the server-side InitializeParams structure. Rejection of other
+    // versions is covered by the server unit tests (the handlers are private).
+    let request = MCPRequest::initialize(ClientInfo::new("test", "1.0.0"), HashMap::new());
+    let params: InitializeParams = serde_json::from_value(request.params.unwrap()).unwrap();
+    assert_eq!(params.protocol_version, MCP_PROTOCOL_VERSION);
+    assert_eq!(params.client_info.name, "test");
 
-    let request =
-        MCPRequest::new("test", "initialize").with_params(serde_json::to_value(params).unwrap());
-
-    // This would be handled by the server's initialize handler
-    let config = ServerConfig::new();
-    let server = QuDAGMCPServer::new(config).await.unwrap();
-    let response = server.handle_initialize(&request).await.unwrap();
-
-    assert!(response.result.is_some());
-    assert!(response.error.is_none());
-
-    // Test unsupported version
+    // Explicit params serialize with the MCP wire names
     let unsupported_params = InitializeParams {
         protocol_version: "unsupported-version".to_string(),
         capabilities: HashMap::new(),
         client_info: ClientInfo::new("test", "1.0.0"),
     };
-
-    let request = MCPRequest::new("test", "initialize")
-        .with_params(serde_json::to_value(unsupported_params).unwrap());
-
-    let result = server.handle_initialize(&request).await;
-    assert!(result.is_err());
-
-    if let Err(error) = result {
-        assert!(matches!(error, MCPError::UnsupportedProtocolVersion { .. }));
-    }
+    let value = serde_json::to_value(&unsupported_params).unwrap();
+    assert_eq!(value["protocolVersion"], "unsupported-version");
+    assert_eq!(value["clientInfo"]["version"], "1.0.0");
+    assert!(value["capabilities"].is_object());
 }
 
 #[tokio::test]
@@ -496,7 +456,9 @@ async fn test_invalid_json_handling() {
     let invalid_json = r#"{"invalid": json"#;
     let result = MCPMessage::from_json(invalid_json);
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), MCPError::ParseError { .. }));
+    let error = result.unwrap_err();
+    assert!(matches!(error, Error::Serialization { .. }));
+    assert_eq!(error.error_code(), -32700);
 
     // Test valid JSON but invalid message structure
     let invalid_message = r#"{"not_a_valid": "mcp_message"}"#;
@@ -505,8 +467,11 @@ async fn test_invalid_json_handling() {
 
     // Test missing required fields
     let incomplete_request = r#"{"jsonrpc": "2.0", "method": "test"}"#; // Missing id
-    let result = MCPMessage::from_json(incomplete_request);
-    // Note: This might still parse depending on serde's handling of missing fields
+                                                                        // JSON-RPC 2.0: a message without an id is a notification
+    let parsed = MCPMessage::from_json(incomplete_request).unwrap();
+    assert!(parsed.is_notification());
+    assert_eq!(parsed.method(), Some("test"));
+    assert_eq!(parsed.id(), None);
 }
 
 #[tokio::test]
@@ -601,17 +566,16 @@ fn test_server_capabilities_serialization() {
     let parsed: ServerCapabilities = serde_json::from_str(&json).unwrap();
 
     // Verify default capabilities
-    assert!(parsed.logging.is_some());
     assert!(parsed.tools.is_some());
     assert!(parsed.resources.is_some());
     assert!(parsed.prompts.is_some());
     assert!(parsed.experimental.is_some());
 
-    if let Some(experimental) = parsed.experimental {
-        assert!(experimental.contains_key("streaming"));
-        assert!(experimental.contains_key("batching"));
-        assert!(experimental.contains_key("subscriptions"));
-    }
+    let resources = parsed.resources.unwrap();
+    assert_eq!(resources["subscribe"], true);
+    assert_eq!(resources["listChanged"], true);
+    assert_eq!(parsed.tools.unwrap()["listChanged"], true);
+    assert_eq!(parsed.prompts.unwrap()["listChanged"], true);
 }
 
 #[test]
@@ -628,8 +592,12 @@ fn test_client_info_serialization() {
 #[test]
 fn test_tool_result_content_types() {
     // Test text content
-    let text_content = ToolResultContent::text("Test result");
+    let text_content = ToolResultContent::Text {
+        text: "Test result".to_string(),
+    };
     let json = serde_json::to_string(&text_content).unwrap();
+    let wire: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(wire["type"], "text");
     let parsed: ToolResultContent = serde_json::from_str(&json).unwrap();
 
     if let ToolResultContent::Text { text } = parsed {
@@ -638,9 +606,11 @@ fn test_tool_result_content_types() {
         panic!("Expected text content");
     }
 
-    // Test JSON content
+    // Test JSON data carried as text content
     let data = serde_json::json!({"status": "success", "count": 42});
-    let json_content = ToolResultContent::json(&data).unwrap();
+    let json_content = ToolResultContent::Text {
+        text: serde_json::to_string(&data).unwrap(),
+    };
     let json = serde_json::to_string(&json_content).unwrap();
     let parsed: ToolResultContent = serde_json::from_str(&json).unwrap();
 
@@ -654,12 +624,20 @@ fn test_tool_result_content_types() {
 
     // Test image content
     let image_data = vec![0u8, 1u8, 2u8, 255u8];
-    let image_content = ToolResultContent::image(&image_data, "image/png");
+    let image_content = ToolResultContent::Image {
+        data: base64::engine::general_purpose::STANDARD.encode(&image_data),
+        mime_type: "image/png".to_string(),
+    };
     let json = serde_json::to_string(&image_content).unwrap();
+    let wire: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(wire["type"], "image");
+    assert_eq!(wire["mimeType"], "image/png");
     let parsed: ToolResultContent = serde_json::from_str(&json).unwrap();
 
     if let ToolResultContent::Image { data, mime_type } = parsed {
-        let decoded_data = base64::decode(data).unwrap();
+        let decoded_data = base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .unwrap();
         assert_eq!(decoded_data, image_data);
         assert_eq!(mime_type, "image/png");
     } else {

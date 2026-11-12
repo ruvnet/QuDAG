@@ -18,6 +18,12 @@ pub struct WasmDarkResolver {
     registry: Arc<Mutex<HashMap<String, DarkAddressInfo>>>,
 }
 
+impl Default for WasmDarkResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[wasm_bindgen]
 impl WasmDarkResolver {
     /// Create a new dark resolver
@@ -91,11 +97,9 @@ impl WasmDarkResolver {
     /// Create a quantum fingerprint for data
     #[wasm_bindgen(js_name = "createFingerprint")]
     pub fn create_fingerprint(&self, data: &[u8]) -> Result<JsValue, JsError> {
-        use qudag_crypto::HashFunction;
-
-        let hash = HashFunction::Blake3.hash(data);
+        let hash = blake3::hash(data);
         let fingerprint = QuantumFingerprint {
-            hash: hex::encode(hash),
+            hash: hex::encode(hash.as_bytes()),
             signature: generate_mock_signature(),
             public_key: generate_mock_public_key(),
             timestamp: js_sys::Date::now() as u64,

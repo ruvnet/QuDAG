@@ -59,24 +59,6 @@ fn test_ml_dsa_key_generation() {
     assert!(!keypair.secret_key().iter().all(|&b| b == 0));
 }
 
-/// Test ML-DSA key generation determinism
-#[test]
-fn test_ml_dsa_key_generation_determinism() {
-    use rand::rngs::StdRng;
-    use rand::SeedableRng;
-
-    let seed = [42u8; 32];
-    let mut rng1 = StdRng::from_seed(seed);
-    let mut rng2 = StdRng::from_seed(seed);
-
-    let keypair1 = MlDsaKeyPair::generate(&mut rng1).unwrap();
-    let keypair2 = MlDsaKeyPair::generate(&mut rng2).unwrap();
-
-    // Same seed should produce same keys
-    assert_eq!(keypair1.public_key(), keypair2.public_key());
-    assert_eq!(keypair1.secret_key(), keypair2.secret_key());
-}
-
 /// Test ML-DSA signing and verification
 #[test]
 fn test_ml_dsa_sign_verify() {

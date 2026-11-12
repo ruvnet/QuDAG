@@ -44,3 +44,28 @@ sha2 = "0.10"
 proptest.workspace = true
 rand_chacha = "0.3"
 pqcrypto-mlkem = "0.1"
+criterion.workspace = true
+
+[[bench]]
+name = "crypto_benchmarks"
+harness = false
+
+[[bench]]
+name = "crypto_optimized"
+harness = false
+
+[[bench]]
+name = "hqc_benchmarks"
+harness = false
+
+[[bench]]
+name = "mldsa_benchmarks"
+harness = false
+
+[[bench]]
+name = "ml_dsa_performance"
+harness = false
+
+[[bench]]
+name = "ml_kem_benchmarks"
+harness = false

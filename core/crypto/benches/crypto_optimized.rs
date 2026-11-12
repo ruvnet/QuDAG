@@ -64,17 +64,33 @@ impl MlKem768Optimized {
         std::arch::is_aarch64_feature_detected!("neon")
     }
 
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    #[cfg(not(target_arch = "x86_64"))]
     fn detect_avx2() -> bool {
         false
     }
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    #[cfg(not(target_arch = "x86_64"))]
     fn detect_avx512() -> bool {
         false
     }
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    #[cfg(not(target_arch = "aarch64"))]
     fn detect_neon() -> bool {
         false
+    }
+
+    fn get_performance_info(&self) -> String {
+        format!(
+            "avx2={} avx512={} neon={} cores={}",
+            self.has_avx2, self.has_avx512, self.has_neon, self.cpu_cores
+        )
+    }
+
+    fn clear_caches(&self) {
+        if let Ok(mut cache) = self.key_cache.lock() {
+            cache.clear();
+        }
+        if let Ok(mut cache) = self.operation_cache.lock() {
+            cache.clear();
+        }
     }
 
     fn keygen(&self) -> (Vec<u8>, Vec<u8>) {
@@ -150,11 +166,11 @@ impl Blake3HasherOptimized {
         std::arch::is_aarch64_feature_detected!("neon")
     }
 
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    #[cfg(not(target_arch = "x86_64"))]
     fn detect_avx2() -> bool {
         false
     }
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    #[cfg(not(target_arch = "aarch64"))]
     fn detect_neon() -> bool {
         false
     }
@@ -253,12 +269,12 @@ impl Blake3HasherOptimized {
         }
     }
 
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    #[cfg(not(target_arch = "x86_64"))]
     fn hash_avx2(&self, data: &[u8]) -> Vec<u8> {
         self.hash_scalar(data)
     }
 
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    #[cfg(not(target_arch = "aarch64"))]
     fn hash_neon(&self, data: &[u8]) -> Vec<u8> {
         self.hash_scalar(data)
     }
@@ -606,7 +622,7 @@ fn benchmark_memory_allocation(c: &mut Criterion) {
                 buffers.push(vec![0u8; 4096]);
             }
 
-            let buffer = &mut buffers[buffers.len() - 1];
+            let buffer = buffers.last_mut().expect("buffer pool is non-empty");
             buffer.fill(0x42);
             let hasher = Blake3HasherOptimized::new();
             let hash = hasher.hash(buffer);

@@ -17,6 +17,12 @@ pub struct VaultEntriesResource {
     description: Option<String>,
 }
 
+impl Default for VaultEntriesResource {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VaultEntriesResource {
     /// Create a new vault entries resource
     pub fn new() -> Self {

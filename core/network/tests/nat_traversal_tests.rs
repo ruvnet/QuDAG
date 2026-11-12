@@ -62,7 +62,8 @@ async fn test_stun_server_creation() {
 #[tokio::test]
 async fn test_turn_server_creation() {
     let server = TurnServer {
-        address: "turn.example.com:3478".parse().unwrap(),
+        // TurnServer takes a resolved socket address (TEST-NET-3 documentation IP)
+        address: "203.0.113.10:3478".parse().unwrap(),
         username: "testuser".to_string(),
         password: "testpass".to_string(),
         realm: Some("example.com".to_string()),

@@ -5,7 +5,7 @@ test('real native cosine retrieval and metadata isolation', async () => {
   assert.equal(backend.native,true); const db=new RuvectorIndex({dimensions:3});
   const metadata={type:'task'};await db.add({id:'x',vector:[2,0,0],metadata});metadata.type='tampered';
   await db.add({id:'y',vector:[0,1,0]});const result=await db.search([1,0,0],2);
-  assert.deepEqual(result.map(x=>[x.id,x.score]),[['x',0],['y',1]]);assert.equal(result[0].metadata.type,'task');
+  assert.deepEqual(result.map(x=>x.id),['x','y']);assert.ok(Math.abs(result[0].score)<1e-6&&Math.abs(result[1].score-1)<1e-6,'cosine distances '+result.map(x=>x.score));assert.equal(result[0].metadata.type,'task');
   result[0].metadata.type='changed';assert.equal((await db.search([1,0,0],1))[0].metadata.type,'task');await db.close();await assert.rejects(db.search([1,0,0],1),/closed/);
 });
 test('validation, immutable duplicates and capacity',async()=>{
@@ -24,5 +24,5 @@ test('deterministic lexical embeddings and related retrieval',async()=>{
 test('independent instances isolate native storage and dimensions',async()=>{
   const first=new RuvectorIndex({dimensions:2}),second=new RuvectorIndex({dimensions:3});
   await first.add({id:'same',vector:[1,0]});await second.add({id:'same',vector:[0,1,0]});
-  assert.equal((await first.search([1,0],1))[0].score,0);assert.equal((await second.search([0,1,0],1))[0].score,0);await first.close();await second.close();
+  assert.ok(Math.abs((await first.search([1,0],1))[0].score)<1e-6);assert.ok(Math.abs((await second.search([0,1,0],1))[0].score)<1e-6);await first.close();await second.close();
 });

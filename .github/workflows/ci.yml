@@ -26,7 +26,7 @@ jobs:
           components: rustfmt, clippy
           
       - name: Cache cargo registry
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -73,25 +73,27 @@ jobs:
           toolchain: ${{ matrix.rust }}
           
       - name: Cache cargo build
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: target
           key: ${{ runner.os }}-${{ matrix.rust }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.rust }}-cargo-build-
             
-      - name: Install test dependencies (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libssl-dev pkg-config
-          
+      # bash on every OS: the default Windows shell (pwsh) only reports the exit code of
+      # the LAST command, which hid failures of earlier commands in the same step.
       - name: Run tests
-        run: |
-          cargo test --workspace --all-features
-          cargo test --workspace --all-features --release
+        shell: bash
+        run: cargo test --workspace --all-features --no-fail-fast
         env:
           RUST_MIN_STACK: 8388608  # 8MB stack for quantum crypto operations
+
+      - name: Run tests (release)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: cargo test --workspace --all-features --release --no-fail-fast
+        env:
+          RUST_MIN_STACK: 8388608
           
       - name: Run doc tests
         run: cargo test --doc --workspace
@@ -109,9 +111,11 @@ jobs:
       - name: Run quantum crypto tests
         run: |
           cd core/crypto
-          cargo test --features "ml-dsa ml-kem hqc" -- --test-threads=1
-          cargo test security -- --nocapture
-          cargo test timing -- --ignored --nocapture
+          # ML-KEM, ML-DSA and HQC are always compiled in; the crate has no features.
+          cargo test -- --test-threads=1
+          cargo test --test security_tests -- --nocapture
+          # tests/timing_tests.rs is quarantined (#41): its wall-clock jitter
+          # assertion is not a constant-time test and fails on shared runners.
           
       - name: Test NIST vectors
         run: |
@@ -141,19 +145,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        
+
       - name: Run network tests
         run: |
           cd core/network
           cargo test onion_routing -- --nocapture
           cargo test nat_traversal -- --nocapture
           cargo test traffic_obfuscation -- --nocapture
-          cargo test dark_addressing -- --nocapture
+          cargo test dark_ -- --nocapture
 
-  # Build binaries
+  # Build the release binary on every platform the Release workflow ships.
+  # Mirrors release.yml: native arm64 runner (aws-lc-sys does not build under `cross`).
   build:
     name: Build Binaries
     needs: [lint, test]
@@ -165,43 +170,44 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: qudag-linux-amd64
-          - os: ubuntu-latest
+            exe: qudag
+          - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             artifact_name: qudag-linux-arm64
-            use_cross: true
-          - os: macos-latest
+            exe: qudag
+          - os: macos-15
             target: x86_64-apple-darwin
             artifact_name: qudag-macos-amd64
-          - os: macos-latest
+            exe: qudag
+          - os: macos-15
             target: aarch64-apple-darwin
             artifact_name: qudag-macos-arm64
+            exe: qudag
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: qudag-windows-amd64.exe
-            
+            exe: qudag.exe
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
-        
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          
-      - name: Install cross-compilation tool
-        if: matrix.use_cross
-        run: cargo install cross
-        
+
       - name: Build release binary
-        run: |
-          ${{ matrix.use_cross && 'cross' || 'cargo' }} build --release --target ${{ matrix.target }} --features "cli full"
-          
+        run: cargo build --release --locked -p qudag-cli --bin qudag --target ${{ matrix.target }}
+
       - name: Prepare artifacts
         run: |
           mkdir -p artifacts
-          cp target/${{ matrix.target }}/release/qudag* artifacts/${{ matrix.artifact_name }} || true
-          
+          cp "target/${{ matrix.target }}/release/${{ matrix.exe }}" "artifacts/${{ matrix.artifact_name }}"
+
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: binaries-${{ matrix.target }}
           path: artifacts/*
@@ -213,47 +219,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-          
+
       - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-        
-      - name: Cache WASM builds
-        uses: actions/cache@v3
+        uses: taiki-e/install-action@v2
         with:
-          path: |
-            qudag-wasm/pkg
-            qudag-wasm/pkg-nodejs
-            qudag-wasm/pkg-bundler
-          key: ${{ runner.os }}-wasm-${{ hashFiles('qudag-wasm/Cargo.toml') }}
-          
+          tool: wasm-pack
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Build WASM for web
-        run: |
-          cd qudag-wasm
-          wasm-pack build --target web --out-dir pkg
-          
+        working-directory: qudag-wasm
+        run: wasm-pack build --target web --out-dir pkg
+
       - name: Build WASM for Node.js
-        run: |
-          cd qudag-wasm
-          wasm-pack build --target nodejs --out-dir pkg-nodejs
-          
+        working-directory: qudag-wasm
+        run: wasm-pack build --target nodejs --out-dir pkg-nodejs
+
       - name: Build WASM for bundlers
-        run: |
-          cd qudag-wasm
-          wasm-pack build --target bundler --out-dir pkg-bundler
-          
+        working-directory: qudag-wasm
+        run: wasm-pack build --target bundler --out-dir pkg-bundler
+
       - name: Test WASM in Node.js
-        run: |
-          cd qudag-wasm
-          npm install
-          node test-nodejs.mjs
-          
+        working-directory: qudag-wasm
+        run: node test-nodejs.mjs pkg-nodejs
+
       - name: Upload WASM artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wasm-packages
           path: |
@@ -261,29 +259,9 @@ jobs:
             qudag-wasm/pkg-nodejs
             qudag-wasm/pkg-bundler
 
-  # Performance benchmarks
-  benchmarks:
-    name: Performance Benchmarks
-    needs: [test]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-        
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        
-      - name: Run benchmarks
-        run: |
-          cargo bench --workspace --features bench > benchmark_results.txt
-          
-      - name: Store benchmark results
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          tool: 'cargo'
-          output-file-path: benchmark_results.txt
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: true
+  # Benchmarks run in performance.yml (Rust-native). The job that used to live
+  # here could not run: it built a `bench` feature no crate defines and
+  # auto-pushed results to a gh-pages branch that does not exist.
 
   # Test coverage
   coverage:
@@ -292,25 +270,43 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        
-      - name: Install tarpaulin
-        run: cargo install cargo-tarpaulin
-        
-      - name: Generate coverage report
-        run: |
-          cargo tarpaulin --workspace --all-features --out Xml --output-dir coverage
-          
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
         with:
-          files: ./coverage/cobertura.xml
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Generate coverage report
+        run: cargo llvm-cov --locked --workspace --all-features --lcov --output-path lcov.info
+        env:
+          RUST_MIN_STACK: 8388608
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: lcov.info
+
+      # Codecov upload needs a repository token; skipped cleanly when it is not configured.
+      - name: Upload coverage to Codecov
+        if: ${{ env.CODECOV_TOKEN != '' }}
+        uses: codecov/codecov-action@v5
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
+          files: ./lcov.info
           flags: unittests
           name: codecov-umbrella
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-  # Docker build
+  # Docker build (no push)
   docker:
     name: Docker Build
     needs: [build]
@@ -318,12 +314,12 @@ jobs:
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
-        
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-        
+        uses: docker/setup-buildx-action@v3
+
       - name: Build Docker image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
@@ -334,40 +330,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Integration test with multi-node setup
-  integration:
-    name: Integration Tests
-    needs: [build, docker]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        
-      - name: Set up test network
-        run: |
-          cd qudag-testnet
-          docker-compose up -d
-          ./scripts/monitor-nodes.sh --wait-ready
-          
-      - name: Run integration tests
-        run: |
-          cd tests/integration
-          cargo test --features integration
-          
-      - name: Collect logs
-        if: always()
-        run: |
-          cd qudag-testnet
-          docker-compose logs > integration_logs.txt
-          
-      - name: Upload logs
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: integration-logs
-          path: qudag-testnet/integration_logs.txt
-          
-      - name: Tear down test network
-        if: always()
-        run: |
-          cd qudag-testnet
-          docker-compose down -v
+  # The multi-node "Integration Tests" job was removed: it ran `cargo test` in
+  # tests/integration, which has no Cargo.toml (the files there are not part of
+  # any crate), and called `monitor-nodes.sh --wait-ready`, an option the script
+  # does not have. Tracked in #41.

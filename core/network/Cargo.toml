@@ -57,12 +57,19 @@ hkdf = "0.12"
 
 # Other dependencies
 qudag-crypto = { version = "0.6.0", path = "../crypto" }
+ml-kem = { version = "0.3.2", features = ["zeroize", "getrandom"] }
 
 # Compression for message chunking
 zstd = "0.13"
 
 [dev-dependencies]
 proptest.workspace = true
+criterion = { workspace = true, features = ["async_tokio"] }
+tokio-test.workspace = true
+tracing-subscriber = "0.3"
+mockito = "1"
+rcgen = "0.13"
+qudag-dag = { version = "0.6.0", path = "../dag" }
 
 [features]
 default = []
@@ -70,3 +77,31 @@ optimizations = ["message-chunking", "adaptive-batching"]
 message-chunking = []
 adaptive-batching = []
 full-optimizations = ["optimizations"]
+
+[[bench]]
+name = "nat_traversal_benchmarks"
+harness = false
+
+[[bench]]
+name = "network_benchmarks"
+harness = false
+
+[[bench]]
+name = "peer_benchmarks"
+harness = false
+
+[[bench]]
+name = "queue_benchmarks"
+harness = false
+
+[[bench]]
+name = "routing_benchmarks"
+harness = false
+
+[[bench]]
+name = "throughput_optimized"
+harness = false
+
+[[bench]]
+name = "throughput"
+harness = false

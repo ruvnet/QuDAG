@@ -131,9 +131,11 @@ impl OptimizationConfig {
 
         Ok(config)
     }
+}
 
+impl Default for OptimizationConfig {
     /// Load default configuration
-    pub fn default() -> Self {
+    fn default() -> Self {
         Self {
             global: GlobalConfig {
                 enable_optimizations: true,
@@ -185,7 +187,9 @@ impl OptimizationConfig {
             },
         }
     }
+}
 
+impl OptimizationConfig {
     /// Apply environment variable overrides
     fn apply_env_overrides(&mut self) {
         // Global

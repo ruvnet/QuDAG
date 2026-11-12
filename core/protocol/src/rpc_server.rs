@@ -142,17 +142,15 @@ pub enum RpcTransport {
 /// Forward declaration of NodeRunner to avoid circular imports
 type NodeRunnerHandle = Arc<RwLock<dyn NodeRunnerTrait + Send + Sync>>;
 
+/// Boxed error returned by [`NodeRunnerTrait`] operations
+pub type NodeRunnerBoxError = Box<dyn std::error::Error + Send + Sync>;
+
+/// Boxed `Send` future returned by [`NodeRunnerTrait`] operations
+pub type NodeRunnerFuture<T> = Pin<Box<dyn std::future::Future<Output = T> + Send>>;
+
 /// Trait for NodeRunner operations that RPC server can call
 pub trait NodeRunnerTrait: Send + Sync + std::fmt::Debug {
-    fn get_status(
-        &self,
-    ) -> Pin<
-        Box<
-            dyn std::future::Future<
-                    Output = Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>,
-                > + Send,
-        >,
-    >;
+    fn get_status(&self) -> NodeRunnerFuture<Result<serde_json::Value, NodeRunnerBoxError>>;
     fn get_connected_peers(
         &self,
     ) -> Pin<Box<dyn std::future::Future<Output = Vec<PeerInfo>> + Send>>;
@@ -165,14 +163,7 @@ pub trait NodeRunnerTrait: Send + Sync + std::fmt::Debug {
         peer_id: &str,
     ) -> Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send>>;
     fn get_network_stats(&self) -> Pin<Box<dyn std::future::Future<Output = NetworkStats> + Send>>;
-    fn shutdown(
-        &self,
-    ) -> Pin<
-        Box<
-            dyn std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
-                + Send,
-        >,
-    >;
+    fn shutdown(&self) -> NodeRunnerFuture<Result<(), NodeRunnerBoxError>>;
 }
 
 /// RPC server for handling remote commands
@@ -1002,7 +993,7 @@ async fn handle_request(
 
             // Try to shutdown the node gracefully through command channel
             let (tx, rx) = tokio::sync::oneshot::channel();
-            if let Err(_) = command_tx.send((RpcCommand::Stop, tx)).await {
+            if command_tx.send((RpcCommand::Stop, tx)).await.is_err() {
                 return RpcResponse {
                     id: request.id,
                     result: None,

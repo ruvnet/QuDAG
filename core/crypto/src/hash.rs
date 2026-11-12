@@ -21,7 +21,7 @@ pub enum HashError {
 /// ```rust
 /// use qudag_crypto::hash::Digest;
 ///
-/// let digest = Digest(vec![0x12, 0x34, 0x56, 0x78]);
+/// let digest = Digest::from(vec![0x12, 0x34, 0x56, 0x78]);
 /// let bytes = digest.as_bytes();
 /// assert_eq!(bytes, &[0x12, 0x34, 0x56, 0x78]);
 /// ```
@@ -36,7 +36,7 @@ impl Digest {
     /// ```rust
     /// use qudag_crypto::hash::Digest;
     ///
-    /// let digest = Digest(vec![0x12, 0x34, 0x56, 0x78]);
+    /// let digest = Digest::from(vec![0x12, 0x34, 0x56, 0x78]);
     /// let bytes = digest.as_bytes();
     /// assert_eq!(bytes, &[0x12, 0x34, 0x56, 0x78]);
     /// ```
@@ -51,12 +51,19 @@ impl Digest {
     /// ```rust
     /// use qudag_crypto::hash::Digest;
     ///
-    /// let digest = Digest(vec![0x12, 0x34, 0x56, 0x78]);
+    /// let digest = Digest::from(vec![0x12, 0x34, 0x56, 0x78]);
     /// let bytes = digest.into_bytes();
     /// assert_eq!(bytes, vec![0x12, 0x34, 0x56, 0x78]);
     /// ```
     pub fn into_bytes(self) -> Vec<u8> {
         self.0
+    }
+}
+
+impl From<Vec<u8>> for Digest {
+    /// Wrap raw hash output, so `HashFunction` can be implemented outside this crate.
+    fn from(bytes: Vec<u8>) -> Self {
+        Self(bytes)
     }
 }
 
@@ -85,7 +92,7 @@ impl Digest {
 ///     fn finalize(self) -> Result<qudag_crypto::hash::Digest, HashError> {
 ///         // Simple checksum for example
 ///         let sum = self.state.iter().fold(0u8, |acc, &x| acc.wrapping_add(x));
-///         Ok(qudag_crypto::hash::Digest(vec![sum]))
+///         Ok(qudag_crypto::hash::Digest::from(vec![sum]))
 ///     }
 ///     
 ///     fn hash(data: &[u8]) -> Result<qudag_crypto::hash::Digest, HashError> {

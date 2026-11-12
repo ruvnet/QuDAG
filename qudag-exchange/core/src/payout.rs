@@ -150,12 +150,19 @@ pub struct PayoutSplit {
 /// Generic contributor types for payout splits
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum ContributorType {
+    /// Agent that provided compute, storage or bandwidth
     Agent,
+    /// Creator of a plugin used by the agent
     Plugin,
+    /// Operator of a network node
     Node,
+    /// Infrastructure provider
     Infrastructure,
+    /// Network-wide pool
     Network,
+    /// System (genesis) allocation
     System,
+    /// Poster of a completed bounty
     BountyPoster,
 }
 
@@ -335,7 +342,8 @@ impl FeeRouter {
         let system_fee = total_fee
             .multiply(self.config.system_fee_percentage)
             .map_err(|e| Error::Other(e.into()))?;
-        total_distributed = total_distributed
+        // Only checked for overflow; the distributed total is not recorded.
+        total_distributed
             .add(system_fee)
             .map_err(|e| Error::Other(e.into()))?;
 

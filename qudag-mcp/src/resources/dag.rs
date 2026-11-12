@@ -17,6 +17,12 @@ pub struct DagStateResource {
     description: Option<String>,
 }
 
+impl Default for DagStateResource {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DagStateResource {
     /// Create a new DAG state resource
     pub fn new() -> Self {

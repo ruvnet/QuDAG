@@ -18,12 +18,13 @@ async fn test_ml_kem_onion_router_creation() {
 async fn test_onion_layer_encryption_decryption() {
     let router = MLKEMOnionRouter::new().await.unwrap();
 
-    // Create a simple route with 3 hops
-    let mut route = Vec::new();
-    for _ in 0..3 {
-        let (pub_key, _) = MlKem768::keygen().unwrap();
-        route.push(pub_key.as_bytes().to_vec());
-    }
+    // Create a route with 3 hops: hops are node ids from the directory the
+    // router resolves public keys against
+    let route = router
+        .directory_client()
+        .select_random_nodes(3)
+        .await
+        .unwrap();
 
     let message = b"Secret message".to_vec();
 
@@ -76,7 +77,8 @@ async fn test_circuit_rotation() {
     let circuit1 = circuit_mgr.build_circuit(3, &directory).await.unwrap();
     circuit_mgr.activate_circuit(circuit1).unwrap();
 
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    // Circuit creation is rate limited to one per second
+    tokio::time::sleep(Duration::from_millis(1100)).await;
 
     let circuit2 = circuit_mgr.build_circuit(3, &directory).await.unwrap();
     circuit_mgr.activate_circuit(circuit2).unwrap();
@@ -112,7 +114,13 @@ async fn test_directory_client() {
 
 #[tokio::test]
 async fn test_mix_node_batching() {
-    let mut mix_node = MixNode::new(vec![1, 2, 3]);
+    // Padding draws each dummy with `dummy_probability` and stops at the first
+    // miss, so make the cover traffic deterministic for this test.
+    let config = MixConfig {
+        dummy_probability: 1.0,
+        ..Default::default()
+    };
+    let mut mix_node = MixNode::with_config(vec![1, 2, 3], config);
 
     // Add messages below batch threshold
     for i in 0..50 {
@@ -303,14 +311,11 @@ async fn test_rate_limiting() {
 async fn test_bandwidth_measurement() {
     let directory = DirectoryClient::new();
 
-    // Force populate nodes
-    directory.select_random_nodes(1).await.unwrap();
+    // Selecting nodes populates the directory and returns their ids
+    let selected = directory.select_random_nodes(1).await.unwrap();
+    let node_id = selected.first().expect("directory returned no nodes");
 
     // Test bandwidth measurement
-    let nodes = directory.nodes.lock().await;
-    if let Some((node_id, _)) = nodes.iter().next() {
-        drop(nodes); // Release lock
-        let bandwidth = directory.measure_bandwidth(node_id).await.unwrap();
-        assert!(bandwidth > 0);
-    }
+    let bandwidth = directory.measure_bandwidth(node_id).await.unwrap();
+    assert!(bandwidth > 0);
 }

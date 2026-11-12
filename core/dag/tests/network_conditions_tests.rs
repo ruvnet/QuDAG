@@ -196,31 +196,27 @@ async fn test_jitter_tolerance() {
 
         let (positive, negative) = consensus.query_sample(&vertex_id).await.unwrap();
 
-        if positive + negative > 0 {
-            if let Some(confidence) = consensus.confidence.get(&vertex_id) {
-                if confidence.value >= consensus.config.beta {
-                    // Achieved consensus despite jitter
-                    let total_time = start_time.elapsed();
+        // query_sample returns the sampled vote counts; confidence is only folded in
+        // by run_consensus_round, so compute this round's confidence directly.
+        let total = positive + negative;
+        if total > 0 {
+            let round_confidence = positive as f64 / total as f64;
+            if round_confidence >= consensus.config.beta {
+                // Achieved consensus despite jitter
+                let total_time = start_time.elapsed();
 
-                    // Should still achieve reasonable performance despite jitter
-                    assert!(
-                        total_time < Duration::from_secs(2),
-                        "Consensus took too long with jitter: {:?}",
-                        total_time
-                    );
-                    return;
-                }
+                // Should still achieve reasonable performance despite jitter
+                assert!(
+                    total_time < Duration::from_secs(2),
+                    "Consensus took too long with jitter: {:?}",
+                    total_time
+                );
+                return;
             }
         }
     }
 
-    // Should have made progress even with jitter
-    if let Some(confidence) = consensus.confidence.get(&vertex_id) {
-        assert!(
-            confidence.value > 0.0,
-            "No progress made with network jitter"
-        );
-    }
+    panic!("No round reached the beta threshold under network jitter");
 }
 
 /// Test Byzantine behavior under network stress

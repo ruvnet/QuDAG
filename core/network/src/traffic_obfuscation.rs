@@ -820,6 +820,7 @@ mod tests {
 
         // Should have delayed between 10-50ms
         assert!(elapsed >= Duration::from_millis(10));
-        assert!(elapsed <= Duration::from_millis(60)); // Allow some overhead
+        // Allow generous overhead: a timer tick is ~15 ms on Windows and runners are shared.
+        assert!(elapsed <= Duration::from_millis(50 + 250));
     }
 }

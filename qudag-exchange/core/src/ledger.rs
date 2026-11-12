@@ -385,19 +385,34 @@ impl Ledger {
 
         #[cfg(feature = "std")]
         {
-            // Get both accounts (this locks them)
-            let mut from_ref = self
-                .accounts
+            // Never hold two DashMap entries at once: each `get_mut` write-locks the
+            // shard that holds the key, so when both accounts hash to the same shard
+            // (which depends on the per-process random hasher) the second call
+            // deadlocks against the first. Take the locks one after the other.
+            if !self.accounts.contains_key(from) {
+                return Err(Error::AccountNotFound(from.as_str().into()));
+            }
+            if !self.accounts.contains_key(to) {
+                return Err(Error::AccountNotFound(to.as_str().into()));
+            }
+
+            self.accounts
                 .get_mut(from)
-                .ok_or_else(|| Error::AccountNotFound(from.as_str().into()))?;
-            let mut to_ref = self
+                .ok_or_else(|| Error::AccountNotFound(from.as_str().into()))?
+                .debit(amount)?;
+
+            let credited = self
                 .accounts
                 .get_mut(to)
-                .ok_or_else(|| Error::AccountNotFound(to.as_str().into()))?;
-
-            // Perform the transfer
-            from_ref.debit(amount)?;
-            to_ref.credit(amount)?;
+                .ok_or_else(|| Error::AccountNotFound(to.as_str().into()))
+                .and_then(|mut to_ref| to_ref.credit(amount));
+            if let Err(e) = credited {
+                // Refund the sender so a failed transfer leaves balances unchanged.
+                if let Some(mut from_ref) = self.accounts.get_mut(from) {
+                    let _ = from_ref.credit(amount);
+                }
+                return Err(e);
+            }
         }
 
         Ok(())
@@ -591,5 +606,40 @@ mod tests {
 
         // Verify final state
         assert_eq!(ledger.total_supply(), rUv::new(1200)); // 1500 - 300
+    }
+
+    /// Regression test: `transfer` used to hold two DashMap entries at once, which
+    /// deadlocked whenever both accounts landed in the same shard. Shard placement
+    /// depends on a per-process random hasher, so the hang was intermittent. With
+    /// many accounts and many pairs, same-shard pairs are all but certain.
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_transfer_between_accounts_in_the_same_shard_does_not_deadlock() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let (done_tx, done_rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut ledger = Ledger::new();
+            let ids: Vec<AccountId> = (0..64)
+                .map(|i| AccountId::new(format!("acct-{i}")))
+                .collect();
+            for id in &ids {
+                ledger.create_account(id.clone()).unwrap();
+                ledger.mint(id, rUv::new(1_000)).unwrap();
+            }
+            for round in 0..20 {
+                for (i, from) in ids.iter().enumerate() {
+                    let to = &ids[(i + 1 + round) % ids.len()];
+                    ledger.transfer(from, to, rUv::new(1)).unwrap();
+                }
+            }
+            ledger.check_invariants().unwrap();
+            let _ = done_tx.send(());
+        });
+        assert!(
+            done_rx.recv_timeout(Duration::from_secs(30)).is_ok(),
+            "transfer deadlocked"
+        );
     }
 }
